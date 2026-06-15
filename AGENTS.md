@@ -28,3 +28,4 @@
 - Follow the branch strategy above unless the user explicitly requests a different workflow.
 - Keep changes scoped to the current task.
 - Do not create or restore a `dev` branch without explicit user approval.
+- Do not commit files matched by `.git/info/exclude` or any `.gitignore`; do not use `git add -f` for ignored files unless the user explicitly approves that exact file.
