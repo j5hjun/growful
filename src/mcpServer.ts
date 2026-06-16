@@ -15,16 +15,21 @@ export interface CreateReminderHandlersInput {
   defaultThreadId?: string;
   processDue: (now?: string) => unknown;
   now?: () => Date;
+  onClose?: () => void;
 }
 
 export interface ReminderHandlers {
   setReminder(args: { message: string; dueAt: string; threadId?: string }): Reminder;
   listReminders(args?: { status?: ReminderStatus; limit?: number }): { reminders: Reminder[] };
   cancelReminder(args: { id: string }): Reminder;
-  sendDueReminders(args?: { now?: string }): unknown;
+  sendDueReminders(args?: { now?: string }): Promise<unknown>;
 }
 
 const statusSchema = z.enum(["pending", "sending", "sent", "cancelled", "failed"]);
+const strictUtcIsoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const nowSchema = z.string().refine(isStrictUtcIsoTimestamp, {
+  message: "Invalid now timestamp. Use a valid UTC ISO timestamp.",
+});
 
 export function createReminderHandlers(input: CreateReminderHandlersInput): ReminderHandlers {
   const defaultThreadId = trimOptional(input.defaultThreadId);
@@ -51,8 +56,8 @@ export function createReminderHandlers(input: CreateReminderHandlersInput): Remi
     cancelReminder(args) {
       return input.store.cancelReminder(args.id);
     },
-    sendDueReminders(args = {}) {
-      return input.processDue(args.now);
+    async sendDueReminders(args = {}) {
+      return input.processDue(args.now ? validateNow(args.now) : undefined);
     },
   };
 }
@@ -60,6 +65,7 @@ export function createReminderHandlers(input: CreateReminderHandlersInput): Remi
 export async function runMcpServer(input: CreateReminderHandlersInput): Promise<void> {
   const handlers = createReminderHandlers(input);
   const server = new McpServer({ name: "reminder-mcp", version: "0.1.0" });
+  server.server.onclose = input.onClose;
 
   server.registerTool(
     "set_reminder",
@@ -106,7 +112,7 @@ export async function runMcpServer(input: CreateReminderHandlersInput): Promise<
       title: "Send due reminders",
       description: "Immediately process reminders due at or before now.",
       inputSchema: {
-        now: z.string().optional(),
+        now: nowSchema.optional(),
       },
     },
     async (args) => jsonText(await handlers.sendDueReminders(args)),
@@ -124,4 +130,21 @@ function jsonText(value: unknown): { content: Array<{ type: "text"; text: string
 function trimOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function validateNow(value: string): string {
+  if (!isStrictUtcIsoTimestamp(value)) {
+    throw new Error("Invalid now timestamp. Use a valid UTC ISO timestamp.");
+  }
+
+  return value;
+}
+
+function isStrictUtcIsoTimestamp(value: string): boolean {
+  if (!strictUtcIsoTimestamp.test(value)) {
+    return false;
+  }
+
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
 }

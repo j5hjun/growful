@@ -7,6 +7,7 @@ import {
   OutboxCodexThreadSender,
   UnavailableCodexThreadSender,
 } from "./sender/codexThreadSender.js";
+import { createShutdown } from "./shutdown.js";
 import { SqliteReminderStore } from "./store/sqliteReminderStore.js";
 import type { CodexThreadSender } from "./types.js";
 
@@ -21,24 +22,22 @@ const scheduler = startScheduler({
   },
 });
 
-let isShuttingDown = false;
-function shutdown(signal: NodeJS.Signals): void {
-  if (isShuttingDown) {
-    return;
-  }
-  isShuttingDown = true;
-  clearInterval(scheduler);
-  store.close();
-  process.kill(process.pid, signal);
-}
+const shutdown = createShutdown({
+  scheduler,
+  close: () => store.close(),
+  onSignal: (signal) => process.kill(process.pid, signal),
+});
 
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
+process.stdin.once("close", () => shutdown());
+process.stdin.once("end", () => shutdown());
 
 await runMcpServer({
   store,
   defaultThreadId: config.threadId,
   processDue: (now) => processDueReminders({ store, sender, now }),
+  onClose: () => shutdown(),
 });
 
 function createSender(): CodexThreadSender {

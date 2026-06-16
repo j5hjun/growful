@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createReminderHandlers, type ReminderHandlerStore } from "../src/mcpServer.js";
+import { createShutdown } from "../src/shutdown.js";
 import type { Reminder } from "../src/types.js";
 
 describe("createReminderHandlers", () => {
@@ -52,6 +53,49 @@ describe("createReminderHandlers", () => {
     expect(listed.reminders.map((item) => item.id)).toEqual([first.id]);
     expect(cancelled.status).toBe("cancelled");
     expect(handlers.listReminders().reminders.map((item) => item.status)).toEqual(["cancelled", "pending"]);
+  });
+
+  it.each(["zzzz", "June 16, 2026", "2026-02-30T00:00:00.000Z"])(
+    "rejects invalid send_due_reminders now value %s before processing",
+    async (now) => {
+      const processDue = vi.fn();
+      const handlers = createReminderHandlers({
+        store: createMemoryStore(),
+        processDue,
+      });
+
+      await expect(handlers.sendDueReminders({ now })).rejects.toThrow("Invalid now timestamp. Use a valid UTC ISO timestamp.");
+      expect(processDue).not.toHaveBeenCalled();
+    },
+  );
+
+  it("passes valid strict ISO now to processDue", async () => {
+    const processDue = vi.fn().mockResolvedValue({ processed: 0, sent: 0, failed: 0, results: [] });
+    const handlers = createReminderHandlers({
+      store: createMemoryStore(),
+      processDue,
+    });
+
+    await expect(handlers.sendDueReminders({ now: "2026-06-16T00:00:00.000Z" })).resolves.toEqual({
+      processed: 0,
+      sent: 0,
+      failed: 0,
+      results: [],
+    });
+    expect(processDue).toHaveBeenCalledWith("2026-06-16T00:00:00.000Z");
+  });
+});
+
+describe("createShutdown", () => {
+  it("clears the scheduler and closes the store once", () => {
+    const timer = setInterval(() => undefined, 60_000);
+    const close = vi.fn();
+    const shutdown = createShutdown({ scheduler: timer, close });
+
+    shutdown();
+    shutdown();
+
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
 
