@@ -1,0 +1,28 @@
+{
+  "name": "@growful/codex-ipc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:test": "tsc -p tsconfig.test.json",
+    "clean": "rm -rf dist",
+    "test": "npm run clean && npm run build && npm run build:test && node --disable-warning=ExperimentalWarning --experimental-strip-types --test \"test/**/*.test.ts\"",
+    "test:integration": "npm run clean && npm run build && npm run build:test && CODEX_IPC_INTEGRATION=1 node --disable-warning=ExperimentalWarning --experimental-strip-types --test \"test/integration/*.test.ts\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "typescript": "^6.0.3"
+  }
+}

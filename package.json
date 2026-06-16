@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm --workspace @growful/codex-ipc run build",
+    "test": "npm --workspace @growful/codex-ipc test",
+    "test:integration": "npm --workspace @growful/codex-ipc run test:integration"
+  },
   "engines": {
     "node": ">=20"
   }
