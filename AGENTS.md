@@ -29,3 +29,4 @@
 - Keep changes scoped to the current task.
 - Do not create or restore a `dev` branch without explicit user approval.
 - Do not commit files matched by `.git/info/exclude` or any `.gitignore`; do not use `git add -f` for ignored files unless the user explicitly approves that exact file.
+- `docs/superpowers/` is intentionally ignored local planning output. Agents may write Superpowers specs there, but must not move them elsewhere just to commit them, must not force-add them, and must not commit them unless the user explicitly approves that exact file.
