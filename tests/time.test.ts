@@ -28,4 +28,9 @@ describe("parseDueAt", () => {
   it("rejects unsupported expressions", () => {
     expect(() => parseDueAt("tomorrow morning", base)).toThrow("Unsupported dueAt format");
   });
+
+  it("rejects non-ISO date strings", () => {
+    expect(() => parseDueAt("June 16, 2026", base)).toThrow("Unsupported dueAt format");
+    expect(() => parseDueAt("06/16/2026", base)).toThrow("Unsupported dueAt format");
+  });
 });

@@ -13,10 +13,15 @@ const durationUnits: Record<string, number> = {
   "일": 24 * 60 * 60_000,
 };
 
+const isoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 export function parseDueAt(input: string, now = new Date()): string {
   const trimmed = input.trim();
-  const parsed = new Date(trimmed);
-  if (!Number.isNaN(parsed.getTime())) {
+  if (isoTimestamp.test(trimmed)) {
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error("Unsupported dueAt format. Use a valid ISO timestamp.");
+    }
     return parsed.toISOString();
   }
 
