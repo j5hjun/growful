@@ -3,6 +3,7 @@ import { loadConfig } from "./config.js";
 import { runMcpServer } from "./mcpServer.js";
 import { processDueReminders, startScheduler } from "./scheduler.js";
 import {
+  CodexIpcThreadSender,
   CommandCodexThreadSender,
   OutboxCodexThreadSender,
   UnavailableCodexThreadSender,
@@ -50,6 +51,14 @@ await runMcpServer({
 });
 
 function createSender(): CodexThreadSender {
+  if (config.useCodexIpc) {
+    return new CodexIpcThreadSender({
+      socketPath: config.codexIpcSocketPath,
+      cwd: config.codexIpcCwd,
+      timeoutMs: config.codexIpcTimeoutMs,
+    });
+  }
+
   if (config.sendCommand) {
     return new CommandCodexThreadSender(config.sendCommand);
   }
@@ -59,7 +68,7 @@ function createSender(): CodexThreadSender {
   }
 
   return new UnavailableCodexThreadSender(
-    "Codex reminder delivery is not configured. Set REMINDER_MCP_SEND_COMMAND to a command that sends JSON stdin to a Codex thread, or set REMINDER_MCP_ALLOW_OUTBOX_FALLBACK=1 for local outbox files.",
+    "Codex reminder delivery is not configured. Set REMINDER_MCP_USE_CODEX_IPC=1 for local IPC delivery, REMINDER_MCP_SEND_COMMAND for an external delivery command, or REMINDER_MCP_ALLOW_OUTBOX_FALLBACK=1 for local outbox files.",
   );
 }
 
