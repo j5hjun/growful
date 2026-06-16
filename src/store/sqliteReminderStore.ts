@@ -95,33 +95,55 @@ export class SqliteReminderStore {
       const update = this.db.prepare(
         "UPDATE reminders SET status = 'sending', updated_at = ? WHERE id = ? AND status = 'pending'",
       );
+      const claimed: Reminder[] = [];
 
       for (const row of rows) {
-        update.run(updatedAt, row.id);
+        const result = update.run(updatedAt, row.id);
+        if (result.changes === 1) {
+          claimed.push({ ...mapRow(row), status: "sending", updatedAt });
+        }
       }
 
-      return rows.map((row) => ({ ...mapRow(row), status: "sending" as const, updatedAt }));
+      return claimed;
     });
 
     return claim();
   }
 
   markSent(id: string): Reminder {
+    const existing = this.getRequiredReminder(id);
+    if (existing.status !== "sending") {
+      throw new Error("Reminder is not sending");
+    }
+
     const now = new Date().toISOString();
-    this.db
-      .prepare("UPDATE reminders SET status = 'sent', sent_at = ?, updated_at = ?, last_error = NULL WHERE id = ?")
+    const result = this.db
+      .prepare(
+        "UPDATE reminders SET status = 'sent', sent_at = ?, updated_at = ?, last_error = NULL WHERE id = ? AND status = 'sending'",
+      )
       .run(now, now, id);
+    if (result.changes !== 1) {
+      throw new Error("Reminder is not sending");
+    }
 
     return this.getRequiredReminder(id);
   }
 
   markFailed(id: string, error: string): Reminder {
+    const existing = this.getRequiredReminder(id);
+    if (existing.status !== "sending") {
+      throw new Error("Reminder is not sending");
+    }
+
     const now = new Date().toISOString();
-    this.db
+    const result = this.db
       .prepare(
-        "UPDATE reminders SET status = 'failed', last_error = ?, attempt_count = attempt_count + 1, updated_at = ? WHERE id = ?",
+        "UPDATE reminders SET status = 'failed', last_error = ?, attempt_count = attempt_count + 1, updated_at = ? WHERE id = ? AND status = 'sending'",
       )
       .run(error, now, id);
+    if (result.changes !== 1) {
+      throw new Error("Reminder is not sending");
+    }
 
     return this.getRequiredReminder(id);
   }
