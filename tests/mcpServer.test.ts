@@ -87,14 +87,15 @@ describe("createReminderHandlers", () => {
 });
 
 describe("createShutdown", () => {
-  it("clears the scheduler and closes the store once", () => {
-    const timer = setInterval(() => undefined, 60_000);
+  it("stops the scheduler and closes the store once", async () => {
+    const scheduler = { stop: vi.fn().mockResolvedValue(undefined) };
     const close = vi.fn();
-    const shutdown = createShutdown({ scheduler: timer, close });
+    const shutdown = createShutdown({ scheduler, close });
 
-    shutdown();
-    shutdown();
+    await shutdown();
+    await shutdown();
 
+    expect(scheduler.stop).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
   });
 });

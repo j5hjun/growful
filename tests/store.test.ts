@@ -113,6 +113,29 @@ describe("SqliteReminderStore", () => {
     expect(failed.attemptCount).toBe(1);
   });
 
+  it("marks persisted sending reminders failed without making them claimable again", () => {
+    const dbPath = join(dir, "restart.sqlite");
+    const restarted = new SqliteReminderStore(dbPath);
+    const reminder = restarted.createReminder({
+      message: "due",
+      threadId: "thread-1",
+      dueAt: "2026-06-16T00:00:00.000Z",
+    });
+    restarted.claimDueReminders("2026-06-16T00:00:00.000Z", 10);
+    restarted.close();
+
+    const recoveredStore = new SqliteReminderStore(dbPath);
+    const recoveredCount = recoveredStore.markSendingRemindersFailed("delivery interrupted");
+    const recovered = recoveredStore.getReminder(reminder.id);
+
+    expect(recoveredCount).toBe(1);
+    expect(recovered?.status).toBe("failed");
+    expect(recovered?.lastError).toBe("delivery interrupted");
+    expect(recovered?.attemptCount).toBe(1);
+    expect(recoveredStore.claimDueReminders("2026-06-16T00:01:00.000Z", 10)).toHaveLength(0);
+    recoveredStore.close();
+  });
+
   it("rejects terminal transitions for pending reminders", () => {
     const reminder = store.createReminder({
       message: "pending",

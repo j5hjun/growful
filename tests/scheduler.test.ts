@@ -130,9 +130,14 @@ describe("scheduler", () => {
       async sendMessage() {},
     };
 
-    const timer = startScheduler({ store: fakeStore, sender, intervalMs: 1_000, onError: (caught) => errors.push(caught) });
+    const scheduler = startScheduler({
+      store: fakeStore,
+      sender,
+      intervalMs: 1_000,
+      onError: (caught) => errors.push(caught),
+    });
     await flushPromises();
-    clearInterval(timer);
+    await scheduler.stop();
 
     expect(errors).toEqual([error]);
   });
@@ -161,7 +166,7 @@ describe("scheduler", () => {
       sendMessage: vi.fn(() => sendPromise),
     };
 
-    const timer = startScheduler({ store: fakeStore, sender, intervalMs: 1_000 });
+    const scheduler = startScheduler({ store: fakeStore, sender, intervalMs: 1_000 });
     await flushPromises();
     expect(claimCalls).toBe(1);
 
@@ -170,7 +175,53 @@ describe("scheduler", () => {
 
     resolveSend!();
     await flushPromises();
-    clearInterval(timer);
+    await scheduler.stop();
+  });
+
+  it("waits for an in-flight tick before stop resolves", async () => {
+    vi.useFakeTimers();
+    const reminder = createClaimedReminder();
+    let isSending = false;
+    let markSentCalls = 0;
+    let resolveSend: () => void;
+    const sendPromise = new Promise<void>((resolve) => {
+      resolveSend = resolve;
+    });
+    const fakeStore: ReminderStore = {
+      claimDueReminders() {
+        return [reminder];
+      },
+      markSent() {
+        markSentCalls += 1;
+        return { ...reminder, status: "sent" };
+      },
+      markFailed() {
+        throw new Error("unexpected markFailed");
+      },
+    };
+    const sender: CodexThreadSender = {
+      async sendMessage() {
+        isSending = true;
+        await sendPromise;
+      },
+    };
+
+    const scheduler = startScheduler({ store: fakeStore, sender, intervalMs: 1_000 });
+    await flushPromises();
+    expect(isSending).toBe(true);
+
+    let stopped = false;
+    const stopPromise = scheduler.stop().then(() => {
+      stopped = true;
+    });
+    await flushPromises();
+    expect(stopped).toBe(false);
+
+    resolveSend!();
+    await stopPromise;
+
+    expect(stopped).toBe(true);
+    expect(markSentCalls).toBe(1);
   });
 });
 

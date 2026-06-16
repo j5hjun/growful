@@ -148,6 +148,17 @@ export class SqliteReminderStore {
     return this.getRequiredReminder(id);
   }
 
+  markSendingRemindersFailed(reason: string): number {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        "UPDATE reminders SET status = 'failed', last_error = ?, attempt_count = attempt_count + 1, updated_at = ? WHERE status = 'sending'",
+      )
+      .run(reason, now);
+
+    return result.changes;
+  }
+
   private getRequiredReminder(id: string): Reminder {
     const reminder = this.getReminder(id);
     if (!reminder) {

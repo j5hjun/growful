@@ -17,6 +17,10 @@ export interface ProcessDueRemindersResult {
   results: Array<{ id: string; status: "sent" | "failed" }>;
 }
 
+export interface SchedulerHandle {
+  stop(): Promise<void>;
+}
+
 export async function processDueReminders(input: ProcessDueRemindersInput): Promise<ProcessDueRemindersResult> {
   const now = input.now ?? new Date().toISOString();
   const claimed = input.store.claimDueReminders(now, input.limit ?? 25);
@@ -56,9 +60,10 @@ export function startScheduler(input: {
   sender: CodexThreadSender;
   intervalMs?: number;
   onError?: (error: unknown) => void;
-}): NodeJS.Timeout {
+}): SchedulerHandle {
   const intervalMs = input.intervalMs ?? 15_000;
   let isRunning = false;
+  let currentTick: Promise<void> | null = null;
   const tick = async (): Promise<void> => {
     if (isRunning) {
       return;
@@ -73,9 +78,25 @@ export function startScheduler(input: {
       isRunning = false;
     }
   };
+  const runTick = (): void => {
+    if (currentTick) {
+      return;
+    }
 
-  void tick();
-  return setInterval(() => void tick(), intervalMs);
+    currentTick = tick().finally(() => {
+      currentTick = null;
+    });
+  };
+
+  runTick();
+  const timer = setInterval(runTick, intervalMs);
+
+  return {
+    async stop() {
+      clearInterval(timer);
+      await currentTick;
+    },
+  };
 }
 
 function getErrorMessage(error: unknown): string {
