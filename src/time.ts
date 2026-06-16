@@ -19,7 +19,7 @@ export function parseDueAt(input: string, now = new Date()): string {
   const trimmed = input.trim();
   if (isoTimestamp.test(trimmed)) {
     const parsed = new Date(trimmed);
-    if (Number.isNaN(parsed.getTime())) {
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString() !== trimmed) {
       throw new Error("Unsupported dueAt format. Use a valid ISO timestamp.");
     }
     return parsed.toISOString();
@@ -32,7 +32,12 @@ export function parseDueAt(input: string, now = new Date()): string {
 
   const english = /^in\s+(\d+)\s+(minutes?|hours?|days?)$/i.exec(trimmed);
   if (english) {
-    return addDuration(now, Number(english[1]), english[2].toLowerCase());
+    const amount = Number(english[1]);
+    const unit = english[2].toLowerCase();
+    if (!matchesEnglishDurationGrammar(amount, unit)) {
+      throw new Error("Unsupported dueAt format");
+    }
+    return addDuration(now, amount, unit);
   }
 
   const korean = /^(\d+)\s*(분|시간|일)\s*뒤$/.exec(trimmed);
@@ -51,4 +56,9 @@ function addDuration(now: Date, amount: number, unit: string): string {
     throw new Error(`Unsupported duration unit: ${unit}`);
   }
   return new Date(now.getTime() + amount * ms).toISOString();
+}
+
+function matchesEnglishDurationGrammar(amount: number, unit: string): boolean {
+  const isPlural = unit.endsWith("s");
+  return amount === 1 ? !isPlural : isPlural;
 }
