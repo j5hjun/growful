@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "reminder-mcp": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
