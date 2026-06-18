@@ -1,148 +1,47 @@
+import type {
+  IpcMethod,
+  IpcMethodMap,
+  IpcRequestParamsForMethod,
+  IpcResultForMethod,
+} from "./protocol/method-map.ts";
+import type { ByteRange, ImageDetail, TextElement, UserInput } from "./model/input.ts";
+import type {
+  ThreadFollowerStartTurnParams,
+  ThreadFollowerStartTurnResponse,
+  ThreadFollowerSteerTurnParams,
+  ThreadFollowerSteerTurnResponse,
+  ThreadFollowerTurnStartParams,
+} from "./model/thread-follower.ts";
+import type {
+  Turn,
+  TurnError,
+  TurnItemsView,
+  TurnStartParams,
+  TurnStartResponse,
+  TurnStatus,
+  TurnSteerParams,
+  TurnSteerResponse,
+} from "./model/turn.ts";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
-export type ImageDetail = "auto" | "low" | "high" | "original";
-
-export interface ByteRange {
-  start: number;
-  end: number;
-}
-
-export interface TextElement {
-  byteRange: ByteRange;
-  placeholder: string | null;
-}
-
-export type UserInput =
-  | {
-      type: "text";
-      text: string;
-      text_elements?: TextElement[];
-    }
-  | {
-      type: "image";
-      detail?: ImageDetail;
-      url: string;
-    }
-  | {
-      type: "localImage";
-      detail?: ImageDetail;
-      path: string;
-    }
-  | {
-      type: "skill";
-      name: string;
-      path: string;
-    }
-  | {
-      type: "mention";
-      name: string;
-      path: string;
-    };
-
-export type TurnStatus = "completed" | "interrupted" | "failed" | "inProgress";
-export type TurnItemsView = "notLoaded" | "summary" | "full";
-
-export interface TurnError {
-  message: string;
-  codexErrorInfo: unknown | null;
-  additionalDetails: string | null;
-}
-
-export interface Turn {
-  id: string;
-  items: unknown[];
-  itemsView: TurnItemsView;
-  status: TurnStatus;
-  error: TurnError | null;
-  startedAt: number | null;
-  completedAt: number | null;
-  durationMs: number | null;
-}
-
-export interface TurnStartParams {
-  threadId: string;
-  clientUserMessageId?: string | null;
-  input: UserInput[];
-  responsesapiClientMetadata?: Record<string, string> | null;
-  additionalContext?: Record<string, unknown> | null;
-  environments?: unknown[] | null;
-  cwd?: string | null;
-  runtimeWorkspaceRoots?: string[] | null;
-  approvalPolicy?: unknown | null;
-  approvalsReviewer?: unknown | null;
-  sandboxPolicy?: unknown | null;
-  permissions?: string | null;
-  model?: string | null;
-  serviceTier?: string | null;
-  effort?: string | null;
-  summary?: string | null;
-  personality?: unknown | null;
-  outputSchema?: JsonValue | null;
-  collaborationMode?: unknown | null;
-}
-
-export type ThreadFollowerTurnStartParams = Omit<TurnStartParams, "threadId">;
-
-export interface TurnStartResponse {
-  turn: Turn;
-}
-
-export interface ThreadFollowerStartTurnParams {
-  conversationId: string;
-  turnStartParams: ThreadFollowerTurnStartParams;
-}
-
-export interface ThreadFollowerStartTurnResponse {
-  result: TurnStartResponse;
-}
-
-export interface TurnSteerParams {
-  threadId: string;
-  clientUserMessageId?: string | null;
-  input: UserInput[];
-  responsesapiClientMetadata?: Record<string, string> | null;
-  additionalContext?: Record<string, unknown> | null;
-  expectedTurnId: string;
-}
-
-export type ThreadFollowerSteerTurnParams = Omit<TurnSteerParams, "threadId"> & {
-  conversationId: string;
-  restoreMessage?: unknown;
-  serviceTier?: string | null;
-  attachments?: unknown[];
+export type CodexIpcRequestParamsByMethod = {
+  [Method in IpcMethod]: IpcRequestParamsForMethod<Method>;
 };
 
-export interface TurnSteerResponse {
-  turnId: string;
-}
+export type CodexIpcRequestResultByMethod = {
+  [Method in IpcMethod]: IpcResultForMethod<Method>;
+};
 
-export interface ThreadFollowerSteerTurnResponse {
-  result: TurnSteerResponse;
-}
-
-export interface CodexIpcRequestParamsByMethod {
-  initialize: { clientType: string };
-  "thread-follower-start-turn": ThreadFollowerStartTurnParams;
-  "thread-follower-steer-turn": ThreadFollowerSteerTurnParams;
-}
-
-export interface CodexIpcRequestResultByMethod {
-  initialize: { clientId: string };
-  "thread-follower-start-turn": ThreadFollowerStartTurnResponse;
-  "thread-follower-steer-turn": ThreadFollowerSteerTurnResponse;
-}
-
-export type CodexIpcKnownRequestMethod = keyof CodexIpcRequestParamsByMethod;
+export type CodexIpcRequestMethod = keyof IpcMethodMap;
 
 export type CodexIpcRequestParams<Method extends string> =
-  Method extends CodexIpcKnownRequestMethod ? CodexIpcRequestParamsByMethod[Method] : JsonObject;
+  Method extends IpcMethod ? IpcRequestParamsForMethod<Method> : JsonObject;
 
 export type CodexIpcRequestResult<Method extends string> =
-  Method extends keyof CodexIpcRequestResultByMethod
-    ? CodexIpcRequestResultByMethod[Method]
-    : JsonValue | undefined;
+  Method extends IpcMethod ? IpcResultForMethod<Method> : JsonValue | undefined;
 
 export interface CodexIpcRequestMessage<
   Method extends string = string,
@@ -157,19 +56,26 @@ export interface CodexIpcRequestMessage<
   timeoutMs?: number;
 }
 
-export interface CodexIpcResponseMessage {
+export interface CodexIpcResponseMessage<
+  Method extends string = string,
+  Result = Method extends CodexIpcRequestMethod ? CodexIpcRequestResult<Method> : unknown,
+> {
   type: "response";
   requestId: string;
-  method?: string;
+  method?: Method;
+  handledByClientId?: string;
   resultType: "success" | "error";
-  result?: unknown;
+  result?: Result;
   error?: string;
 }
 
-export interface CodexIpcBroadcastMessage {
+export interface CodexIpcBroadcastMessage<
+  Method extends string = string,
+  Params extends JsonObject | undefined = JsonObject | undefined,
+> {
   type: "broadcast";
-  method: string;
-  params?: JsonObject;
+  method: Method;
+  params?: Params;
   sourceClientId?: string | null;
   version?: number;
 }
@@ -188,20 +94,31 @@ export interface CodexIpcDiscoveryResponseMessage {
 
 export type CodexIpcMessage =
   | CodexIpcRequestMessage<string, unknown>
-  | CodexIpcResponseMessage
-  | CodexIpcBroadcastMessage
+  | CodexIpcResponseMessage<string, unknown>
+  | CodexIpcBroadcastMessage<string, JsonObject | undefined>
   | CodexIpcDiscoveryRequestMessage
   | CodexIpcDiscoveryResponseMessage;
 
-export interface ThreadStreamStateChangedEvent {
+interface ThreadStreamStateChangedEventBase {
   conversationId: string | null;
   hostId: string | null;
   sourceClientId: string | null;
   version: number | null;
-  changeType: string | null;
   revision: number | null;
   baseRevision: number | null;
-  snapshot: JsonValue | null;
-  patches: JsonValue[] | null;
-  raw: CodexIpcBroadcastMessage;
+  raw: CodexIpcBroadcastMessage<"thread-stream-state-changed">;
 }
+
+export type ThreadStreamStateChangedEvent =
+  | (ThreadStreamStateChangedEventBase & {
+      kind: "snapshot";
+      snapshot: JsonValue | null;
+    })
+  | (ThreadStreamStateChangedEventBase & {
+      kind: "patches";
+      patches: JsonValue[];
+    })
+  | (ThreadStreamStateChangedEventBase & {
+      kind: "unknown";
+      changeType: string | null;
+    });

@@ -54,11 +54,10 @@ describe("toThreadStreamStateChangedEvent", () => {
       hostId: "local",
       sourceClientId: "source-1",
       version: 7,
-      changeType: "snapshot",
+      kind: "snapshot",
       revision: 12,
       baseRevision: null,
       snapshot: { id: "conversation-1" },
-      patches: null,
       raw: event.raw,
     });
   });
@@ -81,10 +80,9 @@ describe("toThreadStreamStateChangedEvent", () => {
     });
 
     assert.ok(event);
-    assert.equal(event.changeType, "patches");
+    assert.equal(event.kind, "patches");
     assert.equal(event.revision, 13);
     assert.equal(event.baseRevision, 12);
-    assert.equal(event.snapshot, null);
     assert.deepEqual(event.patches, patches);
   });
 

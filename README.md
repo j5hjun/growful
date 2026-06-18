@@ -18,9 +18,9 @@ The first milestone is intentionally read-only:
 - receives router broadcasts
 - emits normalized `thread-stream-state-changed` events
 - answers `client-discovery-request` with `canHandle: false` by default
+- provides thin `thread-follower-start-turn` and `thread-follower-steer-turn` helpers
 
-It does not claim ownership of threads and does not provide mutating
-`thread-follower-*` helpers yet.
+It does not claim ownership of threads beyond forwarding those request helpers.
 
 ```ts
 import { CodexIpcClient } from "@growful/codex-ipc";
@@ -32,6 +32,17 @@ client.onThreadStateChanged((event) => {
 });
 
 await client.connect();
+```
+
+Known thread-follower helpers are also available:
+
+```ts
+await client.startTurn({
+  conversationId: "conversation-1",
+  turnStartParams: {
+    input: [{ type: "text", text: "hello" }],
+  },
+});
 ```
 
 Use `onBroadcast` if you need raw IPC broadcasts:

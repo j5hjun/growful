@@ -8,7 +8,7 @@ import type {
 
 export function isThreadStreamStateChangedBroadcast(
   message: CodexIpcMessage | null | undefined,
-): message is CodexIpcBroadcastMessage {
+): message is CodexIpcBroadcastMessage<"thread-stream-state-changed"> {
   return message?.type === "broadcast" && message.method === "thread-stream-state-changed";
 }
 
@@ -38,17 +38,35 @@ export function toThreadStreamStateChangedEvent(
   const params = message.params ?? {};
   const change = asObject(params.change);
   const changeType = asString(change.type);
-
-  return {
+  const base = {
     conversationId: asString(params.conversationId),
     hostId: asString(params.hostId),
     sourceClientId: message.sourceClientId ?? null,
     version: message.version ?? null,
-    changeType,
     revision: asNumber(change.revision),
     baseRevision: asNumber(change.baseRevision),
-    snapshot: changeType === "snapshot" ? (change.conversationState ?? null) : null,
-    patches: changeType === "patches" ? asArray(change.patches) : null,
     raw: message,
+  };
+
+  if (changeType === "snapshot") {
+    return {
+      ...base,
+      kind: "snapshot",
+      snapshot: change.conversationState ?? null,
+    };
+  }
+
+  if (changeType === "patches") {
+    return {
+      ...base,
+      kind: "patches",
+      patches: asArray(change.patches),
+    };
+  }
+
+  return {
+    ...base,
+    kind: "unknown",
+    changeType,
   };
 }

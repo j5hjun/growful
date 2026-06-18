@@ -11,6 +11,8 @@ import type {
   CodexIpcDiscoveryResponseMessage,
   CodexIpcMessage,
   CodexIpcRequestMessage,
+} from "../src/protocol.ts";
+import type {
   ThreadStreamStateChangedEvent,
 } from "../src/index.ts";
 
@@ -76,6 +78,7 @@ describe("CodexIpcClient", () => {
         requestId: message.requestId,
         resultType: "success",
         method: "initialize",
+        handledByClientId: "router-1",
         result: { clientId: "client-1" },
       });
     });
@@ -154,7 +157,7 @@ describe("CodexIpcClient", () => {
 
     assert.equal(received.length, 1);
     assert.equal(received[0].conversationId, "conversation-1");
-    assert.equal(received[0].changeType, "snapshot");
+    assert.equal(received[0].kind, "snapshot");
     assert.deepEqual(received[0].snapshot, { id: "conversation-1" });
     await client.close();
   });
@@ -204,14 +207,14 @@ describe("CodexIpcClient", () => {
           method: "initialize",
           result: { clientId: "client-1" },
         });
-      } else if (isRequest(message) && message.method === "example-method") {
+      } else if (isRequest(message) && message.method === "thread-follower-steer-turn") {
         assert.equal(message.sourceClientId, "client-1");
         write(socket, {
           type: "response",
           requestId: message.requestId,
           resultType: "success",
-          method: "example-method",
-          result: { ok: true },
+          method: "thread-follower-steer-turn",
+          result: { result: { turnId: "turn-1" } },
         });
       }
     });
@@ -219,9 +222,72 @@ describe("CodexIpcClient", () => {
     const client = new CodexIpcClient({ socketPath });
     await client.connect();
 
-    const result = await client.request("example-method", { value: 1 });
+    const result = await client.request("thread-follower-steer-turn", {
+      conversationId: "conversation-1",
+      clientUserMessageId: "message-1",
+      input: [{ type: "text", text: "hello" }],
+      expectedTurnId: "turn-1",
+    });
 
-    assert.deepEqual(result, { ok: true });
+    assert.deepEqual(result, { result: { turnId: "turn-1" } });
+    await client.close();
+  });
+
+  it("provides helper methods for known thread-follower requests", async () => {
+    const seenMethods: string[] = [];
+    const { socketPath } = await createIpcTestServer((message, socket) => {
+      if (isRequest(message) && message.method === "initialize") {
+        write(socket, {
+          type: "response",
+          requestId: message.requestId,
+          resultType: "success",
+          method: "initialize",
+          result: { clientId: "client-1" },
+        });
+      } else if (isRequest(message) && message.method === "thread-follower-start-turn") {
+        seenMethods.push(message.method);
+        write(socket, {
+          type: "response",
+          requestId: message.requestId,
+          resultType: "success",
+          method: "thread-follower-start-turn",
+          result: { result: { turn: { id: "turn-1", items: [], itemsView: "summary", status: "inProgress", error: null, startedAt: null, completedAt: null, durationMs: null } } },
+        });
+      } else if (isRequest(message) && message.method === "thread-follower-steer-turn") {
+        seenMethods.push(message.method);
+        write(socket, {
+          type: "response",
+          requestId: message.requestId,
+          resultType: "success",
+          method: "thread-follower-steer-turn",
+          result: { result: { turnId: "turn-1" } },
+        });
+      }
+    });
+
+    const client = new CodexIpcClient({ socketPath });
+    await client.connect();
+
+    const startTurnResult = await client.startTurn({
+      conversationId: "conversation-1",
+      turnStartParams: {
+        clientUserMessageId: "message-1",
+        input: [{ type: "text", text: "hello" }],
+      },
+    });
+    const steerTurnResult = await client.steerTurn({
+      conversationId: "conversation-1",
+      clientUserMessageId: "message-2",
+      input: [{ type: "text", text: "follow up" }],
+      expectedTurnId: "turn-1",
+    });
+
+    assert.equal(startTurnResult.result.turn.id, "turn-1");
+    assert.equal(steerTurnResult.result.turnId, "turn-1");
+    assert.deepEqual(seenMethods, [
+      "thread-follower-start-turn",
+      "thread-follower-steer-turn",
+    ]);
     await client.close();
   });
 });

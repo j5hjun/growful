@@ -3,6 +3,13 @@ import net from "node:net";
 import { randomUUID } from "node:crypto";
 
 import { encodeMessage, FrameDecoder } from "./framing.ts";
+import type {
+  ThreadFollowerStartTurnParams,
+  ThreadFollowerStartTurnResponse,
+  ThreadFollowerSteerTurnParams,
+  ThreadFollowerSteerTurnResponse,
+} from "./model/thread-follower.ts";
+import type { IpcMethod } from "./protocol/method-map.ts";
 import { getDefaultCodexIpcSocketPath } from "./socket-path.ts";
 import { toThreadStreamStateChangedEvent } from "./thread-state.ts";
 import type {
@@ -30,7 +37,7 @@ export interface CodexIpcRequestOptions {
 }
 
 interface PendingRequest {
-  method: string;
+  method: IpcMethod;
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
@@ -113,7 +120,7 @@ export class CodexIpcClient {
     return () => this.#events.off("thread-state-changed", handler);
   }
 
-  async request<Method extends string>(
+  async request<Method extends IpcMethod>(
     method: Method,
     params: CodexIpcRequestParams<Method>,
     options: CodexIpcRequestOptions = {},
@@ -143,6 +150,20 @@ export class CodexIpcClient {
 
     socket.write(encodeMessage(message));
     return promise as Promise<CodexIpcRequestResult<Method>>;
+  }
+
+  startTurn(
+    params: ThreadFollowerStartTurnParams,
+    options: CodexIpcRequestOptions = {},
+  ): Promise<ThreadFollowerStartTurnResponse> {
+    return this.request("thread-follower-start-turn", params, options);
+  }
+
+  steerTurn(
+    params: ThreadFollowerSteerTurnParams,
+    options: CodexIpcRequestOptions = {},
+  ): Promise<ThreadFollowerSteerTurnResponse> {
+    return this.request("thread-follower-steer-turn", params, options);
   }
 
   #handleMessage(message: CodexIpcMessage): void {

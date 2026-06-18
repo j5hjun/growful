@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { FrameDecoder, encodeMessage } from "../src/framing.ts";
-import type { CodexIpcMessage } from "../src/index.ts";
+import type { CodexIpcMessage } from "../src/protocol.ts";
 
 describe("encodeMessage", () => {
   it("prefixes JSON payloads with a uint32le byte length", () => {
