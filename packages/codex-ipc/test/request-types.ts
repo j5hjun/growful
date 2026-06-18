@@ -7,6 +7,7 @@ import type {
   CodexIpcRequestParamsByMethod,
   CodexIpcRequestResultByMethod,
   CodexIpcResponseMessage,
+  IpcBroadcastMap,
   IpcMethodMap,
 } from "../src/protocol.ts";
 import type {
@@ -48,6 +49,44 @@ type MethodMapIncludesInitialize = Assert<
 
 type PublicRequestMethodIncludesInitialize = Assert<
   IsAssignable<"initialize", CodexIpcRequestMethod>
+>;
+
+type InitializeVersionIsDeclared = Assert<
+  IsAssignable<1, IpcMethodMap["initialize"]["version"]>
+>;
+
+type ThreadStateBroadcastCarriesTypedEnvelope = Assert<
+  IsAssignable<
+    IpcBroadcastMap["thread-stream-state-changed"]["params"],
+    {
+      conversationId?: string | null;
+      hostId?: string | null;
+      change?: {
+        type?: string | null;
+      };
+    }
+  >
+>;
+
+type ThreadStateBroadcastChangePayloadIsTyped = Assert<
+  IsAssignable<
+    IpcBroadcastMap["thread-stream-state-changed"]["params"]["change"],
+    {
+      type?: string | null;
+      revision?: number;
+    } | undefined
+  >
+>;
+
+type ClientStatusBroadcastCarriesTypedStatus = Assert<
+  IsAssignable<
+    IpcBroadcastMap["client-status-changed"]["params"],
+    {
+      clientId: string;
+      clientType: string;
+      status: string;
+    }
+  >
 >;
 
 type UserInputMatchesModel = Assert<
@@ -122,6 +161,10 @@ const startTurnParamsMapEntryIsStable: StartTurnParamsMapEntryIsStable = true;
 const startTurnResultMapEntryIsStable: StartTurnResultMapEntryIsStable = true;
 const methodMapIncludesInitialize: MethodMapIncludesInitialize = true;
 const publicRequestMethodIncludesInitialize: PublicRequestMethodIncludesInitialize = true;
+const initializeVersionIsDeclared: InitializeVersionIsDeclared = true;
+const threadStateBroadcastCarriesTypedEnvelope: ThreadStateBroadcastCarriesTypedEnvelope = true;
+const threadStateBroadcastChangePayloadIsTyped: ThreadStateBroadcastChangePayloadIsTyped = true;
+const clientStatusBroadcastCarriesTypedStatus: ClientStatusBroadcastCarriesTypedStatus = true;
 const userInputMatchesModel: UserInputMatchesModel = true;
 const turnStartParamsMatchModel: TurnStartParamsMatchModel = true;
 const startTurnResponseMatchesModel: StartTurnResponseMatchesModel = true;
@@ -130,6 +173,10 @@ void startTurnParamsMapEntryIsStable;
 void startTurnResultMapEntryIsStable;
 void methodMapIncludesInitialize;
 void publicRequestMethodIncludesInitialize;
+void initializeVersionIsDeclared;
+void threadStateBroadcastCarriesTypedEnvelope;
+void threadStateBroadcastChangePayloadIsTyped;
+void clientStatusBroadcastCarriesTypedStatus;
 void userInputMatchesModel;
 void turnStartParamsMatchModel;
 void startTurnResponseMatchesModel;

@@ -72,6 +72,7 @@ describe("CodexIpcClient", () => {
 
       assert.equal(message.type, "request");
       assert.equal(message.method, "initialize");
+      assert.equal(message.version, 1);
       assert.deepEqual(message.params, { clientType: "test-client" });
       write(socket, {
         type: "response",
@@ -87,6 +88,52 @@ describe("CodexIpcClient", () => {
     await client.connect();
 
     assert.equal(client.clientId, "client-1");
+    await client.close();
+  });
+
+  it("prefers explicit request version overrides over default method metadata", async () => {
+    const { socketPath } = await createIpcTestServer((message, socket) => {
+      if (!isRequest(message)) {
+        return;
+      }
+
+      if (message.method === "initialize") {
+        write(socket, {
+          type: "response",
+          requestId: message.requestId,
+          resultType: "success",
+          method: "initialize",
+          result: { clientId: "client-1" },
+        });
+        return;
+      }
+
+      if (message.method === "thread-follower-steer-turn") {
+        assert.equal(message.version, 99);
+        write(socket, {
+          type: "response",
+          requestId: message.requestId,
+          resultType: "success",
+          method: "thread-follower-steer-turn",
+          result: { result: { turnId: "turn-99" } },
+        });
+      }
+    });
+
+    const client = new CodexIpcClient({ socketPath });
+    await client.connect();
+
+    const result = await client.steerTurn(
+      {
+        conversationId: "conversation-1",
+        clientUserMessageId: "message-1",
+        input: [{ type: "text", text: "hello" }],
+        expectedTurnId: "turn-1",
+      },
+      { version: 99 },
+    );
+
+    assert.equal(result.result.turnId, "turn-99");
     await client.close();
   });
 

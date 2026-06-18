@@ -1,4 +1,12 @@
 export type {
+  ClientStatusChangedParams,
+  ThreadStreamChange,
+  ThreadStreamPatchesChange,
+  ThreadStreamSnapshotChange,
+  ThreadStreamStateChangedParams,
+  ThreadStreamUnknownChange,
+} from "./model/broadcast.ts";
+export type {
   ByteRange,
   ImageDetail,
   TextElement,

@@ -5,7 +5,11 @@ import type {
 
 import type { IpcMethodDescriptor } from "./descriptor.ts";
 
-export type ThreadFollowerSteerTurnMethod = IpcMethodDescriptor<
-  ThreadFollowerSteerTurnParams,
-  ThreadFollowerSteerTurnResponse
->;
+export interface ThreadFollowerSteerTurnMethod
+  extends IpcMethodDescriptor<
+    ThreadFollowerSteerTurnParams,
+    ThreadFollowerSteerTurnResponse,
+    1
+  > {
+  version: 1;
+}

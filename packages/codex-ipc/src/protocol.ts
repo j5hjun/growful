@@ -1,4 +1,6 @@
-export type { IpcMethod, IpcMethodMap } from "./protocol/method-map.ts";
+export type { IpcBroadcastMap, IpcBroadcastMethod } from "./protocol/broadcast-map.ts";
+export type { IpcMethod, IpcMethodMap, IpcMethodVersion } from "./protocol/method-map.ts";
+export { getIpcMethodVersion } from "./protocol/method-map.ts";
 export type {
   CodexIpcBroadcastMessage,
   CodexIpcDiscoveryRequestMessage,

@@ -9,6 +9,7 @@ import type {
   ThreadFollowerSteerTurnParams,
   ThreadFollowerSteerTurnResponse,
 } from "./model/thread-follower.ts";
+import { getIpcMethodVersion } from "./protocol/method-map.ts";
 import type { IpcMethod } from "./protocol/method-map.ts";
 import { getDefaultCodexIpcSocketPath } from "./socket-path.ts";
 import { toThreadStreamStateChangedEvent } from "./thread-state.ts";
@@ -128,6 +129,7 @@ export class CodexIpcClient {
     const socket = this.#requireSocket();
     const requestId = options.requestId ?? randomUUID();
     const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    const version = options.version ?? getIpcMethodVersion(method);
 
     const message: CodexIpcRequestMessage<Method> = {
       type: "request",
@@ -135,7 +137,7 @@ export class CodexIpcClient {
       method,
       params,
       ...(options.includeSourceClientId === false ? {} : { sourceClientId: this.clientId }),
-      ...(options.version === undefined ? {} : { version: options.version }),
+      version,
       ...(options.timeoutMs === undefined ? {} : { timeoutMs }),
     };
 

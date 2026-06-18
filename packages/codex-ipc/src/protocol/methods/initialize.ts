@@ -8,4 +8,7 @@ export interface InitializeResult {
   clientId: string;
 }
 
-export type InitializeMethod = IpcMethodDescriptor<InitializeParams, InitializeResult>;
+export interface InitializeMethod
+  extends IpcMethodDescriptor<InitializeParams, InitializeResult, 1> {
+  version: 1;
+}
