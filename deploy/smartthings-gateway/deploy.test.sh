@@ -14,6 +14,23 @@ previous_image_reference='registry.example/gateway@sha256:0000000000000000000000
 broken_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000003'
 public_broken_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000004'
 same_rerun_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000005'
+release_state_file="$deployment_root/.deployed-release-state"
+
+assert_release_state() {
+  local expected_image_reference="$1"
+  local expected_release_id="$2"
+  local expected_release="$3"
+  local -a actual_state
+  local state_line
+  actual_state=()
+  while IFS= read -r state_line; do
+    actual_state+=("$state_line")
+  done <"$release_state_file"
+  test "${#actual_state[@]}" = '3'
+  test "${actual_state[0]}" = "$expected_image_reference"
+  test "${actual_state[1]}" = "$expected_release_id"
+  test "${actual_state[2]}" = "$expected_release"
+}
 
 cleanup() {
   rm -rf "$test_root"
@@ -25,9 +42,7 @@ cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$release_dir/"
 cp "$source_dir/compose.yaml" "$previous_release/"
 grep -Fq 'stop_grace_period: 120s' "$source_dir/compose.yaml"
 touch "$deployment_root/.env"
-printf '%s\n' "$previous_image_reference" >"$deployment_root/.deployed-image-reference"
-printf '%s\n' 'previous' >"$deployment_root/.deployed-release-id"
-printf '%s\n' "$previous_release" >"$deployment_root/.deployed-release"
+printf '%s\n' "$previous_image_reference" 'previous' "$previous_release" >"$release_state_file"
 
 # Dollar expressions below belong to the generated fake executable.
 # shellcheck disable=SC2016
@@ -74,6 +89,15 @@ export PUBLIC_HEALTHCHECK_ATTEMPTS=1
 export PUBLIC_HEALTHCHECK_INTERVAL_SECONDS=0
 export PATH="$fake_bin:$PATH"
 
+: >"$fake_log"
+mv "$previous_release/compose.yaml" "$previous_release/compose.yaml.unavailable"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" broken; then
+  printf 'deployment without an exact rollback Compose file unexpectedly started\n' >&2
+  exit 1
+fi
+mv "$previous_release/compose.yaml.unavailable" "$previous_release/compose.yaml"
+test ! -s "$fake_log"
+
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" registry.example/gateway:mutable invalid; then
   printf 'mutable image reference unexpectedly reached deployment\n' >&2
   exit 1
@@ -88,9 +112,7 @@ grep -Eq '^broken\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Fq "previous|image inspect $previous_image_reference" "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^previous\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
-test "$(<"$deployment_root/.deployed-image-reference")" = "$previous_image_reference"
-test "$(<"$deployment_root/.deployed-release-id")" = 'previous'
-test "$(<"$deployment_root/.deployed-release")" = "$previous_release"
+assert_release_state "$previous_image_reference" previous "$previous_release"
 
 : >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
@@ -101,10 +123,10 @@ fi
 
 grep -Eq '^public-broken\|curl .*smartthings\.growful\.click/healthz$' "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
-test "$(<"$deployment_root/.deployed-image-reference")" = "$previous_image_reference"
+assert_release_state "$previous_image_reference" previous "$previous_release"
 
 : >"$fake_log"
-printf '%s\n' 'same-rerun' >"$deployment_root/.deployed-release-id"
+printf '%s\n' "$previous_image_reference" 'same-rerun' "$previous_release" >"$release_state_file"
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$same_rerun_image_reference" same-rerun; then
   printf 'same release with a different digest unexpectedly succeeded\n' >&2
   exit 1
@@ -114,7 +136,7 @@ if grep -Eq '^same-rerun\|compose .* (pull gateway|run --rm gateway|up -d|stop g
   printf 'digest mismatch mutated the previously healthy gateway\n' >&2
   exit 1
 fi
-test "$(<"$deployment_root/.deployed-image-reference")" = "$previous_image_reference"
+assert_release_state "$previous_image_reference" same-rerun "$previous_release"
 
 : >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
@@ -127,8 +149,7 @@ if grep -Eq '^same-rerun\|compose .* (pull gateway|run --rm gateway|up -d|stop g
   printf 'same-release verification mutated the previously healthy gateway\n' >&2
   exit 1
 fi
-test "$(<"$deployment_root/.deployed-image-reference")" = "$previous_image_reference"
-test "$(<"$deployment_root/.deployed-release-id")" = 'same-rerun'
+assert_release_state "$previous_image_reference" same-rerun "$previous_release"
 
 : >"$fake_log"
 healthy_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000002'
@@ -136,7 +157,5 @@ DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image
 
 grep -Eq '^healthy\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
-test "$(<"$deployment_root/.deployed-image-reference")" = "$healthy_image_reference"
-test "$(<"$deployment_root/.deployed-release-id")" = 'healthy'
-test "$(<"$deployment_root/.deployed-release")" = "$release_dir"
+assert_release_state "$healthy_image_reference" healthy "$release_dir"
 test "$(readlink "$deployment_root/current")" = "$release_dir"

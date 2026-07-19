@@ -4,6 +4,7 @@ set -euo pipefail
 deployment_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deployment_root="${DEPLOYMENT_ROOT:-$deployment_dir}"
 environment_file="$deployment_root/.env"
+release_state_file="$deployment_root/.deployed-release-state"
 image_reference="${1:?image reference is required}"
 new_release_id="${2:?release id is required}"
 if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
@@ -21,14 +22,23 @@ previous_image_reference=""
 previous_release_id=""
 previous_release=""
 
-if [[ -f "$deployment_root/.deployed-image-reference" ]]; then
-  previous_image_reference="$(<"$deployment_root/.deployed-image-reference")"
-fi
-if [[ -f "$deployment_root/.deployed-release-id" ]]; then
-  previous_release_id="$(<"$deployment_root/.deployed-release-id")"
-fi
-if [[ -f "$deployment_root/.deployed-release" ]]; then
-  previous_release="$(<"$deployment_root/.deployed-release")"
+if [[ -f "$release_state_file" ]]; then
+  deployed_state=()
+  while IFS= read -r state_line; do
+    deployed_state+=("$state_line")
+  done <"$release_state_file"
+  if ((${#deployed_state[@]} != 3)); then
+    printf 'deployed release state is malformed\n' >&2
+    exit 1
+  fi
+  previous_image_reference="${deployed_state[0]}"
+  previous_release_id="${deployed_state[1]}"
+  previous_release="${deployed_state[2]}"
+  if [[ ! "$previous_image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] ||
+    [[ -z "$previous_release_id" || ! -f "$previous_release/compose.yaml" ]]; then
+    printf 'deployed release state cannot provide an exact rollback target\n' >&2
+    exit 1
+  fi
 fi
 
 export COMPOSE_PROJECT_NAME=smartthings-gateway
@@ -105,9 +115,7 @@ rollback_release() {
   export RELEASE_ID="$previous_release_id"
   export SMARTTHINGS_GATEWAY_IMAGE_NAME="${previous_image_reference%@sha256:*}"
   export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="sha256:${previous_image_reference##*@sha256:}"
-  if [[ -n "$previous_release" && -f "$previous_release/compose.yaml" ]]; then
-    compose=(docker compose --env-file "$environment_file" -f "$previous_release/compose.yaml")
-  fi
+  compose=(docker compose --env-file "$environment_file" -f "$previous_release/compose.yaml")
 
   if ! docker image inspect "$previous_image_reference" >/dev/null 2>&1; then
     "${compose[@]}" pull gateway || return 1
@@ -133,10 +141,10 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
 fi
 
 if deploy_release; then
-  printf '%s\n' "$image_reference" >"$deployment_root/.deployed-image-reference"
-  printf '%s\n' "$new_release_id" >"$deployment_root/.deployed-release-id"
-  printf '%s\n' "$deployment_dir" >"$deployment_root/.deployed-release"
+  state_temp="$(mktemp "${release_state_file}.XXXXXX")"
+  printf '%s\n' "$image_reference" "$new_release_id" "$deployment_dir" >"$state_temp"
   ln -sfn "$deployment_dir" "$deployment_root/current"
+  mv "$state_temp" "$release_state_file"
   exit 0
 fi
 
