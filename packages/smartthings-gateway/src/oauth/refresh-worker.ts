@@ -13,14 +13,11 @@ export type RefreshWorkerOptions = {
   readonly service: RefreshService
 }
 
-export async function runTokenRefresh(service: RefreshService): Promise<boolean> {
-  return service.refreshIfDue()
-}
-
-export function startRefreshWorker(options: RefreshWorkerOptions): () => void {
-  const run = async (): Promise<void> => {
+export function startRefreshWorker(options: RefreshWorkerOptions): () => Promise<void> {
+  let activeRun: Promise<void> | undefined
+  const execute = async (): Promise<void> => {
     try {
-      const refreshed = await runTokenRefresh(options.service)
+      const refreshed = await options.service.refreshIfDue()
       if (refreshed) {
         options.logger.info("token.refresh.completed")
       }
@@ -29,9 +26,21 @@ export function startRefreshWorker(options: RefreshWorkerOptions): () => void {
       options.logger.error({ errorName }, "token.refresh.failed")
     }
   }
+  const run = (): Promise<void> => {
+    if (activeRun !== undefined) {
+      return activeRun
+    }
+    activeRun = execute().finally(() => {
+      activeRun = undefined
+    })
+    return activeRun
+  }
 
   void run()
   const timer = setInterval(() => void run(), options.intervalMs)
   timer.unref()
-  return () => clearInterval(timer)
+  return async () => {
+    clearInterval(timer)
+    await activeRun
+  }
 }

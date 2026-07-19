@@ -58,6 +58,8 @@ jobs:
       - run: pnpm build
       - name: Test deployment rollback
         run: bash ../../deploy/smartthings-gateway/deploy.test.sh
+      - name: Test production preflight
+        run: bash ../../deploy/smartthings-gateway/preflight.test.sh
       - name: Build deployment image
         run: docker build --tag smartthings-gateway:ci .
       - name: Smoke test deployment image with Compose
@@ -89,7 +91,6 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
-            ${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -107,19 +108,33 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
-      - uses: tailscale/github-action@v4
+      - id: freshness
+        name: Check commit is current main
+        run: |
+          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          test -n "$current_main"
+          if [[ "$current_main" == "$GITHUB_SHA" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping stale commit $GITHUB_SHA; current main is $current_main"
+          fi
+      - if: steps.freshness.outputs.deploy == 'true'
+        uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           ping: 100.72.144.111
       - name: Copy deployment files
+        if: steps.freshness.outputs.deploy == 'true'
         run: |
           test -n "$DEPLOY_USER"
           tar -C deploy/smartthings-gateway -cf - compose.yaml deploy.sh preflight.sh |
             tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
               "mkdir -p \"\$HOME/app/smartthings-gateway/releases/$IMAGE_TAG\" && tar -xf - -C \"\$HOME/app/smartthings-gateway/releases/$IMAGE_TAG\""
       - name: Check production prerequisites
+        if: steps.freshness.outputs.deploy == 'true'
         run: |
           tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
             bash -s -- "$IMAGE_NAME" "$IMAGE_TAG" <<'REMOTE'
@@ -129,6 +144,7 @@ jobs:
           DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$1" "$2"
           REMOTE
       - name: Deploy image
+        if: steps.freshness.outputs.deploy == 'true'
         run: |
           tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
             bash -s -- "$IMAGE_NAME" "$IMAGE_TAG" "$PUBLIC_BASE_URL" <<'REMOTE'
@@ -138,6 +154,7 @@ jobs:
           DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="$3" bash "$release_dir/deploy.sh" "$1" "$2"
           REMOTE
       - name: Verify public HTTPS endpoints
+        if: steps.freshness.outputs.deploy == 'true'
         run: |
           health_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$PUBLIC_BASE_URL/healthz")"
           test "$health_response" = '{"status":"ok"}'
@@ -146,4 +163,4 @@ jobs:
           jq --exit-status '.connected == true or .connected == false' <<<"$connection_response" >/dev/null
 
           oauth_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$PUBLIC_BASE_URL/oauth/start")"
-          test "$oauth_status" = '302'
+          test "$oauth_status" = '401'

@@ -1,18 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  type RefreshService,
-  runTokenRefresh,
-  startRefreshWorker,
-} from "../src/oauth/refresh-worker.js"
-
-class DueRefreshService implements RefreshService {
-  calls = 0
-
-  async refreshIfDue(): Promise<boolean> {
-    this.calls += 1
-    return true
-  }
-}
+import { type RefreshService, startRefreshWorker } from "../src/oauth/refresh-worker.js"
 
 class SecretBearingRefreshError extends Error {
   override readonly name = "SecretBearingRefreshError"
@@ -24,19 +11,7 @@ class FailingRefreshService implements RefreshService {
   }
 }
 
-describe("runTokenRefresh", () => {
-  it("delegates one refresh check to the OAuth service", async () => {
-    // Given
-    const service = new DueRefreshService()
-
-    // When
-    const refreshed = await runTokenRefresh(service)
-
-    // Then
-    expect(refreshed).toBe(true)
-    expect(service.calls).toBe(1)
-  })
-
+describe("startRefreshWorker", () => {
   it("logs only the error name when a refresh fails", async () => {
     let loggedFields: { readonly errorName: string } | undefined
     let notifyLogged: (() => void) | undefined
@@ -56,8 +31,45 @@ describe("runTokenRefresh", () => {
     })
 
     await logged
-    stop()
+    await stop()
 
     expect(loggedFields).toEqual({ errorName: "SecretBearingRefreshError" })
+  })
+
+  it("waits for an in-flight refresh before stopping", async () => {
+    // Given
+    let completeRefresh: (() => void) | undefined
+    let notifyStarted: (() => void) | undefined
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve
+    })
+    const service: RefreshService = {
+      async refreshIfDue() {
+        notifyStarted?.()
+        await new Promise<void>((resolve) => {
+          completeRefresh = resolve
+        })
+        return true
+      },
+    }
+    const stop = startRefreshWorker({
+      intervalMs: 60_000,
+      logger: { error() {}, info() {} },
+      service,
+    })
+    await started
+
+    // When
+    let stopped = false
+    const stopping = stop().then(() => {
+      stopped = true
+    })
+    await Promise.resolve()
+
+    // Then
+    expect(stopped).toBe(false)
+    completeRefresh?.()
+    await stopping
+    expect(stopped).toBe(true)
   })
 })

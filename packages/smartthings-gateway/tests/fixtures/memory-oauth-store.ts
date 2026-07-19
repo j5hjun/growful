@@ -1,11 +1,13 @@
-import type {
-  InstalledAppId,
-  OAuthStateHash,
-  OAuthStore,
-  RefreshClaim,
-  RefreshFailure,
-  SaveTokensInput,
-  StoredTokens,
+import {
+  type InstalledAppId,
+  type OAuthStateHash,
+  type OAuthStore,
+  type RefreshClaim,
+  type RefreshClaimId,
+  type RefreshFailure,
+  type SaveTokensInput,
+  StaleRefreshClaimError,
+  type StoredTokens,
 } from "../../src/oauth/contracts.js"
 
 export class MemoryOAuthStore implements OAuthStore {
@@ -13,6 +15,7 @@ export class MemoryOAuthStore implements OAuthStore {
   readonly states = new Map<OAuthStateHash, Date>()
   tokens: StoredTokens | null = null
   private refreshClaimedUntil: Date | null = null
+  private refreshClaimId: RefreshClaimId | null = null
 
   async claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null> {
     const tokens = this.tokens
@@ -23,6 +26,7 @@ export class MemoryOAuthStore implements OAuthStore {
       return null
     }
     this.refreshClaimedUntil = new Date(claim.now.getTime() + claim.leaseMs)
+    this.refreshClaimId = claim.claimId
     return tokens
   }
 
@@ -37,8 +41,12 @@ export class MemoryOAuthStore implements OAuthStore {
   }
 
   async recordRefreshFailure(failure: RefreshFailure): Promise<void> {
+    if (this.refreshClaimId !== failure.claimId) {
+      return
+    }
     this.failures.push(failure)
     this.refreshClaimedUntil = null
+    this.refreshClaimId = null
   }
 
   async saveState(stateHash: OAuthStateHash, expiresAt: Date): Promise<void> {
@@ -46,6 +54,9 @@ export class MemoryOAuthStore implements OAuthStore {
   }
 
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {
+    if (input.source === "refresh" && this.refreshClaimId !== input.claimId) {
+      throw new StaleRefreshClaimError()
+    }
     const lastRefreshedAt = input.source === "refresh" ? input.issuedAt : null
     this.tokens = {
       accessToken: input.grant.accessToken,
@@ -57,6 +68,7 @@ export class MemoryOAuthStore implements OAuthStore {
       tokenType: input.grant.tokenType,
     }
     this.refreshClaimedUntil = null
+    this.refreshClaimId = null
     return this.tokens
   }
 

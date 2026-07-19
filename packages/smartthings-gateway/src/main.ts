@@ -29,6 +29,7 @@ async function main(): Promise<void> {
     store,
   })
   const app = createApp({
+    adminToken: config.adminToken,
     logger: {
       level: config.logLevel,
       redact: ["req.headers.authorization", "req.headers.cookie"],
@@ -49,7 +50,7 @@ async function main(): Promise<void> {
     }
     shuttingDown = true
     app.log.info({ signal }, "server.stopping")
-    stopRefreshWorker()
+    await stopRefreshWorker()
     await app.close()
     await database.destroy()
   }

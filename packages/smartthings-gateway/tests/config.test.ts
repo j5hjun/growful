@@ -6,6 +6,7 @@ describe("loadConfig", () => {
     // Given
     const environment = {
       DATABASE_URL: "postgresql://gateway:password@postgres:5432/gateway",
+      OAUTH_ADMIN_TOKEN: "test-admin-token-with-32-characters",
       OAUTH_CLIENT_ID: "client-id",
       OAUTH_CLIENT_SECRET: "client-secret",
       OAUTH_REDIRECT_URI: "https://smartthings.growful.click/oauth/callback",
@@ -19,6 +20,7 @@ describe("loadConfig", () => {
     // Then
     expect(config).toMatchObject({
       databaseUrl: environment.DATABASE_URL,
+      adminToken: environment.OAUTH_ADMIN_TOKEN,
       host: "0.0.0.0",
       port: 8_100,
       refreshBeforeExpiryMs: 3_600_000,

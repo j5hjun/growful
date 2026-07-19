@@ -16,6 +16,7 @@ export type OAuthTokenTable = {
   readonly lastRefreshError: string | null
   readonly lastRefreshedAt: Timestamp | null
   readonly refreshClaimedUntil: Timestamp | null
+  readonly refreshClaimId: string | null
   readonly refreshTokenCiphertext: string
   readonly scope: string
   readonly tokenType: string
@@ -57,6 +58,7 @@ const initialMigration: Migration = {
       .addColumn("lastRefreshedAt", "timestamptz")
       .addColumn("lastRefreshError", "text")
       .addColumn("refreshClaimedUntil", "timestamptz")
+      .addColumn("refreshClaimId", "text")
       .execute()
   },
 }

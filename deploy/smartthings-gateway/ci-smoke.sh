@@ -28,6 +28,7 @@ printf '%s\n' \
   'PORT=8100' \
   'HOST=0.0.0.0' \
   'LOG_LEVEL=info' \
+  'OAUTH_ADMIN_TOKEN=gateway-ci-admin-token-with-32-characters' \
   'OAUTH_CLIENT_ID=gateway-ci-client' \
   'OAUTH_CLIENT_SECRET=gateway-ci-secret' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
@@ -63,7 +64,8 @@ done
 
 test "$(curl --fail --silent --show-error http://127.0.0.1:8100/healthz)" = '{"status":"ok"}'
 test "$(curl --fail --silent --show-error http://127.0.0.1:8100/connection)" = '{"connected":false}'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '401'
+test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
 
 restart_count="$(docker inspect --format='{{.RestartCount}}' "$container_id")"
 test "$restart_count" = '0'

@@ -6,6 +6,7 @@ import {
   type RefreshClaim,
   type RefreshFailure,
   type SaveTokensInput,
+  StaleRefreshClaimError,
   type StoredTokens,
 } from "../oauth/contracts.js"
 import { decodeEncryptionKey, decryptSecret, encryptSecret } from "../security/token-encryption.js"
@@ -38,7 +39,7 @@ export class PostgresOAuthStore implements OAuthStore {
     const leaseUntil = new Date(claim.now.getTime() + claim.leaseMs)
     const row = await this.database
       .updateTable("oauthTokens")
-      .set({ refreshClaimedUntil: leaseUntil })
+      .set({ refreshClaimedUntil: leaseUntil, refreshClaimId: claim.claimId })
       .where("expiresAt", "<=", dueAt)
       .where((expression) =>
         expression.or([
@@ -68,8 +69,13 @@ export class PostgresOAuthStore implements OAuthStore {
   async recordRefreshFailure(failure: RefreshFailure): Promise<void> {
     await this.database
       .updateTable("oauthTokens")
-      .set({ lastRefreshError: failure.message, refreshClaimedUntil: null })
+      .set({
+        lastRefreshError: failure.message,
+        refreshClaimedUntil: null,
+        refreshClaimId: null,
+      })
       .where("installedAppId", "=", failure.installedAppId)
+      .where("refreshClaimId", "=", failure.claimId)
       .execute()
   }
 
@@ -101,14 +107,20 @@ export class PostgresOAuthStore implements OAuthStore {
     return this.decryptRow(row)
   }
 
-  private async saveRefreshedTokens(input: SaveTokensInput): Promise<StoredTokens> {
+  private async saveRefreshedTokens(
+    input: Extract<SaveTokensInput, { readonly source: "refresh" }>,
+  ): Promise<StoredTokens> {
     const row = this.createRow(input, input.issuedAt)
     const saved = await this.database
       .updateTable("oauthTokens")
       .set(row)
       .where("installedAppId", "=", input.grant.installedAppId)
+      .where("refreshClaimId", "=", input.claimId)
       .returningAll()
-      .executeTakeFirstOrThrow()
+      .executeTakeFirst()
+    if (saved === undefined) {
+      throw new StaleRefreshClaimError()
+    }
     return this.decryptRow(saved)
   }
 
@@ -120,6 +132,7 @@ export class PostgresOAuthStore implements OAuthStore {
       lastRefreshError: null,
       lastRefreshedAt,
       refreshClaimedUntil: null,
+      refreshClaimId: null,
       refreshTokenCiphertext: encryptSecret(input.grant.refreshToken, this.encryptionKey),
       scope: input.grant.scope,
       tokenType: input.grant.tokenType,

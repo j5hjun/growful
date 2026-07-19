@@ -4,6 +4,7 @@ const environmentSchema = z.object({
   DATABASE_URL: z.url(),
   HOST: z.string().min(1).default("0.0.0.0"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  OAUTH_ADMIN_TOKEN: z.string().min(32),
   OAUTH_CLIENT_ID: z.string().min(1),
   OAUTH_CLIENT_SECRET: z.string().min(1),
   OAUTH_REDIRECT_URI: z.url(),
@@ -18,6 +19,7 @@ const environmentSchema = z.object({
 })
 
 export type AppConfig = {
+  readonly adminToken: string
   readonly authorizationUrl: URL
   readonly clientId: string
   readonly clientSecret: string
@@ -37,6 +39,7 @@ export type AppConfig = {
 export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
   const parsed = environmentSchema.parse(environment)
   return {
+    adminToken: parsed.OAUTH_ADMIN_TOKEN,
     authorizationUrl: new URL(parsed.SMARTTHINGS_AUTHORIZE_URL),
     clientId: parsed.OAUTH_CLIENT_ID,
     clientSecret: parsed.OAUTH_CLIENT_SECRET,

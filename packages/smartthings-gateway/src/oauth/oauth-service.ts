@@ -1,6 +1,6 @@
-import { createHash, randomBytes } from "node:crypto"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
 import type { ConnectionStatus, OAuthStore, SmartThingsClient, StoredTokens } from "./contracts.js"
-import { OAuthStateHashSchema } from "./contracts.js"
+import { OAuthStateHashSchema, RefreshClaimIdSchema } from "./contracts.js"
 
 const oauthStateLifetimeMs = 10 * 60 * 1_000
 
@@ -58,7 +58,9 @@ export class OAuthService {
 
   async refreshIfDue(): Promise<boolean> {
     const now = this.now()
+    const claimId = RefreshClaimIdSchema.parse(randomUUID())
     const tokens = await this.options.store.claimTokensForRefresh({
+      claimId,
       leaseMs: this.options.refreshLeaseMs,
       now,
       refreshBeforeExpiryMs: this.options.refreshBeforeExpiryMs,
@@ -69,10 +71,11 @@ export class OAuthService {
 
     try {
       const grant = await this.options.client.refresh(tokens.refreshToken)
-      await this.options.store.saveTokens({ grant, issuedAt: now, source: "refresh" })
+      await this.options.store.saveTokens({ claimId, grant, issuedAt: now, source: "refresh" })
       return true
     } catch (error) {
       await this.options.store.recordRefreshFailure({
+        claimId,
         installedAppId: tokens.installedAppId,
         message: error instanceof Error ? error.name : "UnknownError",
         occurredAt: now,

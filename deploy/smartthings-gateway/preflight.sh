@@ -33,27 +33,42 @@ fi
 
 required_keys=(
   DATABASE_URL
+  OAUTH_ADMIN_TOKEN
   OAUTH_CLIENT_ID
   OAUTH_CLIENT_SECRET
   OAUTH_REDIRECT_URI
+  PORT
   POSTGRES_PASSWORD
   SMARTTHINGS_SCOPES
   TOKEN_ENCRYPTION_KEY
 )
 for key in "${required_keys[@]}"; do
+  key_count="$(grep -Ec "^${key}=" "$environment_file" || true)"
+  if [[ "$key_count" != '1' ]]; then
+    printf 'environment value must occur exactly once: %s\n' "$key" >&2
+    exit 1
+  fi
   if ! grep -Eq "^${key}=.+$" "$environment_file"; then
-    printf 'required environment value is missing: %s\n' "$key" >&2
+    printf 'required environment value is empty: %s\n' "$key" >&2
     exit 1
   fi
 done
 
-if ! grep -Eq '^PORT=8100[[:space:]]*$' "$environment_file"; then
+port="$(sed -n 's/^PORT=//p' "$environment_file")"
+if [[ "$port" != '8100' ]]; then
   printf 'PORT must be 8100 in %s\n' "$environment_file" >&2
   exit 1
 fi
 
-if ! grep -Eq '^OAUTH_REDIRECT_URI=https://smartthings\.growful\.click/oauth/callback[[:space:]]*$' "$environment_file"; then
+redirect_uri="$(sed -n 's/^OAUTH_REDIRECT_URI=//p' "$environment_file")"
+if [[ "$redirect_uri" != 'https://smartthings.growful.click/oauth/callback' ]]; then
   printf 'OAUTH_REDIRECT_URI does not match the registered production callback\n' >&2
+  exit 1
+fi
+
+admin_token="$(sed -n 's/^OAUTH_ADMIN_TOKEN=//p' "$environment_file")"
+if ((${#admin_token} < 32)); then
+  printf 'OAUTH_ADMIN_TOKEN must contain at least 32 characters\n' >&2
   exit 1
 fi
 

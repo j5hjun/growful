@@ -6,6 +6,8 @@ import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 
 const apps: ReturnType<typeof createApp>[] = []
+const adminToken = "test-admin-token-with-32-characters"
+const adminAuthorization = `Basic ${Buffer.from(`operator:${adminToken}`).toString("base64")}`
 
 function createFixture(logger?: AppOptions["logger"]) {
   const client = new FakeSmartThingsClient()
@@ -18,7 +20,7 @@ function createFixture(logger?: AppOptions["logger"]) {
     stateGenerator: () => "test-state-with-sufficient-entropy",
     store,
   })
-  const app = createApp({ logger, service })
+  const app = createApp({ adminToken, logger, service })
   apps.push(app)
   return { app, client }
 }
@@ -28,10 +30,26 @@ afterEach(async () => {
 })
 
 describe("SmartThings Gateway HTTP API", () => {
+  it("rejects OAuth authorization starts without operator credentials", async () => {
+    // Given
+    const fixture = createFixture()
+
+    // When
+    const response = await fixture.app.inject({ method: "GET", url: "/oauth/start" })
+
+    // Then
+    expect(response.statusCode).toBe(401)
+    expect(response.headers["www-authenticate"]).toBe('Basic realm="SmartThings Gateway"')
+  })
+
   it("completes OAuth and reports connection metadata without tokens", async () => {
     // Given
     const fixture = createFixture()
-    const startResponse = await fixture.app.inject({ method: "GET", url: "/oauth/start" })
+    const startResponse = await fixture.app.inject({
+      headers: { authorization: adminAuthorization },
+      method: "GET",
+      url: "/oauth/start",
+    })
     const location = new URL(startResponse.headers.location ?? "")
     const state = location.searchParams.get("state") ?? ""
 
@@ -64,7 +82,11 @@ describe("SmartThings Gateway HTTP API", () => {
         },
       }),
     })
-    const startResponse = await fixture.app.inject({ method: "GET", url: "/oauth/start" })
+    const startResponse = await fixture.app.inject({
+      headers: { authorization: adminAuthorization },
+      method: "GET",
+      url: "/oauth/start",
+    })
     const location = new URL(startResponse.headers.location ?? "")
     const state = location.searchParams.get("state") ?? ""
 
@@ -74,6 +96,7 @@ describe("SmartThings Gateway HTTP API", () => {
     })
 
     const logs = logChunks.join("")
+    expect(logs).not.toContain(adminToken)
     expect(logs).not.toContain("sensitive-authorization-code")
     expect(logs).not.toContain(state)
   })

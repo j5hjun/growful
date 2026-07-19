@@ -2,9 +2,19 @@ import { z } from "zod"
 
 export const InstalledAppIdSchema = z.string().min(1).brand("InstalledAppId")
 export const OAuthStateHashSchema = z.string().length(64).brand("OAuthStateHash")
+export const RefreshClaimIdSchema = z.uuid().brand("RefreshClaimId")
 
 export type InstalledAppId = z.infer<typeof InstalledAppIdSchema>
 export type OAuthStateHash = z.infer<typeof OAuthStateHashSchema>
+export type RefreshClaimId = z.infer<typeof RefreshClaimIdSchema>
+
+export class StaleRefreshClaimError extends Error {
+  override readonly name = "StaleRefreshClaimError"
+
+  constructor() {
+    super("Refresh claim is no longer current")
+  }
+}
 
 export type TokenGrant = {
   readonly accessToken: string
@@ -34,18 +44,27 @@ export type ConnectionStatus =
     }
 
 export type RefreshClaim = {
+  readonly claimId: RefreshClaimId
   readonly leaseMs: number
   readonly now: Date
   readonly refreshBeforeExpiryMs: number
 }
 
-export type SaveTokensInput = {
-  readonly grant: TokenGrant
-  readonly issuedAt: Date
-  readonly source: "authorization" | "refresh"
-}
+export type SaveTokensInput =
+  | {
+      readonly grant: TokenGrant
+      readonly issuedAt: Date
+      readonly source: "authorization"
+    }
+  | {
+      readonly claimId: RefreshClaimId
+      readonly grant: TokenGrant
+      readonly issuedAt: Date
+      readonly source: "refresh"
+    }
 
 export type RefreshFailure = {
+  readonly claimId: RefreshClaimId
   readonly installedAppId: InstalledAppId
   readonly message: string
   readonly occurredAt: Date

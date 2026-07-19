@@ -3,6 +3,8 @@ import { z } from "zod"
 import {
   InstalledAppIdSchema,
   OAuthStateHashSchema,
+  RefreshClaimIdSchema,
+  StaleRefreshClaimError,
   type TokenGrant,
 } from "../src/oauth/contracts.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
@@ -72,7 +74,12 @@ describe("PostgresOAuthStore", () => {
   it("grants a refresh lease to only one concurrent worker", async () => {
     // Given
     await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
-    const claim = { leaseMs: 60_000, now, refreshBeforeExpiryMs: 60 * 60 * 1_000 }
+    const claim = {
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001"),
+      leaseMs: 60_000,
+      now,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    }
 
     // When
     const claims = await Promise.all([
@@ -82,5 +89,55 @@ describe("PostgresOAuthStore", () => {
 
     // Then
     expect(claims.filter((tokens) => tokens !== null)).toHaveLength(1)
+  })
+
+  it("prevents an expired refresh claimant from overwriting a newer claim", async () => {
+    // Given
+    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
+    const firstClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001")
+    const secondClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000002")
+    await store.claimTokensForRefresh({
+      claimId: firstClaimId,
+      leaseMs: 60_000,
+      now,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+    const secondClaimTime = new Date(now.getTime() + 60_001)
+    await store.claimTokensForRefresh({
+      claimId: secondClaimId,
+      leaseMs: 60_000,
+      now: secondClaimTime,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+    const rotatedGrant = {
+      ...grant,
+      accessToken: "rotated-access-token",
+      refreshToken: "rotated-refresh-token",
+    }
+
+    // When
+    const staleSave = store.saveTokens({
+      claimId: firstClaimId,
+      grant: rotatedGrant,
+      issuedAt: secondClaimTime,
+      source: "refresh",
+    })
+
+    // Then
+    await expect(staleSave).rejects.toBeInstanceOf(StaleRefreshClaimError)
+    await store.recordRefreshFailure({
+      claimId: firstClaimId,
+      installedAppId: grant.installedAppId,
+      message: "stale worker",
+      occurredAt: secondClaimTime,
+    })
+    await expect(
+      store.saveTokens({
+        claimId: secondClaimId,
+        grant: rotatedGrant,
+        issuedAt: secondClaimTime,
+        source: "refresh",
+      }),
+    ).resolves.toMatchObject({ refreshToken: "rotated-refresh-token" })
   })
 })

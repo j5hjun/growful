@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto"
 import Fastify, { type FastifyInstance, type FastifyServerOptions, LogController } from "fastify"
 import { z } from "zod"
 import { InvalidOAuthStateError, type OAuthService } from "../oauth/oauth-service.js"
@@ -7,11 +8,33 @@ const callbackQuerySchema = z.union([
   z.object({ code: z.string().min(1), state: z.string().min(1) }),
   z.object({ error: z.literal("access_denied"), state: z.string().min(1) }),
 ])
-const pathsWithSensitiveRequestData = new Set(["/healthz", "/oauth/callback"])
+const basicAuthorizationSchema = z.string().regex(/^Basic [A-Za-z0-9+/]+={0,2}$/)
+const pathsWithSensitiveRequestData = new Set(["/healthz", "/oauth/callback", "/oauth/start"])
 
 export type AppOptions = {
+  readonly adminToken: string
   readonly logger?: FastifyServerOptions["logger"]
   readonly service: OAuthService
+}
+
+function hasValidAdminAuthorization(
+  authorization: string | undefined,
+  adminToken: string,
+): boolean {
+  const parsed = basicAuthorizationSchema.safeParse(authorization)
+  if (!parsed.success) {
+    return false
+  }
+  const credentials = Buffer.from(parsed.data.slice("Basic ".length), "base64").toString("utf8")
+  const separatorIndex = credentials.indexOf(":")
+  if (separatorIndex < 0) {
+    return false
+  }
+  const suppliedToken = Buffer.from(credentials.slice(separatorIndex + 1), "utf8")
+  const expectedToken = Buffer.from(adminToken, "utf8")
+  return (
+    suppliedToken.length === expectedToken.length && timingSafeEqual(suppliedToken, expectedToken)
+  )
 }
 
 export function createApp(options: AppOptions): FastifyInstance {
@@ -24,7 +47,13 @@ export function createApp(options: AppOptions): FastifyInstance {
   })
   app.get("/healthz", async () => ({ status: "ok" as const }))
 
-  app.get("/oauth/start", async (_request, reply) => {
+  app.get("/oauth/start", async (request, reply) => {
+    if (!hasValidAdminAuthorization(request.headers.authorization, options.adminToken)) {
+      return reply
+        .header("WWW-Authenticate", 'Basic realm="SmartThings Gateway"')
+        .status(401)
+        .send({ error: "unauthorized" as const })
+    }
     const authorizationUrl = await options.service.startAuthorization()
     return reply.redirect(authorizationUrl.toString())
   })
