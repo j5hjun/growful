@@ -39,15 +39,17 @@ assert_release_state() {
 assert_deployment_sequence() {
   local expected_sequence="$1"
   local expected_release_id="$2"
+  local expected_image_reference="$3"
   local -a actual_sequence
   local sequence_line
   actual_sequence=()
   while IFS= read -r sequence_line; do
     actual_sequence+=("$sequence_line")
   done <"$deployment_sequence_file"
-  test "${#actual_sequence[@]}" = '2'
+  test "${#actual_sequence[@]}" = '3'
   test "${actual_sequence[0]}" = "$expected_sequence"
   test "${actual_sequence[1]}" = "$expected_release_id"
+  test "${actual_sequence[2]}" = "$expected_image_reference"
 }
 
 cleanup() {
@@ -68,7 +70,9 @@ printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
   'printf "%s|%s\n" "${RELEASE_ID:-}" "$*" >>"$FAKE_LOG"' \
-  'if [[ "$1" == "compose" && "${FAIL_ROLLBACK:-}" == "1" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
+  'if [[ "$1" == "compose" && "${FAIL_STOP:-}" == "1" && "$*" == *" stop gateway"* ]]; then' \
+  '  exit 1' \
+  'elif [[ "$1" == "compose" && "${FAIL_ROLLBACK:-}" == "1" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
   '  exit 1' \
   'elif [[ "$1" == "inspect" ]]; then' \
   '  if [[ "$*" == *RestartCount* ]]; then' \
@@ -91,7 +95,7 @@ printf '%s\n' \
   'if [[ "${RELEASE_ID:-}" == "broken" ]]; then' \
   '  exit 22' \
   'fi' \
-  'if [[ "${RELEASE_ID:-}" == "public-broken" && "$*" == *smartthings.growful.click* ]]; then' \
+  'if [[ ("${RELEASE_ID:-}" == "public-broken" || "${RELEASE_ID:-}" == "first-stop-failure") && "$*" == *smartthings.growful.click* ]]; then' \
   '  exit 22' \
   'fi' \
   'if [[ "${RELEASE_ID:-}" == "same-rerun" && "$*" == *smartthings.growful.click* && ! -f "$FAIL_ONCE_MARKER" ]]; then' \
@@ -137,6 +141,19 @@ test ! -s "$fake_log"
 
 : >"$fake_log"
 mv "$release_state_file" "$release_state_file.saved"
+if FAIL_STOP=1 DEPLOYMENT_ROOT="$deployment_root" \
+  PUBLIC_BASE_URL="https://smartthings.growful.click" \
+  bash "$release_dir/deploy.sh" "$public_broken_image_reference" first-stop-failure 2; then
+  printf 'first deployment with a failed stop unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test ! -f "$release_state_file"
+test "$(grep -Ec '^first-stop-failure\|compose .* stop gateway$' "$fake_log")" = '2'
+rm -f "$deployment_sequence_file"
+mv "$release_state_file.saved" "$release_state_file"
+
+: >"$fake_log"
+mv "$release_state_file" "$release_state_file.saved"
 if FAIL_STATE_MOVE=1 DEPLOYMENT_ROOT="$deployment_root" \
   bash "$release_dir/deploy.sh" "$public_broken_image_reference" first-state-failure 2; then
   printf 'first deployment with a failed release-state commit unexpectedly succeeded\n' >&2
@@ -145,7 +162,7 @@ fi
 test ! -f "$release_state_file"
 grep -Eq '^first-state-failure\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^first-state-failure\|compose .* stop gateway$' "$fake_log"
-assert_deployment_sequence 2 first-state-failure
+assert_deployment_sequence 2 first-state-failure "$public_broken_image_reference"
 mv "$release_state_file.saved" "$release_state_file"
 
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" registry.example/gateway:mutable invalid 2; then
@@ -160,7 +177,7 @@ if FAIL_SEQUENCE_MOVE=1 DEPLOYMENT_ROOT="$deployment_root" \
   exit 1
 fi
 test ! -s "$fake_log"
-assert_deployment_sequence 2 first-state-failure
+assert_deployment_sequence 2 first-state-failure "$public_broken_image_reference"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1
 
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" broken 3; then
@@ -173,7 +190,7 @@ grep -Fq "previous|image inspect $previous_image_reference" "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^previous\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1
-assert_deployment_sequence 3 broken
+assert_deployment_sequence 3 broken "$broken_image_reference"
 
 : >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
@@ -185,7 +202,7 @@ fi
 grep -Eq '^public-broken\|curl .*smartthings\.growful\.click/healthz$' "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1
-assert_deployment_sequence 4 public-broken
+assert_deployment_sequence 4 public-broken "$public_broken_image_reference"
 
 : >"$fake_log"
 printf '%s\n' "$previous_image_reference" 'same-rerun' "$previous_release" '4' >"$release_state_file"
@@ -199,7 +216,7 @@ if grep -Eq '^same-rerun\|compose .* (pull gateway|run --rm gateway|up -d|stop g
   exit 1
 fi
 assert_release_state "$previous_image_reference" same-rerun "$previous_release" 4
-assert_deployment_sequence 4 public-broken
+assert_deployment_sequence 4 public-broken "$public_broken_image_reference"
 
 : >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
@@ -213,7 +230,7 @@ if grep -Eq '^same-rerun\|compose .* (pull gateway|run --rm gateway|up -d|stop g
   exit 1
 fi
 assert_release_state "$previous_image_reference" same-rerun "$previous_release" 4
-assert_deployment_sequence 4 public-broken
+assert_deployment_sequence 4 public-broken "$public_broken_image_reference"
 
 : >"$fake_log"
 if FAIL_STATE_MOVE=1 DEPLOYMENT_ROOT="$deployment_root" \
@@ -224,13 +241,31 @@ fi
 grep -Eq '^state-failure\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^same-rerun\|compose .* up -d --no-deps gateway$' "$fake_log"
 assert_release_state "$previous_image_reference" same-rerun "$previous_release" 4
-assert_deployment_sequence 6 state-failure
+assert_deployment_sequence 6 state-failure "$healthy_image_reference"
+
+: >"$fake_log"
+if DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/deploy.sh" "$broken_image_reference" state-failure 6; then
+  printf 'equal deployment sequence accepted a different image digest\n' >&2
+  exit 1
+fi
+test ! -s "$fake_log"
+assert_deployment_sequence 6 state-failure "$healthy_image_reference"
+
+: >"$fake_log"
+if DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/deploy.sh" "$broken_image_reference" oversized 18446744073709551617; then
+  printf 'oversized deployment sequence unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test ! -s "$fake_log"
+assert_deployment_sequence 6 state-failure "$healthy_image_reference"
 
 : >"$fake_log"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" delayed 5
 test ! -s "$fake_log"
 assert_release_state "$previous_image_reference" same-rerun "$previous_release" 4
-assert_deployment_sequence 6 state-failure
+assert_deployment_sequence 6 state-failure "$healthy_image_reference"
 
 : >"$fake_log"
 if FAIL_ROLLBACK=1 DEPLOYMENT_ROOT="$deployment_root" \
@@ -241,7 +276,7 @@ fi
 grep -Eq '^same-rerun\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^same-rerun\|compose .* stop gateway$' "$fake_log"
 assert_release_state "$previous_image_reference" same-rerun "$previous_release" 4
-assert_deployment_sequence 7 broken
+assert_deployment_sequence 7 broken "$broken_image_reference"
 
 : >"$fake_log"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy 8
@@ -249,14 +284,25 @@ DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image
 grep -Eq '^healthy\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
 assert_release_state "$healthy_image_reference" healthy "$release_dir" 8
-assert_deployment_sequence 8 healthy
+assert_deployment_sequence 8 healthy "$healthy_image_reference"
 test "$(readlink "$deployment_root/current")" = "$release_dir"
+
+: >"$fake_log"
+mv "$deployment_sequence_file" "$deployment_sequence_file.saved"
+printf '%s\n' '18446744073709551617' malformed "$broken_image_reference" >"$deployment_sequence_file"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" malformed 9; then
+  printf 'overflowing stored deployment sequence unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test ! -s "$fake_log"
+mv "$deployment_sequence_file.saved" "$deployment_sequence_file"
+assert_deployment_sequence 8 healthy "$healthy_image_reference"
 
 : >"$fake_log"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" stale 7
 test ! -s "$fake_log"
 assert_release_state "$healthy_image_reference" healthy "$release_dir" 8
-assert_deployment_sequence 8 healthy
+assert_deployment_sequence 8 healthy "$healthy_image_reference"
 
 : >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" conflict 8; then
@@ -265,7 +311,7 @@ if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_ima
 fi
 test ! -s "$fake_log"
 assert_release_state "$healthy_image_reference" healthy "$release_dir" 8
-assert_deployment_sequence 8 healthy
+assert_deployment_sequence 8 healthy "$healthy_image_reference"
 
 : >"$fake_log"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy 9
@@ -274,4 +320,4 @@ if grep -Eq '^healthy\|compose .* (pull gateway|run --rm gateway|up -d|stop gate
   exit 1
 fi
 assert_release_state "$healthy_image_reference" healthy "$release_dir" 9
-assert_deployment_sequence 9 healthy
+assert_deployment_sequence 9 healthy "$healthy_image_reference"

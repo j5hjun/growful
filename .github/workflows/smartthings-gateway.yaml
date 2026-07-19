@@ -91,7 +91,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
+      image-digest: ${{ steps.existing_image.outputs.digest || steps.build.outputs.digest }}
       ready: ${{ steps.post_push_freshness.outputs.deploy }}
       release-id: ${{ steps.release.outputs.release }}
     steps:
@@ -121,6 +121,43 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - id: existing_image
+        name: Reuse an existing immutable release image
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          RELEASE_ID: ${{ steps.release.outputs.release }}
+        run: |
+          registry_token="$(curl --fail --silent --show-error \
+            --user "$GHCR_USER:$GHCR_TOKEN" \
+            --get 'https://ghcr.io/token' \
+            --data-urlencode 'service=ghcr.io' \
+            --data-urlencode 'scope=repository:j5hjun/growful-smartthings-gateway:pull' |
+            jq --exit-status --raw-output '.token // .access_token')"
+          manifest_headers="$RUNNER_TEMP/smartthings-gateway-manifest.headers"
+          manifest_status="$(curl --silent --show-error \
+            --output /dev/null \
+            --dump-header "$manifest_headers" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $registry_token" \
+            --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/j5hjun/growful-smartthings-gateway/manifests/$RELEASE_ID")"
+          case "$manifest_status" in
+            200)
+              image_digest="$(awk 'tolower($1) == "docker-content-digest:" { gsub("\\r", "", $2); print $2; exit }' "$manifest_headers")"
+              [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+              echo "digest=$image_digest" >> "$GITHUB_OUTPUT"
+              echo 'build=false' >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo 'build=true' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              printf 'GHCR manifest lookup failed with HTTP %s\n' "$manifest_status" >&2
+              exit 1
+              ;;
+          esac
       - id: push_freshness
         name: Recheck gateway release before build and push
         if: steps.release.outputs.publish == 'true'
@@ -138,7 +175,7 @@ jobs:
           fi
       - id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        if: steps.push_freshness.outputs.publish == 'true'
+        if: steps.push_freshness.outputs.publish == 'true' && steps.existing_image.outputs.build == 'true'
         with:
           context: packages/smartthings-gateway
           platforms: linux/amd64

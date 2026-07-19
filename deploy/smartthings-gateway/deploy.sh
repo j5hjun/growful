@@ -13,7 +13,7 @@ if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
   printf 'gateway image reference must use an immutable sha256 digest\n' >&2
   exit 1
 fi
-if [[ ! "$deployment_sequence" =~ ^[1-9][0-9]*$ ]]; then
+if [[ ! "$deployment_sequence" =~ ^[1-9][0-9]{0,17}$ ]]; then
   printf 'deployment sequence must be a positive integer\n' >&2
   exit 1
 fi
@@ -35,6 +35,7 @@ previous_release_id=""
 previous_release=""
 previous_deployment_sequence=0
 highest_deployment_release_id=""
+highest_deployment_image_reference=""
 highest_deployment_sequence=0
 state_temp=""
 sequence_temp=""
@@ -57,7 +58,7 @@ if [[ -f "$release_state_file" ]]; then
   fi
   if [[ ! "$previous_image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] ||
     [[ -z "$previous_release_id" || ! -f "$previous_release/compose.yaml" ]] ||
-    [[ ! "$previous_deployment_sequence" =~ ^[0-9]+$ ]]; then
+    [[ ! "$previous_deployment_sequence" =~ ^(0|[1-9][0-9]{0,17})$ ]]; then
     printf 'deployed release state cannot provide an exact rollback target\n' >&2
     exit 1
   fi
@@ -65,19 +66,22 @@ fi
 
 highest_deployment_sequence="$previous_deployment_sequence"
 highest_deployment_release_id="$previous_release_id"
+highest_deployment_image_reference="$previous_image_reference"
 if [[ -f "$deployment_sequence_file" ]]; then
   sequence_state=()
   while IFS= read -r sequence_line; do
     sequence_state+=("$sequence_line")
   done <"$deployment_sequence_file"
-  if ((${#sequence_state[@]} != 2)) || [[ ! "${sequence_state[0]}" =~ ^[1-9][0-9]*$ ]] ||
+  if ((${#sequence_state[@]} != 3)) || [[ ! "${sequence_state[0]}" =~ ^[1-9][0-9]{0,17}$ ]] ||
     [[ -z "${sequence_state[1]}" ]] ||
+    [[ ! "${sequence_state[2]}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] ||
     ((10#${sequence_state[0]} < 10#$previous_deployment_sequence)); then
     printf 'deployment sequence state is malformed\n' >&2
     exit 1
   fi
   highest_deployment_sequence="${sequence_state[0]}"
   highest_deployment_release_id="${sequence_state[1]}"
+  highest_deployment_image_reference="${sequence_state[2]}"
 fi
 
 if ((10#$deployment_sequence < 10#$highest_deployment_sequence)); then
@@ -86,14 +90,16 @@ if ((10#$deployment_sequence < 10#$highest_deployment_sequence)); then
   exit 0
 fi
 if ((10#$deployment_sequence == 10#$highest_deployment_sequence)) &&
-  [[ -n "$highest_deployment_release_id" && "$highest_deployment_release_id" != "$new_release_id" ]]; then
-  printf 'deployment sequence already belongs to another release\n' >&2
+  [[ -n "$highest_deployment_release_id" ]] &&
+  { [[ "$highest_deployment_release_id" != "$new_release_id" ]] ||
+    [[ "$highest_deployment_image_reference" != "$image_reference" ]]; }; then
+  printf 'deployment sequence already belongs to another release artifact\n' >&2
   exit 1
 fi
 
 commit_deployment_sequence() {
   sequence_temp="$(mktemp "${deployment_sequence_file}.XXXXXX")"
-  printf '%s\n' "$deployment_sequence" "$new_release_id" >"$sequence_temp"
+  printf '%s\n' "$deployment_sequence" "$new_release_id" "$image_reference" >"$sequence_temp"
   mv "$sequence_temp" "$deployment_sequence_file"
   sequence_temp=""
 }
@@ -164,7 +170,10 @@ deploy_release() {
 
 rollback_release() {
   if [[ -z "$previous_image_reference" || -z "$previous_release_id" ]]; then
-    "${compose[@]}" stop gateway >/dev/null 2>&1 || true
+    if ! "${compose[@]}" stop gateway >/dev/null 2>&1; then
+      printf 'failed to stop the rejected first deployment\n' >&2
+      return 1
+    fi
     printf 'deployment failed and no previous release is available\n' >&2
     return 0
   fi
