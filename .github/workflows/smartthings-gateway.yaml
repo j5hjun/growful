@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: smartthings-gateway-build-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
