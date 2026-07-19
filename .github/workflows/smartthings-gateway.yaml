@@ -16,6 +16,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: smartthings-gateway-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -60,7 +64,8 @@ jobs:
         run: bash ../../deploy/smartthings-gateway/resolve-release.test.sh
       - name: Smoke test digest-pinned deployment image with Compose
         run: |
-          docker run --detach --name smartthings-gateway-ci-registry --publish 5001:5000 registry:2@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+          docker compose --project-name smartthings-gateway-ci-registry \
+            -f ../../deploy/smartthings-gateway/ci-registry.compose.yaml up -d
           for attempt in {1..30}; do
             if curl --fail --silent 'http://127.0.0.1:5001/v2/' >/dev/null; then
               break
@@ -78,15 +83,14 @@ jobs:
           bash ../../deploy/smartthings-gateway/ci-smoke.sh "$image_reference" ci
       - name: Clean up local image registry
         if: always()
-        run: docker rm --force smartthings-gateway-ci-registry >/dev/null 2>&1 || true
+        run: |
+          docker compose --project-name smartthings-gateway-ci-registry \
+            -f ../../deploy/smartthings-gateway/ci-registry.compose.yaml down --volumes >/dev/null 2>&1 || true
 
   publish:
     if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
-    concurrency:
-      group: smartthings-gateway-publish
-      cancel-in-progress: true
     permissions:
       contents: read
       packages: write

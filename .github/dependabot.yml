@@ -4,11 +4,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: docker
+  - package-ecosystem: npm
     directory: /packages/smartthings-gateway
     schedule:
       interval: weekly
   - package-ecosystem: docker
+    directory: /packages/smartthings-gateway
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker-compose
     directory: /deploy/smartthings-gateway
     schedule:
       interval: weekly
