@@ -4,18 +4,26 @@ set -euo pipefail
 deployment_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deployment_root="${DEPLOYMENT_ROOT:-$deployment_dir}"
 environment_file="$deployment_root/.env"
-image_name="${1:?image name is required}"
-new_tag="${2:?image tag is required}"
+image_reference="${1:?image reference is required}"
+new_release_id="${2:?release id is required}"
+if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+  printf 'gateway image reference must use an immutable sha256 digest\n' >&2
+  exit 1
+fi
 healthcheck_attempts="${HEALTHCHECK_ATTEMPTS:-30}"
 healthcheck_interval_seconds="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 public_base_url="${PUBLIC_BASE_URL:-}"
 public_healthcheck_attempts="${PUBLIC_HEALTHCHECK_ATTEMPTS:-10}"
 public_healthcheck_interval_seconds="${PUBLIC_HEALTHCHECK_INTERVAL_SECONDS:-2}"
-previous_tag=""
+previous_image_reference=""
+previous_release_id=""
 previous_release=""
 
-if [[ -f "$deployment_root/.deployed-image-tag" ]]; then
-  previous_tag="$(<"$deployment_root/.deployed-image-tag")"
+if [[ -f "$deployment_root/.deployed-image-reference" ]]; then
+  previous_image_reference="$(<"$deployment_root/.deployed-image-reference")"
+fi
+if [[ -f "$deployment_root/.deployed-release-id" ]]; then
+  previous_release_id="$(<"$deployment_root/.deployed-release-id")"
 fi
 if [[ -f "$deployment_root/.deployed-release" ]]; then
   previous_release="$(<"$deployment_root/.deployed-release")"
@@ -23,8 +31,8 @@ fi
 
 export COMPOSE_PROJECT_NAME=smartthings-gateway
 export GATEWAY_ENV_FILE="$environment_file"
-export SMARTTHINGS_GATEWAY_IMAGE="$image_name"
-export IMAGE_TAG="$new_tag"
+export RELEASE_ID="$new_release_id"
+export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$image_reference"
 
 compose=(docker compose --env-file "$environment_file" -f "$deployment_dir/compose.yaml")
 
@@ -85,38 +93,40 @@ deploy_release() {
 }
 
 rollback_release() {
-  if [[ -z "$previous_tag" ]]; then
+  if [[ -z "$previous_image_reference" || -z "$previous_release_id" ]]; then
     "${compose[@]}" stop gateway >/dev/null 2>&1 || true
     printf 'deployment failed and no previous release is available\n' >&2
     return 1
   fi
 
-  export IMAGE_TAG="$previous_tag"
+  export RELEASE_ID="$previous_release_id"
+  export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$previous_image_reference"
   if [[ -n "$previous_release" && -f "$previous_release/compose.yaml" ]]; then
     compose=(docker compose --env-file "$environment_file" -f "$previous_release/compose.yaml")
   fi
 
-  if ! docker image inspect "$image_name:$previous_tag" >/dev/null 2>&1; then
+  if ! docker image inspect "$previous_image_reference" >/dev/null 2>&1; then
     "${compose[@]}" pull gateway || return 1
   fi
   "${compose[@]}" up -d --no-deps gateway || return 1
   wait_for_gateway || return 1
   verify_local_http || return 1
   verify_public_http || return 1
-  printf 'rolled back to image tag %s\n' "$previous_tag" >&2
+  printf 'rolled back to image digest %s\n' "$previous_image_reference" >&2
 }
 
-if [[ -n "$previous_tag" && "$previous_tag" == "$new_tag" ]]; then
+if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]]; then
   if wait_for_gateway && verify_local_http && verify_public_http; then
     exit 0
   fi
   show_diagnostics
-  printf 'already deployed image tag failed verification; existing gateway was left unchanged\n' >&2
+  printf 'already deployed release failed verification; existing gateway was left unchanged\n' >&2
   exit 1
 fi
 
 if deploy_release; then
-  printf '%s\n' "$new_tag" >"$deployment_root/.deployed-image-tag"
+  printf '%s\n' "$image_reference" >"$deployment_root/.deployed-image-reference"
+  printf '%s\n' "$new_release_id" >"$deployment_root/.deployed-release-id"
   printf '%s\n' "$deployment_dir" >"$deployment_root/.deployed-release"
   ln -sfn "$deployment_dir" "$deployment_root/current"
   exit 0

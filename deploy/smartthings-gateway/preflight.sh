@@ -4,8 +4,13 @@ set -euo pipefail
 deployment_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deployment_root="${DEPLOYMENT_ROOT:-$deployment_dir}"
 environment_file="$deployment_root/.env"
-image_name="${1:?image name is required}"
-image_tag="${2:?image tag is required}"
+image_reference="${1:?image reference is required}"
+release_id="${2:?release id is required}"
+
+if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+  printf 'gateway image reference must use an immutable sha256 digest\n' >&2
+  exit 1
+fi
 
 for command_name in base64 curl docker stat; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -104,12 +109,11 @@ if [[ "$decoded_key_size" != '32' ]]; then
 fi
 
 export GATEWAY_ENV_FILE="$environment_file"
-export IMAGE_TAG="$image_tag"
-export SMARTTHINGS_GATEWAY_IMAGE="$image_name"
+export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$image_reference"
 docker compose \
   --project-name smartthings-gateway \
   --env-file "$environment_file" \
   -f "$deployment_dir/compose.yaml" \
   config --quiet
 
-printf 'preflight ok: architecture=%s, port=8100, environment=valid\n' "$architecture"
+printf 'preflight ok: architecture=%s, port=8100, release=%s, environment=valid\n' "$architecture" "$release_id"

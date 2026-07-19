@@ -7,6 +7,7 @@ test_root="$(mktemp -d "${temporary_root%/}/smartthings-gateway-preflight-test.X
 deployment_root="$test_root/deployment"
 release_dir="$deployment_root/releases/test"
 fake_bin="$test_root/bin"
+test_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000001'
 
 cleanup() {
   rm -rf "$test_root"
@@ -59,30 +60,35 @@ write_environment() {
 
 valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
 write_environment "$valid_key" 8100
-DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test
+DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
+
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway:mutable test; then
+  printf 'mutable image reference unexpectedly passed preflight\n' >&2
+  exit 1
+fi
 
 write_environment invalid-base64 8100
-if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'invalid encryption key unexpectedly passed preflight\n' >&2
   exit 1
 fi
 
 write_environment "$valid_key" 9999
-if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'invalid port unexpectedly passed preflight\n' >&2
   exit 1
 fi
 
 write_environment "$valid_key" 8100
 printf '%s\n' 'PORT=9999' >>"$deployment_root/.env"
-if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'duplicate environment key unexpectedly passed preflight\n' >&2
   exit 1
 fi
 
 write_environment "$valid_key" 8100
 sed -i.bak 's/^REFRESH_LEASE_SECONDS=.*/REFRESH_LEASE_SECONDS=60/' "$deployment_root/.env"
-if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'short refresh lease unexpectedly passed preflight\n' >&2
   exit 1
 fi
@@ -90,14 +96,14 @@ rm -f "$deployment_root/.env.bak"
 
 write_environment "$valid_key" 8100
 chmod 644 "$deployment_root/.env"
-if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'group-readable environment file unexpectedly passed preflight\n' >&2
   exit 1
 fi
 
 write_environment "$valid_key" 8100
 if FAKE_ARCHITECTURE=aarch64 DEPLOYMENT_ROOT="$deployment_root" \
-  bash "$release_dir/preflight.sh" registry.example/gateway test; then
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'unsupported architecture unexpectedly passed preflight\n' >&2
   exit 1
 fi

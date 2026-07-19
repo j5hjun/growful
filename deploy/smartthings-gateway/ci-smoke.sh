@@ -2,15 +2,14 @@
 set -euo pipefail
 
 deployment_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-image_name="${1:?image name is required}"
-image_tag="${2:?image tag is required}"
-project_name="smartthings-gateway-ci-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-0}"
+image_reference="${1:?image reference is required}"
+release_id="${2:?release id is required}"
+project_name="smartthings-gateway-ci-${release_id}-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-0}"
 environment_file="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-ci.XXXXXX")"
 
 export COMPOSE_PROJECT_NAME="$project_name"
 export GATEWAY_ENV_FILE="$environment_file"
-export IMAGE_TAG="$image_tag"
-export SMARTTHINGS_GATEWAY_IMAGE="$image_name"
+export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$image_reference"
 
 compose=(docker compose --env-file "$environment_file" -f "$deployment_dir/compose.yaml")
 
