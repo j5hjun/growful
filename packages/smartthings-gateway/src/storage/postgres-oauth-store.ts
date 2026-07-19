@@ -1,4 +1,4 @@
-import type { Kysely, Selectable } from "kysely"
+import { type Kysely, type Selectable, sql } from "kysely"
 import {
   InstalledAppIdSchema,
   type OAuthStateHash,
@@ -16,6 +16,8 @@ export type PostgresOAuthStoreOptions = {
   readonly database: Kysely<GatewayDatabase>
   readonly encryptionKeyBase64: string
 }
+
+const authorizationTokensLockId = 8_100_202_607_19
 
 export class UnexpectedTokenSourceError extends Error {
   override readonly name = "UnexpectedTokenSourceError"
@@ -101,6 +103,7 @@ export class PostgresOAuthStore implements OAuthStore {
   private async saveAuthorizationTokens(input: SaveTokensInput): Promise<StoredTokens> {
     const row = this.createRow(input, null)
     await this.database.transaction().execute(async (transaction) => {
+      await sql`select pg_advisory_xact_lock(${authorizationTokensLockId})`.execute(transaction)
       await transaction.deleteFrom("oauthTokens").execute()
       await transaction.insertInto("oauthTokens").values(row).execute()
     })

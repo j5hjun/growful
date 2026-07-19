@@ -76,6 +76,11 @@ for key in "${required_keys[@]}"; do
   fi
 done
 
+if grep -Eq '^[A-Z0-9_]+=.*replace-with-' "$environment_file"; then
+  printf 'deployment environment still contains a published placeholder\n' >&2
+  exit 1
+fi
+
 port="$(sed -n 's/^PORT=//p' "$environment_file")"
 if [[ "$port" != '8100' ]]; then
   printf 'PORT must be 8100 in %s\n' "$environment_file" >&2

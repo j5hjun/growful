@@ -60,7 +60,10 @@ export async function startGatewayRuntime(options: GatewayRuntimeOptions): Promi
     await options.app.listen({ host: options.host, port: options.port })
     stopWorker = options.startWorker()
   } catch (error) {
-    await closeResources(options.app, options.database, stopWorker)
+    const failures = await closeResources(options.app, options.database, stopWorker)
+    for (const failure of failures) {
+      options.app.log.error(failure, "server.startup.cleanup.failed")
+    }
     throw error
   }
 

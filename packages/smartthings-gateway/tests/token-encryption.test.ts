@@ -29,4 +29,17 @@ describe("token encryption", () => {
     // Then
     expect(first).not.toBe(second)
   })
+
+  it("rejects a truncated authentication tag", () => {
+    const key = decodeEncryptionKey(Buffer.alloc(32, 7).toString("base64"))
+    const encrypted = encryptSecret("sensitive-access-token", key)
+    const [initializationVector, authenticationTag, ciphertext] = encrypted.split(".")
+    const truncatedTag = Buffer.from(authenticationTag ?? "", "base64url")
+      .subarray(0, 4)
+      .toString("base64url")
+
+    expect(() =>
+      decryptSecret(`${initializationVector}.${truncatedTag}.${ciphertext}`, key),
+    ).toThrow("Stored token ciphertext is malformed")
+  })
 })

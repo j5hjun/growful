@@ -1,12 +1,20 @@
 import { z } from "zod"
 
+const configuredSecret = z
+  .string()
+  .min(1)
+  .refine((value) => !value.startsWith("replace-with-"), "replace placeholder secrets")
+
 const environmentSchema = z.object({
   DATABASE_URL: z.url(),
   HOST: z.string().min(1).default("0.0.0.0"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  OAUTH_ADMIN_TOKEN: z.string().min(32),
-  OAUTH_CLIENT_ID: z.string().min(1),
-  OAUTH_CLIENT_SECRET: z.string().min(1),
+  OAUTH_ADMIN_TOKEN: configuredSecret.refine(
+    (value) => value.length >= 32,
+    "minimum 32 characters",
+  ),
+  OAUTH_CLIENT_ID: configuredSecret,
+  OAUTH_CLIENT_SECRET: configuredSecret,
   OAUTH_REDIRECT_URI: z.url(),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8_100),
   REFRESH_BEFORE_EXPIRY_SECONDS: z.coerce.number().int().positive().default(3_600),
@@ -15,7 +23,7 @@ const environmentSchema = z.object({
   SMARTTHINGS_AUTHORIZE_URL: z.url().default("https://api.smartthings.com/oauth/authorize"),
   SMARTTHINGS_SCOPES: z.string().min(1),
   SMARTTHINGS_TOKEN_URL: z.url().default("https://api.smartthings.com/oauth/token"),
-  TOKEN_ENCRYPTION_KEY: z.string().min(1),
+  TOKEN_ENCRYPTION_KEY: configuredSecret,
 })
 
 export type AppConfig = {

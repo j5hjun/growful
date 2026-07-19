@@ -44,4 +44,18 @@ describe("loadConfig", () => {
       }),
     ).toThrow()
   })
+
+  it("rejects the published operator-token placeholder", () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: "postgresql://gateway:password@postgres:5432/gateway",
+        OAUTH_ADMIN_TOKEN: "replace-with-a-long-random-operator-token",
+        OAUTH_CLIENT_ID: "client-id",
+        OAUTH_CLIENT_SECRET: "client-secret",
+        OAUTH_REDIRECT_URI: "https://smartthings.growful.click/oauth/callback",
+        SMARTTHINGS_SCOPES: "r:devices:*",
+        TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+      }),
+    ).toThrow()
+  })
 })

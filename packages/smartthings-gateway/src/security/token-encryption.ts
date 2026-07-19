@@ -3,6 +3,14 @@ import { z } from "zod"
 
 const encryptedValueSchema = z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)])
 
+export class InvalidEncryptedValueError extends Error {
+  override readonly name = "InvalidEncryptedValueError"
+
+  constructor() {
+    super("Stored token ciphertext is malformed")
+  }
+}
+
 export class InvalidEncryptionKeyError extends Error {
   override readonly name = "InvalidEncryptionKeyError"
 
@@ -34,7 +42,18 @@ export function decryptSecret(encryptedValue: string, key: Buffer): string {
   const initializationVector = Buffer.from(parts[0], "base64url")
   const authenticationTag = Buffer.from(parts[1], "base64url")
   const ciphertext = Buffer.from(parts[2], "base64url")
-  const decipher = createDecipheriv("aes-256-gcm", key, initializationVector)
+  if (
+    initializationVector.byteLength !== 12 ||
+    authenticationTag.byteLength !== 16 ||
+    initializationVector.toString("base64url") !== parts[0] ||
+    authenticationTag.toString("base64url") !== parts[1] ||
+    ciphertext.toString("base64url") !== parts[2]
+  ) {
+    throw new InvalidEncryptedValueError()
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, initializationVector, {
+    authTagLength: 16,
+  })
   decipher.setAuthTag(authenticationTag)
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8")
 }

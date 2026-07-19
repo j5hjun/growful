@@ -71,6 +71,24 @@ describe("PostgresOAuthStore", () => {
     })
   })
 
+  it("keeps one token row when authorizations finish concurrently", async () => {
+    const secondGrant: TokenGrant = {
+      ...grant,
+      accessToken: "second-access-token",
+      installedAppId: InstalledAppIdSchema.parse("second-installed-app"),
+      refreshToken: "second-refresh-token",
+    }
+
+    await Promise.all([
+      store.saveTokens({ grant, issuedAt: now, source: "authorization" }),
+      store.saveTokens({ grant: secondGrant, issuedAt: now, source: "authorization" }),
+    ])
+
+    const rows = await database.selectFrom("oauthTokens").select("installedAppId").execute()
+    expect(rows).toHaveLength(1)
+    expect([grant.installedAppId, secondGrant.installedAppId]).toContain(rows[0]?.installedAppId)
+  })
+
   it("grants a refresh lease to only one concurrent worker", async () => {
     // Given
     await store.saveTokens({ grant, issuedAt: now, source: "authorization" })

@@ -62,6 +62,14 @@ valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
 write_environment "$valid_key" 8100
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
 
+write_environment "$valid_key" 8100
+sed -i.bak 's/^OAUTH_ADMIN_TOKEN=.*/OAUTH_ADMIN_TOKEN=replace-with-a-long-random-operator-token/' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'published operator-token placeholder unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway:mutable test; then
   printf 'mutable image reference unexpectedly passed preflight\n' >&2
   exit 1
