@@ -5,6 +5,7 @@ deployment_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 deployment_root="${DEPLOYMENT_ROOT:-$deployment_dir}"
 environment_file="$deployment_root/.env"
 release_state_file="$deployment_root/.deployed-release-state"
+deployment_sequence_file="$deployment_root/.deployment-sequence"
 image_reference="${1:?image reference is required}"
 new_release_id="${2:?release id is required}"
 deployment_sequence="${3:?deployment sequence is required}"
@@ -33,8 +34,11 @@ previous_image_reference=""
 previous_release_id=""
 previous_release=""
 previous_deployment_sequence=0
+highest_deployment_release_id=""
+highest_deployment_sequence=0
 state_temp=""
-trap 'rm -f "${state_temp:-}"' EXIT
+sequence_temp=""
+trap 'rm -f "${state_temp:-}" "${sequence_temp:-}"' EXIT
 
 if [[ -f "$release_state_file" ]]; then
   deployed_state=()
@@ -59,16 +63,40 @@ if [[ -f "$release_state_file" ]]; then
   fi
 fi
 
-if ((10#$deployment_sequence < 10#$previous_deployment_sequence)); then
+highest_deployment_sequence="$previous_deployment_sequence"
+highest_deployment_release_id="$previous_release_id"
+if [[ -f "$deployment_sequence_file" ]]; then
+  sequence_state=()
+  while IFS= read -r sequence_line; do
+    sequence_state+=("$sequence_line")
+  done <"$deployment_sequence_file"
+  if ((${#sequence_state[@]} != 2)) || [[ ! "${sequence_state[0]}" =~ ^[1-9][0-9]*$ ]] ||
+    [[ -z "${sequence_state[1]}" ]] ||
+    ((10#${sequence_state[0]} < 10#$previous_deployment_sequence)); then
+    printf 'deployment sequence state is malformed\n' >&2
+    exit 1
+  fi
+  highest_deployment_sequence="${sequence_state[0]}"
+  highest_deployment_release_id="${sequence_state[1]}"
+fi
+
+if ((10#$deployment_sequence < 10#$highest_deployment_sequence)); then
   printf 'skipping stale deployment sequence %s; current sequence is %s\n' \
-    "$deployment_sequence" "$previous_deployment_sequence" >&2
+    "$deployment_sequence" "$highest_deployment_sequence" >&2
   exit 0
 fi
-if ((10#$deployment_sequence == 10#$previous_deployment_sequence)) &&
-  [[ -n "$previous_release_id" && "$previous_release_id" != "$new_release_id" ]]; then
+if ((10#$deployment_sequence == 10#$highest_deployment_sequence)) &&
+  [[ -n "$highest_deployment_release_id" && "$highest_deployment_release_id" != "$new_release_id" ]]; then
   printf 'deployment sequence already belongs to another release\n' >&2
   exit 1
 fi
+
+commit_deployment_sequence() {
+  sequence_temp="$(mktemp "${deployment_sequence_file}.XXXXXX")"
+  printf '%s\n' "$deployment_sequence" "$new_release_id" >"$sequence_temp"
+  mv "$sequence_temp" "$deployment_sequence_file"
+  sequence_temp=""
+}
 
 export COMPOSE_PROJECT_NAME=smartthings-gateway
 export GATEWAY_ENV_FILE="$environment_file"
@@ -170,7 +198,8 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
     exit 1
   fi
   if wait_for_gateway && verify_local_http && verify_public_http; then
-    if ((10#$deployment_sequence > 10#$previous_deployment_sequence)); then
+    if ((10#$deployment_sequence > 10#$highest_deployment_sequence)); then
+      commit_deployment_sequence
       state_temp="$(mktemp "${release_state_file}.XXXXXX")"
       printf '%s\n' "$image_reference" "$new_release_id" "$previous_release" \
         "$deployment_sequence" >"$state_temp"
@@ -184,6 +213,9 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
   exit 1
 fi
 
+if ((10#$deployment_sequence > 10#$highest_deployment_sequence)); then
+  commit_deployment_sequence
+fi
 state_temp="$(mktemp "${release_state_file}.XXXXXX")"
 printf '%s\n' "$image_reference" "$new_release_id" "$deployment_dir" \
   "$deployment_sequence" >"$state_temp"
