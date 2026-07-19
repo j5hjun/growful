@@ -17,6 +17,9 @@ openssl rand -base64 32
 chmod 600 ~/app/smartthings-gateway/.env
 ```
 
+예제 파일의 secret 값은 의도적으로 비어 있습니다. 이전 예제의 `replace-with-` 값도
+실제 secret으로 인정하지 않으므로 모든 빈 값을 새로 채워야 합니다.
+
 `REFRESH_LEASE_SECONDS`는 `120` 이상이어야 합니다. preflight는 `.env`가 group/other
 사용자에게 노출되지 않았는지와 이 하한을 배포 전에 확인합니다.
 
@@ -46,6 +49,9 @@ PR의 CI는 다음 순서로 배포 이미지 자체를 검증합니다.
 6. GitHub Actions 실행기에서 공개 `/healthz`, `/connection`, `/oauth/start` 재확인
 
 배포 이미지는 변경 가능한 tag가 아니라 빌드가 반환한 `sha256` digest로 고정합니다.
+GitHub Actions와 Node/PostgreSQL/registry 기반 이미지도 검토된 commit 또는 digest로
+고정하며 Dependabot의 주간 PR을 통해 갱신합니다. 빌드는 provenance와 SBOM을 함께
+게시합니다.
 이미 배포된 커밋 SHA를 다시 실행하면 이미지를 다시 pull하거나 컨테이너를 교체하지
 않고 현재 서비스의 health와 공개 경로만 확인합니다.
 

@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS build
+FROM node:24-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS build
 
 RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
 WORKDIR /app
@@ -11,7 +11,7 @@ COPY src ./src
 COPY tests ./tests
 RUN pnpm check && pnpm build && pnpm prune --prod
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app
