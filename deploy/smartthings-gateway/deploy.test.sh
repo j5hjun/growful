@@ -24,6 +24,8 @@ touch "$deployment_root/.env"
 printf '%s\n' 'previous' >"$deployment_root/.deployed-image-tag"
 printf '%s\n' "$previous_release" >"$deployment_root/.deployed-release"
 
+# Dollar expressions below belong to the generated fake executable.
+# shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
@@ -40,6 +42,8 @@ printf '%s\n' \
   '  printf "gateway-container\n"' \
   'fi' >"$fake_bin/docker"
 
+# Dollar expressions below belong to the generated fake executable.
+# shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \

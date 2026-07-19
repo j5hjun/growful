@@ -16,6 +16,8 @@ trap cleanup EXIT
 mkdir -p "$release_dir" "$fake_bin"
 cp "$source_dir/preflight.sh" "$source_dir/compose.yaml" "$release_dir/"
 
+# Dollar expressions below belong to the generated fake executable.
+# shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
@@ -23,6 +25,8 @@ printf '%s\n' \
   '  printf "%s\n" "${FAKE_ARCHITECTURE:-x86_64}"' \
   'fi' >"$fake_bin/docker"
 
+# Dollar expressions below belong to the generated fake executable.
+# shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
