@@ -45,8 +45,6 @@ export class MemoryOAuthStore implements OAuthStore {
       return
     }
     this.failures.push(failure)
-    this.refreshClaimedUntil = null
-    this.refreshClaimId = null
   }
 
   async saveState(stateHash: OAuthStateHash, expiresAt: Date): Promise<void> {

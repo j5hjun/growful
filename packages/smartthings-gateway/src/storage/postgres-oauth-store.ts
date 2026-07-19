@@ -71,11 +71,7 @@ export class PostgresOAuthStore implements OAuthStore {
   async recordRefreshFailure(failure: RefreshFailure): Promise<void> {
     await this.database
       .updateTable("oauthTokens")
-      .set({
-        lastRefreshError: failure.message,
-        refreshClaimedUntil: null,
-        refreshClaimId: null,
-      })
+      .set({ lastRefreshError: failure.message })
       .where("installedAppId", "=", failure.installedAppId)
       .where("refreshClaimId", "=", failure.claimId)
       .execute()

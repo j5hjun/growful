@@ -158,4 +158,42 @@ describe("PostgresOAuthStore", () => {
       }),
     ).resolves.toMatchObject({ refreshToken: "rotated-refresh-token" })
   })
+
+  it("keeps a failed refresh claim leased before allowing a retry", async () => {
+    // Given
+    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
+    const firstClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001")
+    const leaseMs = 120_000
+    const claimed = await store.claimTokensForRefresh({
+      claimId: firstClaimId,
+      leaseMs,
+      now,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+    expect(claimed).not.toBeNull()
+    await store.recordRefreshFailure({
+      claimId: firstClaimId,
+      installedAppId: grant.installedAppId,
+      message: "SmartThingsTokenRequestError",
+      occurredAt: now,
+    })
+
+    // When
+    const immediateRetry = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000002"),
+      leaseMs,
+      now: new Date(now.getTime() + leaseMs - 1),
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+    const retryAfterLease = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000003"),
+      leaseMs,
+      now: new Date(now.getTime() + leaseMs),
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+
+    // Then
+    expect(immediateRetry).toBeNull()
+    expect(retryAfterLease).not.toBeNull()
+  })
 })

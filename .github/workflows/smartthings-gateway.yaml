@@ -16,13 +16,12 @@ env:
 permissions:
   contents: read
 
-concurrency:
-  group: smartthings-gateway-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   verify:
     runs-on: ubuntu-latest
+    concurrency:
+      group: smartthings-gateway-build-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     services:
       postgres:
         image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
@@ -91,6 +90,9 @@ jobs:
     if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
+    concurrency:
+      group: smartthings-gateway-build-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     permissions:
       contents: read
       packages: write
