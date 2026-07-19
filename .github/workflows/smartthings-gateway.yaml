@@ -2,10 +2,6 @@ name: SmartThings Gateway
 
 on:
   pull_request:
-    paths:
-      - "packages/smartthings-gateway/**"
-      - "deploy/smartthings-gateway/**"
-      - ".github/workflows/smartthings-gateway.yaml"
   push:
     branches:
       - main
