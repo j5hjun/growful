@@ -61,10 +61,36 @@ jobs:
       - name: Smoke test deployment image with Compose
         run: bash ../../deploy/smartthings-gateway/ci-smoke.sh smartthings-gateway ci
 
-  publish:
+  release_candidate:
     if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.freshness.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: freshness
+        name: Check commit is current gateway release
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_release="$(git rev-list -1 origin/main -- packages/smartthings-gateway deploy/smartthings-gateway .github/workflows/smartthings-gateway.yaml)"
+          test -n "$current_release"
+          if [[ "$current_release" == "$GITHUB_SHA" ]]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping stale commit $GITHUB_SHA; current gateway release is $current_release"
+          fi
+
+  publish:
+    if: needs.release_candidate.outputs.publish == 'true'
+    needs: release_candidate
+    runs-on: ubuntu-latest
+    concurrency:
+      group: smartthings-gateway-publish-${{ github.sha }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -79,8 +105,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: image
-        run: echo "tag=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+        run: |
+          echo "tag=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          if docker buildx imagetools inspect "$IMAGE_NAME:$GITHUB_SHA" >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo "Reusing immutable image tag $IMAGE_NAME:$GITHUB_SHA"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/build-push-action@v7
+        if: steps.image.outputs.exists != 'true'
         with:
           context: packages/smartthings-gateway
           platforms: linux/amd64
@@ -104,16 +138,19 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - id: freshness
-        name: Check commit is current main
+        name: Check commit is current gateway release
         run: |
-          current_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
-          test -n "$current_main"
-          if [[ "$current_main" == "$GITHUB_SHA" ]]; then
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_release="$(git rev-list -1 origin/main -- packages/smartthings-gateway deploy/smartthings-gateway .github/workflows/smartthings-gateway.yaml)"
+          test -n "$current_release"
+          if [[ "$current_release" == "$GITHUB_SHA" ]]; then
             echo 'deploy=true' >> "$GITHUB_OUTPUT"
           else
             echo 'deploy=false' >> "$GITHUB_OUTPUT"
-            echo "Skipping stale commit $GITHUB_SHA; current main is $current_main"
+            echo "Skipping stale commit $GITHUB_SHA; current gateway release is $current_release"
           fi
       - if: steps.freshness.outputs.deploy == 'true'
         uses: tailscale/github-action@v4

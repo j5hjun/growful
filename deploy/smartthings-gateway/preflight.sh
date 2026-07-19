@@ -7,7 +7,7 @@ environment_file="$deployment_root/.env"
 image_name="${1:?image name is required}"
 image_tag="${2:?image tag is required}"
 
-for command_name in base64 curl docker; do
+for command_name in base64 curl docker stat; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'required command is missing: %s\n' "$command_name" >&2
     exit 1
@@ -31,6 +31,20 @@ if [[ ! -r "$environment_file" ]]; then
   exit 1
 fi
 
+if environment_permissions="$(stat -c '%a' "$environment_file" 2>/dev/null)"; then
+  :
+elif environment_permissions="$(stat -f '%Lp' "$environment_file" 2>/dev/null)"; then
+  :
+else
+  printf 'could not inspect deployment environment file permissions\n' >&2
+  exit 1
+fi
+if [[ ! "$environment_permissions" =~ ^[0-7]{3,4}$ ]] ||
+  (((8#${environment_permissions} & 8#077) != 0)); then
+  printf 'deployment environment file must not be readable by group or other users\n' >&2
+  exit 1
+fi
+
 required_keys=(
   DATABASE_URL
   OAUTH_ADMIN_TOKEN
@@ -39,6 +53,7 @@ required_keys=(
   OAUTH_REDIRECT_URI
   PORT
   POSTGRES_PASSWORD
+  REFRESH_LEASE_SECONDS
   SMARTTHINGS_SCOPES
   TOKEN_ENCRYPTION_KEY
 )
@@ -57,6 +72,12 @@ done
 port="$(sed -n 's/^PORT=//p' "$environment_file")"
 if [[ "$port" != '8100' ]]; then
   printf 'PORT must be 8100 in %s\n' "$environment_file" >&2
+  exit 1
+fi
+
+refresh_lease_seconds="$(sed -n 's/^REFRESH_LEASE_SECONDS=//p' "$environment_file")"
+if [[ ! "$refresh_lease_seconds" =~ ^[0-9]+$ ]] || ((10#${refresh_lease_seconds} < 120)); then
+  printf 'REFRESH_LEASE_SECONDS must be an integer of at least 120\n' >&2
   exit 1
 fi
 

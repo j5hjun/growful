@@ -51,8 +51,10 @@ write_environment() {
     'OAUTH_CLIENT_ID=test-client' \
     'OAUTH_CLIENT_SECRET=test-secret' \
     'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
+    'REFRESH_LEASE_SECONDS=120' \
     'SMARTTHINGS_SCOPES=r:devices:*' \
     "TOKEN_ENCRYPTION_KEY=$encryption_key" >"$deployment_root/.env"
+  chmod 600 "$deployment_root/.env"
 }
 
 valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
@@ -75,6 +77,21 @@ write_environment "$valid_key" 8100
 printf '%s\n' 'PORT=9999' >>"$deployment_root/.env"
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
   printf 'duplicate environment key unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+write_environment "$valid_key" 8100
+sed -i.bak 's/^REFRESH_LEASE_SECONDS=.*/REFRESH_LEASE_SECONDS=60/' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
+  printf 'short refresh lease unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+chmod 644 "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" registry.example/gateway test; then
+  printf 'group-readable environment file unexpectedly passed preflight\n' >&2
   exit 1
 fi
 

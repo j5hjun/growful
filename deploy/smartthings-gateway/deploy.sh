@@ -106,6 +106,15 @@ rollback_release() {
   printf 'rolled back to image tag %s\n' "$previous_tag" >&2
 }
 
+if [[ -n "$previous_tag" && "$previous_tag" == "$new_tag" ]]; then
+  if wait_for_gateway && verify_local_http && verify_public_http; then
+    exit 0
+  fi
+  show_diagnostics
+  printf 'already deployed image tag failed verification; existing gateway was left unchanged\n' >&2
+  exit 1
+fi
+
 if deploy_release; then
   printf '%s\n' "$new_tag" >"$deployment_root/.deployed-image-tag"
   printf '%s\n' "$deployment_dir" >"$deployment_root/.deployed-release"

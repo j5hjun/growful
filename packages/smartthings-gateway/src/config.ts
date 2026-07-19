@@ -11,7 +11,7 @@ const environmentSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(8_100),
   REFRESH_BEFORE_EXPIRY_SECONDS: z.coerce.number().int().positive().default(3_600),
   REFRESH_CHECK_INTERVAL_SECONDS: z.coerce.number().int().positive().default(300),
-  REFRESH_LEASE_SECONDS: z.coerce.number().int().positive().default(60),
+  REFRESH_LEASE_SECONDS: z.coerce.number().int().min(120).default(120),
   SMARTTHINGS_AUTHORIZE_URL: z.url().default("https://api.smartthings.com/oauth/authorize"),
   SMARTTHINGS_SCOPES: z.string().min(1),
   SMARTTHINGS_TOKEN_URL: z.url().default("https://api.smartthings.com/oauth/token"),

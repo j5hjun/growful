@@ -38,7 +38,7 @@ printf '%s\n' \
   'TOKEN_ENCRYPTION_KEY=MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=' \
   'REFRESH_BEFORE_EXPIRY_SECONDS=3600' \
   'REFRESH_CHECK_INTERVAL_SECONDS=300' \
-  'REFRESH_LEASE_SECONDS=60' >"$environment_file"
+  'REFRESH_LEASE_SECONDS=120' >"$environment_file"
 
 "${compose[@]}" up -d postgres
 "${compose[@]}" run --rm gateway node dist/migrate.js

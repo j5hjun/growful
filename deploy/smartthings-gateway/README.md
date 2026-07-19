@@ -14,7 +14,11 @@ openssl rand -base64 32
 # OAUTH_ADMIN_TOKEN
 openssl rand -base64 32
 # 사용자가 ~/app/smartthings-gateway/.env를 편집
+chmod 600 ~/app/smartthings-gateway/.env
 ```
+
+`REFRESH_LEASE_SECONDS`는 `120` 이상이어야 합니다. preflight는 `.env`가 group/other
+사용자에게 노출되지 않았는지와 이 하한을 배포 전에 확인합니다.
 
 서버에는 GHCR private image를 pull할 수 있는 로그인이 한 번 필요합니다. 자동 배포는
 Tailscale SSH를 통해 `~/app/smartthings-gateway/releases/<commit-sha>`에 Compose
@@ -40,6 +44,9 @@ PR의 CI는 다음 순서로 배포 이미지 자체를 검증합니다.
 4. 서버의 `http://127.0.0.1:8100/healthz` 확인
 5. `https://smartthings.growful.click/healthz` 확인
 6. GitHub Actions 실행기에서 공개 `/healthz`, `/connection`, `/oauth/start` 재확인
+
+이미 배포된 커밋 SHA를 다시 실행하면 image tag를 다시 pull하거나 컨테이너를
+교체하지 않고 현재 서비스의 health와 공개 경로만 확인합니다.
 
 1~5 중 실패하면 이전 정상 이미지와 이전 릴리스의 Compose 파일로 자동
 롤백합니다. 최초 배포에는 이전 릴리스가 없으므로 실패한 Gateway를 정지하고 Actions를

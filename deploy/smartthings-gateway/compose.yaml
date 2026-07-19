@@ -2,7 +2,7 @@ services:
   gateway:
     image: "${SMARTTHINGS_GATEWAY_IMAGE:?SMARTTHINGS_GATEWAY_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}"
     restart: unless-stopped
-    stop_grace_period: 30s
+    stop_grace_period: 120s
     env_file:
       - "${GATEWAY_ENV_FILE:-.env}"
     depends_on:

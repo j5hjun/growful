@@ -19,7 +19,7 @@ trap cleanup EXIT
 mkdir -p "$release_dir" "$previous_release" "$fake_bin"
 cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$release_dir/"
 cp "$source_dir/compose.yaml" "$previous_release/"
-grep -Fq 'stop_grace_period: 30s' "$source_dir/compose.yaml"
+grep -Fq 'stop_grace_period: 120s' "$source_dir/compose.yaml"
 touch "$deployment_root/.env"
 printf '%s\n' 'previous' >"$deployment_root/.deployed-image-tag"
 printf '%s\n' "$previous_release" >"$deployment_root/.deployed-release"
@@ -99,9 +99,8 @@ if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growf
   exit 1
 fi
 
-test "$(grep -Ec '^same-rerun\|compose .* up -d --no-deps gateway$' "$fake_log")" = '2'
-if grep -Eq '^same-rerun\|compose .* stop gateway$' "$fake_log"; then
-  printf 'same-tag rollback stopped the previously healthy gateway\n' >&2
+if grep -Eq '^same-rerun\|compose .* (pull gateway|run --rm gateway|up -d|stop gateway)' "$fake_log"; then
+  printf 'same-tag verification mutated the previously healthy gateway\n' >&2
   exit 1
 fi
 test "$(<"$deployment_root/.deployed-image-tag")" = 'same-rerun'
