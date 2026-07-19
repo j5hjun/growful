@@ -4,12 +4,19 @@ set -euo pipefail
 deployment_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 image_reference="${1:?image reference is required}"
 release_id="${2:?release id is required}"
+if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+  printf 'gateway image reference must use an immutable sha256 digest\n' >&2
+  exit 1
+fi
+image_name="${image_reference%@sha256:*}"
+image_digest="sha256:${image_reference##*@sha256:}"
 project_name="smartthings-gateway-ci-${release_id}-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-0}"
 environment_file="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-ci.XXXXXX")"
 
 export COMPOSE_PROJECT_NAME="$project_name"
 export GATEWAY_ENV_FILE="$environment_file"
-export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$image_reference"
+export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="$image_digest"
+export SMARTTHINGS_GATEWAY_IMAGE_NAME="$image_name"
 
 compose=(docker compose --env-file "$environment_file" -f "$deployment_dir/compose.yaml")
 

@@ -105,8 +105,20 @@ test "$(<"$deployment_root/.deployed-image-reference")" = "$previous_image_refer
 
 : >"$fake_log"
 printf '%s\n' 'same-rerun' >"$deployment_root/.deployed-release-id"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$same_rerun_image_reference" same-rerun; then
+  printf 'same release with a different digest unexpectedly succeeded\n' >&2
+  exit 1
+fi
+
+if grep -Eq '^same-rerun\|compose .* (pull gateway|run --rm gateway|up -d|stop gateway)' "$fake_log"; then
+  printf 'digest mismatch mutated the previously healthy gateway\n' >&2
+  exit 1
+fi
+test "$(<"$deployment_root/.deployed-image-reference")" = "$previous_image_reference"
+
+: >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
-  bash "$release_dir/deploy.sh" "$same_rerun_image_reference" same-rerun; then
+  bash "$release_dir/deploy.sh" "$previous_image_reference" same-rerun; then
   printf 'same-release rerun with a transient public failure unexpectedly succeeded\n' >&2
   exit 1
 fi

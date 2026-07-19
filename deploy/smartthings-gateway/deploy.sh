@@ -10,6 +10,8 @@ if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
   printf 'gateway image reference must use an immutable sha256 digest\n' >&2
   exit 1
 fi
+image_name="${image_reference%@sha256:*}"
+image_digest="sha256:${image_reference##*@sha256:}"
 healthcheck_attempts="${HEALTHCHECK_ATTEMPTS:-30}"
 healthcheck_interval_seconds="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 public_base_url="${PUBLIC_BASE_URL:-}"
@@ -32,7 +34,8 @@ fi
 export COMPOSE_PROJECT_NAME=smartthings-gateway
 export GATEWAY_ENV_FILE="$environment_file"
 export RELEASE_ID="$new_release_id"
-export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$image_reference"
+export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="$image_digest"
+export SMARTTHINGS_GATEWAY_IMAGE_NAME="$image_name"
 
 compose=(docker compose --env-file "$environment_file" -f "$deployment_dir/compose.yaml")
 
@@ -100,7 +103,8 @@ rollback_release() {
   fi
 
   export RELEASE_ID="$previous_release_id"
-  export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$previous_image_reference"
+  export SMARTTHINGS_GATEWAY_IMAGE_NAME="${previous_image_reference%@sha256:*}"
+  export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="sha256:${previous_image_reference##*@sha256:}"
   if [[ -n "$previous_release" && -f "$previous_release/compose.yaml" ]]; then
     compose=(docker compose --env-file "$environment_file" -f "$previous_release/compose.yaml")
   fi
@@ -116,6 +120,10 @@ rollback_release() {
 }
 
 if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]]; then
+  if [[ "$previous_image_reference" != "$image_reference" ]]; then
+    printf 'release ID already exists with a different image digest; existing gateway was left unchanged\n' >&2
+    exit 1
+  fi
   if wait_for_gateway && verify_local_http && verify_public_http; then
     exit 0
   fi

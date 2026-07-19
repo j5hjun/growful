@@ -56,10 +56,27 @@ jobs:
         run: bash ../../deploy/smartthings-gateway/deploy.test.sh
       - name: Test production preflight
         run: bash ../../deploy/smartthings-gateway/preflight.test.sh
-      - name: Build deployment image
-        run: docker build --tag smartthings-gateway:ci .
-      - name: Smoke test deployment image with Compose
-        run: bash ../../deploy/smartthings-gateway/ci-smoke.sh smartthings-gateway:ci ci
+      - name: Smoke test digest-pinned deployment image with Compose
+        run: |
+          docker run --detach --name smartthings-gateway-ci-registry --publish 5001:5000 registry:2
+          for attempt in {1..30}; do
+            if curl --fail --silent 'http://127.0.0.1:5001/v2/' >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == 30 ]]; then
+              exit 1
+            fi
+            sleep 1
+          done
+          image_tag='localhost:5001/growful-smartthings-gateway:ci'
+          docker build --tag "$image_tag" .
+          docker push "$image_tag"
+          image_reference="$(docker image inspect --format '{{index .RepoDigests 0}}' "$image_tag")"
+          [[ "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]
+          bash ../../deploy/smartthings-gateway/ci-smoke.sh "$image_reference" ci
+      - name: Clean up local image registry
+        if: always()
+        run: docker rm --force smartthings-gateway-ci-registry >/dev/null 2>&1 || true
 
   publish:
     if: github.event_name == 'push'

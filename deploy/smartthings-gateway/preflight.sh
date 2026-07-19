@@ -11,6 +11,8 @@ if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
   printf 'gateway image reference must use an immutable sha256 digest\n' >&2
   exit 1
 fi
+image_name="${image_reference%@sha256:*}"
+image_digest="sha256:${image_reference##*@sha256:}"
 
 for command_name in base64 curl docker stat; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -109,7 +111,8 @@ if [[ "$decoded_key_size" != '32' ]]; then
 fi
 
 export GATEWAY_ENV_FILE="$environment_file"
-export SMARTTHINGS_GATEWAY_IMAGE_REFERENCE="$image_reference"
+export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="$image_digest"
+export SMARTTHINGS_GATEWAY_IMAGE_NAME="$image_name"
 docker compose \
   --project-name smartthings-gateway \
   --env-file "$environment_file" \
