@@ -7,10 +7,21 @@ environment_file="$deployment_root/.env"
 release_state_file="$deployment_root/.deployed-release-state"
 image_reference="${1:?image reference is required}"
 new_release_id="${2:?release id is required}"
+deployment_sequence="${3:?deployment sequence is required}"
 if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
   printf 'gateway image reference must use an immutable sha256 digest\n' >&2
   exit 1
 fi
+if [[ ! "$deployment_sequence" =~ ^[1-9][0-9]*$ ]]; then
+  printf 'deployment sequence must be a positive integer\n' >&2
+  exit 1
+fi
+if ! command -v flock >/dev/null 2>&1; then
+  printf 'required command is missing: flock\n' >&2
+  exit 1
+fi
+exec 9>"$deployment_root/.deploy.lock"
+flock --exclusive 9
 image_name="${image_reference%@sha256:*}"
 image_digest="sha256:${image_reference##*@sha256:}"
 healthcheck_attempts="${HEALTHCHECK_ATTEMPTS:-30}"
@@ -21,6 +32,7 @@ public_healthcheck_interval_seconds="${PUBLIC_HEALTHCHECK_INTERVAL_SECONDS:-2}"
 previous_image_reference=""
 previous_release_id=""
 previous_release=""
+previous_deployment_sequence=0
 state_temp=""
 trap 'rm -f "${state_temp:-}"' EXIT
 
@@ -29,18 +41,33 @@ if [[ -f "$release_state_file" ]]; then
   while IFS= read -r state_line; do
     deployed_state+=("$state_line")
   done <"$release_state_file"
-  if ((${#deployed_state[@]} != 3)); then
+  if ((${#deployed_state[@]} != 3 && ${#deployed_state[@]} != 4)); then
     printf 'deployed release state is malformed\n' >&2
     exit 1
   fi
   previous_image_reference="${deployed_state[0]}"
   previous_release_id="${deployed_state[1]}"
   previous_release="${deployed_state[2]}"
+  if ((${#deployed_state[@]} == 4)); then
+    previous_deployment_sequence="${deployed_state[3]}"
+  fi
   if [[ ! "$previous_image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] ||
-    [[ -z "$previous_release_id" || ! -f "$previous_release/compose.yaml" ]]; then
+    [[ -z "$previous_release_id" || ! -f "$previous_release/compose.yaml" ]] ||
+    [[ ! "$previous_deployment_sequence" =~ ^[0-9]+$ ]]; then
     printf 'deployed release state cannot provide an exact rollback target\n' >&2
     exit 1
   fi
+fi
+
+if ((10#$deployment_sequence < 10#$previous_deployment_sequence)); then
+  printf 'skipping stale deployment sequence %s; current sequence is %s\n' \
+    "$deployment_sequence" "$previous_deployment_sequence" >&2
+  exit 0
+fi
+if ((10#$deployment_sequence == 10#$previous_deployment_sequence)) &&
+  [[ -n "$previous_release_id" && "$previous_release_id" != "$new_release_id" ]]; then
+  printf 'deployment sequence already belongs to another release\n' >&2
+  exit 1
 fi
 
 export COMPOSE_PROJECT_NAME=smartthings-gateway
@@ -143,6 +170,13 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
     exit 1
   fi
   if wait_for_gateway && verify_local_http && verify_public_http; then
+    if ((10#$deployment_sequence > 10#$previous_deployment_sequence)); then
+      state_temp="$(mktemp "${release_state_file}.XXXXXX")"
+      printf '%s\n' "$image_reference" "$new_release_id" "$previous_release" \
+        "$deployment_sequence" >"$state_temp"
+      mv "$state_temp" "$release_state_file"
+      state_temp=""
+    fi
     exit 0
   fi
   show_diagnostics
@@ -151,7 +185,8 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
 fi
 
 state_temp="$(mktemp "${release_state_file}.XXXXXX")"
-printf '%s\n' "$image_reference" "$new_release_id" "$deployment_dir" >"$state_temp"
+printf '%s\n' "$image_reference" "$new_release_id" "$deployment_dir" \
+  "$deployment_sequence" >"$state_temp"
 
 if deploy_release; then
   if mv "$state_temp" "$release_state_file"; then

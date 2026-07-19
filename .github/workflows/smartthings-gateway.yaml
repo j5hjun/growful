@@ -19,9 +19,6 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    concurrency:
-      group: smartthings-gateway-build-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
     services:
       postgres:
         image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
@@ -90,15 +87,12 @@ jobs:
     if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
-    concurrency:
-      group: smartthings-gateway-build-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
     outputs:
       image-digest: ${{ steps.build.outputs.digest }}
-      ready: ${{ steps.push_freshness.outputs.publish }}
+      ready: ${{ steps.post_push_freshness.outputs.deploy }}
       release-id: ${{ steps.release.outputs.release }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
@@ -155,6 +149,21 @@ jobs:
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - id: post_push_freshness
+        name: Recheck gateway release after publishing
+        if: steps.push_freshness.outputs.publish == 'true'
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_release="$(bash deploy/smartthings-gateway/resolve-release.sh origin/main)"
+          test -n "$current_release"
+          if [[ "$current_release" == "$RELEASE_ID" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo "Published immutable release $RELEASE_ID but skipping stale deployment; current release is $current_release"
+          fi
 
   deploy:
     if: needs.publish.outputs.ready == 'true'
@@ -167,9 +176,7 @@ jobs:
       IMAGE_REFERENCE: ghcr.io/j5hjun/growful-smartthings-gateway@${{ needs.publish.outputs.image-digest }}
       PUBLIC_BASE_URL: https://smartthings.growful.click
       RELEASE_ID: ${{ needs.publish.outputs.release-id }}
-    concurrency:
-      group: smartthings-gateway-production
-      cancel-in-progress: false
+      DEPLOY_SEQUENCE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -227,11 +234,11 @@ jobs:
         if: steps.mutation_freshness.outputs.deploy == 'true'
         run: |
           tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
-            bash -s -- "$IMAGE_REFERENCE" "$RELEASE_ID" "$PUBLIC_BASE_URL" <<'REMOTE'
+            bash -s -- "$IMAGE_REFERENCE" "$RELEASE_ID" "$PUBLIC_BASE_URL" "$DEPLOY_SEQUENCE" <<'REMOTE'
           set -e
           deployment_root="$HOME/app/smartthings-gateway"
           release_dir="$deployment_root/releases/$2"
-          DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="$3" bash "$release_dir/deploy.sh" "$1" "$2"
+          DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="$3" bash "$release_dir/deploy.sh" "$1" "$2" "$4"
           REMOTE
       - name: Verify public HTTPS endpoints
         if: steps.mutation_freshness.outputs.deploy == 'true'

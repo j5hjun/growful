@@ -14,7 +14,7 @@ fi
 image_name="${image_reference%@sha256:*}"
 image_digest="sha256:${image_reference##*@sha256:}"
 
-for command_name in base64 curl docker stat; do
+for command_name in base64 curl docker flock stat; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'required command is missing: %s\n' "$command_name" >&2
     exit 1

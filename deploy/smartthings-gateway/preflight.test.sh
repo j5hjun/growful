@@ -38,7 +38,8 @@ printf '%s\n' \
   'printf "00000000000000000000000000000000"' >"$fake_bin/base64"
 
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/curl"
-chmod +x "$fake_bin/base64" "$fake_bin/curl" "$fake_bin/docker"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/flock"
+chmod +x "$fake_bin/base64" "$fake_bin/curl" "$fake_bin/docker" "$fake_bin/flock"
 export PATH="$fake_bin:$PATH"
 
 write_environment() {
