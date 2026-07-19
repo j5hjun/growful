@@ -50,7 +50,9 @@ printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
   'printf "%s|%s\n" "${RELEASE_ID:-}" "$*" >>"$FAKE_LOG"' \
-  'if [[ "$1" == "inspect" ]]; then' \
+  'if [[ "$1" == "compose" && "${FAIL_ROLLBACK:-}" == "1" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
+  '  exit 1' \
+  'elif [[ "$1" == "inspect" ]]; then' \
   '  if [[ "$*" == *RestartCount* ]]; then' \
   '    printf "0\n"' \
   '  elif [[ "${RELEASE_ID:-}" == "broken" ]]; then' \
@@ -80,9 +82,21 @@ printf '%s\n' \
   'fi' \
   'printf "{\"status\":\"ok\"}\n"' >"$fake_bin/curl"
 
-chmod +x "$fake_bin/docker" "$fake_bin/curl"
+# Dollar expressions below belong to the generated fake executable.
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'destination="${!#}"' \
+  'if [[ "${FAIL_STATE_MOVE:-}" == "1" && "$destination" == "$RELEASE_STATE_FILE" ]]; then' \
+  '  exit 1' \
+  'fi' \
+  'exec /bin/mv "$@"' >"$fake_bin/mv"
+
+chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/mv"
 export FAKE_LOG="$fake_log"
 export FAIL_ONCE_MARKER="$fail_once_marker"
+export RELEASE_STATE_FILE="$release_state_file"
 export HEALTHCHECK_ATTEMPTS=1
 export HEALTHCHECK_INTERVAL_SECONDS=0
 export PUBLIC_HEALTHCHECK_ATTEMPTS=1
@@ -97,6 +111,18 @@ if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_ima
 fi
 mv "$previous_release/compose.yaml.unavailable" "$previous_release/compose.yaml"
 test ! -s "$fake_log"
+
+: >"$fake_log"
+mv "$release_state_file" "$release_state_file.saved"
+if FAIL_STATE_MOVE=1 DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/deploy.sh" "$public_broken_image_reference" first-state-failure; then
+  printf 'first deployment with a failed release-state commit unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test ! -f "$release_state_file"
+grep -Eq '^first-state-failure\|compose .* up -d --no-deps gateway$' "$fake_log"
+grep -Eq '^first-state-failure\|compose .* stop gateway$' "$fake_log"
+mv "$release_state_file.saved" "$release_state_file"
 
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" registry.example/gateway:mutable invalid; then
   printf 'mutable image reference unexpectedly reached deployment\n' >&2
@@ -153,6 +179,26 @@ assert_release_state "$previous_image_reference" same-rerun "$previous_release"
 
 : >"$fake_log"
 healthy_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000002'
+if FAIL_STATE_MOVE=1 DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/deploy.sh" "$healthy_image_reference" state-failure; then
+  printf 'deployment with a failed release-state commit unexpectedly succeeded\n' >&2
+  exit 1
+fi
+grep -Eq '^state-failure\|compose .* up -d --no-deps gateway$' "$fake_log"
+grep -Eq '^same-rerun\|compose .* up -d --no-deps gateway$' "$fake_log"
+assert_release_state "$previous_image_reference" same-rerun "$previous_release"
+
+: >"$fake_log"
+if FAIL_ROLLBACK=1 DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/deploy.sh" "$broken_image_reference" broken; then
+  printf 'deployment with a failed rollback unexpectedly succeeded\n' >&2
+  exit 1
+fi
+grep -Eq '^same-rerun\|compose .* up -d --no-deps gateway$' "$fake_log"
+grep -Eq '^same-rerun\|compose .* stop gateway$' "$fake_log"
+assert_release_state "$previous_image_reference" same-rerun "$previous_release"
+
+: >"$fake_log"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy
 
 grep -Eq '^healthy\|compose .* up -d --no-deps gateway$' "$fake_log"

@@ -21,6 +21,8 @@ public_healthcheck_interval_seconds="${PUBLIC_HEALTHCHECK_INTERVAL_SECONDS:-2}"
 previous_image_reference=""
 previous_release_id=""
 previous_release=""
+state_temp=""
+trap 'rm -f "${state_temp:-}"' EXIT
 
 if [[ -f "$release_state_file" ]]; then
   deployed_state=()
@@ -109,7 +111,7 @@ rollback_release() {
   if [[ -z "$previous_image_reference" || -z "$previous_release_id" ]]; then
     "${compose[@]}" stop gateway >/dev/null 2>&1 || true
     printf 'deployment failed and no previous release is available\n' >&2
-    return 1
+    return 0
   fi
 
   export RELEASE_ID="$previous_release_id"
@@ -127,6 +129,14 @@ rollback_release() {
   printf 'rolled back to image digest %s\n' "$previous_image_reference" >&2
 }
 
+stop_gateway_fail_closed() {
+  if ! "${compose[@]}" stop gateway >/dev/null 2>&1; then
+    printf 'failed to stop the rejected gateway; manual intervention is required\n' >&2
+    return 1
+  fi
+  printf 'stopped the rejected gateway after rollback failure\n' >&2
+}
+
 if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]]; then
   if [[ "$previous_image_reference" != "$image_reference" ]]; then
     printf 'release ID already exists with a different image digest; existing gateway was left unchanged\n' >&2
@@ -140,16 +150,29 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
   exit 1
 fi
 
+state_temp="$(mktemp "${release_state_file}.XXXXXX")"
+printf '%s\n' "$image_reference" "$new_release_id" "$deployment_dir" >"$state_temp"
+
 if deploy_release; then
-  state_temp="$(mktemp "${release_state_file}.XXXXXX")"
-  printf '%s\n' "$image_reference" "$new_release_id" "$deployment_dir" >"$state_temp"
-  ln -sfn "$deployment_dir" "$deployment_root/current"
-  mv "$state_temp" "$release_state_file"
-  exit 0
+  if mv "$state_temp" "$release_state_file"; then
+    state_temp=""
+    if ! ln -sfn "$deployment_dir" "$deployment_root/current"; then
+      printf 'warning: release state committed but current convenience link was not updated\n' >&2
+    fi
+    exit 0
+  fi
+  printf 'could not commit deployed release state; rolling back candidate\n' >&2
+  show_diagnostics
+  if ! rollback_release; then
+    printf 'automatic rollback failed\n' >&2
+    stop_gateway_fail_closed || true
+  fi
+  exit 1
 fi
 
 show_diagnostics
 if ! rollback_release; then
   printf 'automatic rollback failed\n' >&2
+  stop_gateway_fail_closed || true
 fi
 exit 1
