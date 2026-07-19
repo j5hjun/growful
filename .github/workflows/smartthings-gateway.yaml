@@ -61,12 +61,19 @@ jobs:
       - name: Smoke test deployment image with Compose
         run: bash ../../deploy/smartthings-gateway/ci-smoke.sh smartthings-gateway ci
 
-  release_candidate:
+  publish:
     if: github.event_name == 'push'
     needs: verify
     runs-on: ubuntu-latest
+    concurrency:
+      group: smartthings-gateway-publish-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
     outputs:
-      publish: ${{ steps.freshness.outputs.publish }}
+      image-tag: ${{ steps.image.outputs.tag }}
+      ready: ${{ steps.freshness.outputs.publish }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -83,38 +90,45 @@ jobs:
             echo 'publish=false' >> "$GITHUB_OUTPUT"
             echo "Skipping stale commit $GITHUB_SHA; current gateway release is $current_release"
           fi
-
-  publish:
-    if: needs.release_candidate.outputs.publish == 'true'
-    needs: release_candidate
-    runs-on: ubuntu-latest
-    concurrency:
-      group: smartthings-gateway-publish-${{ github.sha }}
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      image-tag: ${{ steps.image.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - if: steps.freshness.outputs.publish == 'true'
+        uses: docker/setup-buildx-action@v4
+      - if: steps.freshness.outputs.publish == 'true'
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: image
+        if: steps.freshness.outputs.publish == 'true'
+        env:
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "tag=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-          if docker buildx imagetools inspect "$IMAGE_NAME:$GITHUB_SHA" >/dev/null 2>&1; then
-            echo 'exists=true' >> "$GITHUB_OUTPUT"
-            echo "Reusing immutable image tag $IMAGE_NAME:$GITHUB_SHA"
-          else
-            echo 'exists=false' >> "$GITHUB_OUTPUT"
-          fi
+          registry_repository="${IMAGE_NAME#ghcr.io/}"
+          basic_auth="$(printf '%s:%s' "$GITHUB_ACTOR" "$REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+          registry_token="$(curl --fail --silent --show-error --retry 3 \
+            --header "Authorization: Basic $basic_auth" \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:${registry_repository}:pull" |
+            jq --exit-status --raw-output '.token')"
+          manifest_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --retry 3 \
+            --header "Authorization: Bearer $registry_token" \
+            --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/${registry_repository}/manifests/${GITHUB_SHA}")"
+          case "$manifest_status" in
+            200)
+              echo 'exists=true' >> "$GITHUB_OUTPUT"
+              echo "Reusing immutable image tag $IMAGE_NAME:$GITHUB_SHA"
+              ;;
+            404)
+              echo 'exists=false' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Registry manifest check failed with HTTP $manifest_status" >&2
+              exit 1
+              ;;
+          esac
       - uses: docker/build-push-action@v7
-        if: steps.image.outputs.exists != 'true'
+        if: steps.freshness.outputs.publish == 'true' && steps.image.outputs.exists != 'true'
         with:
           context: packages/smartthings-gateway
           platforms: linux/amd64
@@ -125,6 +139,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
+    if: needs.publish.outputs.ready == 'true'
     needs: publish
     runs-on: ubuntu-latest
     environment: production
