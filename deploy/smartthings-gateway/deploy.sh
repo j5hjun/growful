@@ -85,7 +85,7 @@ deploy_release() {
 }
 
 rollback_release() {
-  if [[ -z "$previous_tag" || "$previous_tag" == "$new_tag" ]]; then
+  if [[ -z "$previous_tag" ]]; then
     "${compose[@]}" stop gateway >/dev/null 2>&1 || true
     printf 'deployment failed and no previous release is available\n' >&2
     return 1

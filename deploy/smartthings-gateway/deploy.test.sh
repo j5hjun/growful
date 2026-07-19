@@ -9,6 +9,7 @@ release_dir="$deployment_root/releases/new"
 previous_release="$deployment_root/releases/previous"
 fake_bin="$test_root/bin"
 fake_log="$test_root/docker.log"
+fail_once_marker="$test_root/public-health-failed-once"
 
 cleanup() {
   rm -rf "$test_root"
@@ -18,6 +19,7 @@ trap cleanup EXIT
 mkdir -p "$release_dir" "$previous_release" "$fake_bin"
 cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$release_dir/"
 cp "$source_dir/compose.yaml" "$previous_release/"
+grep -Fq 'stop_grace_period: 30s' "$source_dir/compose.yaml"
 touch "$deployment_root/.env"
 printf '%s\n' 'previous' >"$deployment_root/.deployed-image-tag"
 printf '%s\n' "$previous_release" >"$deployment_root/.deployed-release"
@@ -48,10 +50,15 @@ printf '%s\n' \
   'if [[ "${IMAGE_TAG:-}" == "public-broken" && "$*" == *smartthings.growful.click* ]]; then' \
   '  exit 22' \
   'fi' \
+  'if [[ "${IMAGE_TAG:-}" == "same-rerun" && "$*" == *smartthings.growful.click* && ! -f "$FAIL_ONCE_MARKER" ]]; then' \
+  '  touch "$FAIL_ONCE_MARKER"' \
+  '  exit 22' \
+  'fi' \
   'printf "{\"status\":\"ok\"}\n"' >"$fake_bin/curl"
 
 chmod +x "$fake_bin/docker" "$fake_bin/curl"
 export FAKE_LOG="$fake_log"
+export FAIL_ONCE_MARKER="$fail_once_marker"
 export HEALTHCHECK_ATTEMPTS=1
 export HEALTHCHECK_INTERVAL_SECONDS=0
 export PUBLIC_HEALTHCHECK_ATTEMPTS=1
@@ -79,6 +86,21 @@ fi
 grep -Eq '^public-broken\|curl .*smartthings\.growful\.click/healthz$' "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 test "$(<"$deployment_root/.deployed-image-tag")" = 'previous'
+
+: >"$fake_log"
+printf '%s\n' 'same-rerun' >"$deployment_root/.deployed-image-tag"
+if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
+  bash "$release_dir/deploy.sh" registry.example/gateway same-rerun; then
+  printf 'same-tag rerun with a transient public failure unexpectedly succeeded\n' >&2
+  exit 1
+fi
+
+test "$(grep -Ec '^same-rerun\|compose .* up -d --no-deps gateway$' "$fake_log")" = '2'
+if grep -Eq '^same-rerun\|compose .* stop gateway$' "$fake_log"; then
+  printf 'same-tag rollback stopped the previously healthy gateway\n' >&2
+  exit 1
+fi
+test "$(<"$deployment_root/.deployed-image-tag")" = 'same-rerun'
 
 : >"$fake_log"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" registry.example/gateway healthy
