@@ -5,6 +5,7 @@ import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 
 const apps: ReturnType<typeof createApp>[] = []
+const authorizationOrigin = "https://api.smartthings.test"
 const redirectOrigin = "https://smartthings.growful.click"
 const deviceRanges = ["selected", "all"] as const
 const devicePermissions = ["read", "control", "write"] as const
@@ -73,7 +74,7 @@ function createFixture() {
     store: new MemoryOAuthStore(),
   })
   const app = createApp({
-    authorizationOrigin: "https://api.smartthings.test",
+    authorizationOrigin,
     redirectOrigin,
     service,
   })

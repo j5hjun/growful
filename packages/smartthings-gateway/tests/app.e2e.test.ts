@@ -7,6 +7,7 @@ import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 
 const apps: ReturnType<typeof createApp>[] = []
+const authorizationOrigin = "https://api.smartthings.test"
 const redirectOrigin = "https://smartthings.growful.click"
 
 function testGrowfulToken(index: number) {
@@ -35,7 +36,7 @@ function createFixture(logger?: AppOptions["logger"]) {
     store,
   })
   const app = createApp({
-    authorizationOrigin: "https://api.smartthings.test",
+    authorizationOrigin,
     logger,
     redirectOrigin,
     service,
@@ -81,7 +82,7 @@ describe("SmartThings Gateway HTTP API", () => {
     expect(response.headers["referrer-policy"]).toBe("same-origin")
   })
 
-  it("allows browser navigation to the SmartThings authorization origin", async () => {
+  it("allows browser navigation through the SmartThings OAuth redirect chain", async () => {
     // Given
     const fixture = createFixture()
 
@@ -90,7 +91,7 @@ describe("SmartThings Gateway HTTP API", () => {
 
     // Then
     expect(response.headers["content-security-policy"]).toContain(
-      "form-action 'self' https://api.smartthings.test",
+      "form-action 'self' https://api.smartthings.test https://account.smartthings.com https://account.samsung.com",
     )
   })
 
