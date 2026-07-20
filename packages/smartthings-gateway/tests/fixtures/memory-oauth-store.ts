@@ -19,10 +19,19 @@ export class MemoryOAuthStore implements OAuthStore {
 
   async claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null> {
     const tokens = this.tokens
-    const dueAt = new Date(claim.now.getTime() + claim.refreshBeforeExpiryMs)
+    const dueAt =
+      claim.refreshBeforeExpiryMs === null
+        ? null
+        : new Date(claim.now.getTime() + claim.refreshBeforeExpiryMs)
     const claimAvailable =
       this.refreshClaimedUntil === null || this.refreshClaimedUntil.getTime() <= claim.now.getTime()
-    if (tokens === null || tokens.expiresAt.getTime() > dueAt.getTime() || !claimAvailable) {
+    if (
+      tokens === null ||
+      (dueAt !== null && tokens.expiresAt.getTime() > dueAt.getTime()) ||
+      (claim.expectedAccessToken !== undefined &&
+        tokens.accessToken !== claim.expectedAccessToken) ||
+      !claimAvailable
+    ) {
       return null
     }
     this.refreshClaimedUntil = new Date(claim.now.getTime() + claim.leaseMs)

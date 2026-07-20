@@ -54,6 +54,7 @@ fi
 
 required_keys=(
   DATABASE_URL
+  GATEWAY_API_TOKEN
   OAUTH_ADMIN_TOKEN
   OAUTH_CLIENT_ID
   OAUTH_CLIENT_SECRET
@@ -61,6 +62,8 @@ required_keys=(
   PORT
   POSTGRES_PASSWORD
   REFRESH_LEASE_SECONDS
+  SMARTTHINGS_API_TIMEOUT_SECONDS
+  SMARTTHINGS_API_URL
   SMARTTHINGS_SCOPES
   TOKEN_ENCRYPTION_KEY
 )
@@ -93,6 +96,19 @@ if [[ ! "$refresh_lease_seconds" =~ ^[0-9]+$ ]] || ((10#${refresh_lease_seconds}
   exit 1
 fi
 
+smartthings_api_timeout_seconds="$(sed -n 's/^SMARTTHINGS_API_TIMEOUT_SECONDS=//p' "$environment_file")"
+if [[ ! "$smartthings_api_timeout_seconds" =~ ^[0-9]+$ ]] ||
+  ((10#${smartthings_api_timeout_seconds} < 1 || 10#${smartthings_api_timeout_seconds} > 60)); then
+  printf 'SMARTTHINGS_API_TIMEOUT_SECONDS must be an integer from 1 to 60\n' >&2
+  exit 1
+fi
+
+smartthings_api_url="$(sed -n 's/^SMARTTHINGS_API_URL=//p' "$environment_file")"
+if [[ "$smartthings_api_url" != 'https://api.smartthings.com' ]]; then
+  printf 'SMARTTHINGS_API_URL must be the fixed production SmartThings API origin\n' >&2
+  exit 1
+fi
+
 redirect_uri="$(sed -n 's/^OAUTH_REDIRECT_URI=//p' "$environment_file")"
 if [[ "$redirect_uri" != 'https://smartthings.growful.click/oauth/callback' ]]; then
   printf 'OAUTH_REDIRECT_URI does not match the registered production callback\n' >&2
@@ -102,6 +118,16 @@ fi
 admin_token="$(sed -n 's/^OAUTH_ADMIN_TOKEN=//p' "$environment_file")"
 if ((${#admin_token} < 32)); then
   printf 'OAUTH_ADMIN_TOKEN must contain at least 32 characters\n' >&2
+  exit 1
+fi
+
+gateway_api_token="$(sed -n 's/^GATEWAY_API_TOKEN=//p' "$environment_file")"
+if ((${#gateway_api_token} < 32)); then
+  printf 'GATEWAY_API_TOKEN must contain at least 32 characters\n' >&2
+  exit 1
+fi
+if [[ "$gateway_api_token" == "$admin_token" ]]; then
+  printf 'GATEWAY_API_TOKEN must differ from OAUTH_ADMIN_TOKEN\n' >&2
   exit 1
 fi
 

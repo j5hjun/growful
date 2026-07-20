@@ -294,6 +294,9 @@ jobs:
           oauth_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/oauth/start")"
           test "$oauth_status" = '401'
 
+          api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/v1/devices")"
+          test "$api_status" = '401'
+
           printf '%s\n' "$connection_response"
           REMOTE
           )"

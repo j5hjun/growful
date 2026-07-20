@@ -31,6 +31,7 @@ trap cleanup EXIT
 printf '%s\n' \
   'POSTGRES_PASSWORD=gateway-ci-password' \
   'DATABASE_URL=postgresql://gateway:gateway-ci-password@postgres:5432/smartthings_gateway' \
+  'GATEWAY_API_TOKEN=gateway-ci-api-token-with-32-characters' \
   'PORT=8100' \
   'HOST=0.0.0.0' \
   'LOG_LEVEL=info' \
@@ -39,6 +40,8 @@ printf '%s\n' \
   'OAUTH_CLIENT_SECRET=gateway-ci-secret' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
   'SMARTTHINGS_SCOPES=r:locations:* r:devices:$ r:devices:*' \
+  'SMARTTHINGS_API_URL=https://api.smartthings.com' \
+  'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
   'SMARTTHINGS_AUTHORIZE_URL=https://api.smartthings.com/oauth/authorize' \
   'SMARTTHINGS_TOKEN_URL=https://api.smartthings.com/oauth/token' \
   'TOKEN_ENCRYPTION_KEY=MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=' \
@@ -72,6 +75,7 @@ test "$(curl --fail --silent --show-error http://127.0.0.1:8100/healthz)" = '{"s
 test "$(curl --fail --silent --show-error http://127.0.0.1:8100/connection)" = '{"connected":false}'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '401'
 test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/v1/devices)" = '401'
 
 restart_count="$(docker inspect --format='{{.RestartCount}}' "$container_id")"
 test "$restart_count" = '0'
