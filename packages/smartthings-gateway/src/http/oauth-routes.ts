@@ -12,6 +12,7 @@ const basicAuthorizationSchema = z.string().regex(/^Basic [A-Za-z0-9+/]+={0,2}$/
 
 export type OAuthRouteOptions = {
   readonly adminToken: string
+  readonly authorizationOrigin: string
   readonly redirectOrigin: string
   readonly service: OAuthService
 }
@@ -26,6 +27,7 @@ export class InvalidOAuthOriginError extends Error {
 
 function sendOAuthScopeSelectionPage(
   reply: FastifyReply,
+  authorizationOrigin: string,
   options: { readonly showSelectionError: boolean; readonly statusCode: 200 | 400 } = {
     showSelectionError: false,
     statusCode: 200,
@@ -35,7 +37,7 @@ function sendOAuthScopeSelectionPage(
     .header("Cache-Control", "no-store")
     .header(
       "Content-Security-Policy",
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${authorizationOrigin} https://account.smartthings.com https://account.samsung.com; base-uri 'none'; frame-ancestors 'none'`,
     )
     .header("Referrer-Policy", "same-origin")
     .header("X-Frame-Options", "DENY")
@@ -85,7 +87,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
       onRequest: async (request, reply) =>
         requireAdminAuthorization(request, reply, options.adminToken),
     },
-    async (_request, reply) => sendOAuthScopeSelectionPage(reply),
+    async (_request, reply) => sendOAuthScopeSelectionPage(reply, options.authorizationOrigin),
   )
 
   app.post(
@@ -106,7 +108,10 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
     async (request, reply) => {
       const scopes = parseOAuthScopeSelection(request.body)
       if (scopes === null) {
-        return sendOAuthScopeSelectionPage(reply, { showSelectionError: true, statusCode: 400 })
+        return sendOAuthScopeSelectionPage(reply, options.authorizationOrigin, {
+          showSelectionError: true,
+          statusCode: 400,
+        })
       }
       const authorizationUrl = await options.service.startAuthorization(scopes)
       return reply.redirect(authorizationUrl.toString())

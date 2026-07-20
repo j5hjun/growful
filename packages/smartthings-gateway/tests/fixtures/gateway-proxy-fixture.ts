@@ -50,6 +50,7 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
   )
   const app = createApp({
     adminToken,
+    authorizationOrigin: options.api.baseUrl.origin,
     redirectOrigin: "https://smartthings.growful.click",
     service,
   })

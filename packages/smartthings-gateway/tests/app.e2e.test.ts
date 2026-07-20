@@ -8,6 +8,7 @@ import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 const apps: ReturnType<typeof createApp>[] = []
 const adminToken = "test-admin-token-with-32-characters"
 const adminAuthorization = `Basic ${Buffer.from(`operator:${adminToken}`).toString("base64")}`
+const authorizationOrigin = "https://api.smartthings.test"
 const redirectOrigin = "https://smartthings.growful.click"
 
 function createFixture(logger?: AppOptions["logger"]) {
@@ -21,7 +22,7 @@ function createFixture(logger?: AppOptions["logger"]) {
     stateGenerator: () => "test-state-with-sufficient-entropy",
     store,
   })
-  const app = createApp({ adminToken, logger, redirectOrigin, service })
+  const app = createApp({ adminToken, authorizationOrigin, logger, redirectOrigin, service })
   apps.push(app)
   return { app, client, store }
 }
@@ -94,6 +95,23 @@ describe("SmartThings Gateway HTTP API", () => {
 
     expect(unauthenticatedResponse.statusCode).toBe(401)
     expect(oversizedAuthenticatedResponse.statusCode).toBe(413)
+  })
+
+  it("sets form-action to the SmartThings OAuth redirect chain", async () => {
+    // Given
+    const fixture = createFixture()
+
+    // When
+    const response = await fixture.app.inject({
+      headers: { authorization: adminAuthorization },
+      method: "GET",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.headers["content-security-policy"]).toContain(
+      "form-action 'self' https://api.smartthings.test https://account.smartthings.com https://account.samsung.com",
+    )
   })
 
   it("completes OAuth and reports connection metadata without tokens", async () => {
