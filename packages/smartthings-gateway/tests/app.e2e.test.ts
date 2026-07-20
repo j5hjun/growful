@@ -110,6 +110,7 @@ describe("SmartThings Gateway HTTP API", () => {
     })
     expect(startResponse.statusCode).toBe(200)
     expect(startResponse.headers["content-security-policy"]).toContain("default-src 'none'")
+    expect(startResponse.headers["referrer-policy"]).toBe("same-origin")
     expect(startResponse.headers["cache-control"]).toBe("no-store")
     expect(startResponse.body).not.toContain('name="locationRead" value="on" checked')
 
