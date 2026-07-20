@@ -37,7 +37,7 @@ function sendOAuthScopeSelectionPage(
       "Content-Security-Policy",
       "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     )
-    .header("Referrer-Policy", "no-referrer")
+    .header("Referrer-Policy", "same-origin")
     .header("X-Frame-Options", "DENY")
     .type("text/html; charset=utf-8")
     .status(options.statusCode)
