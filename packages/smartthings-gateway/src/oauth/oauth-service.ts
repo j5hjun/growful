@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto"
 import type { ConnectionStatus, OAuthStore, SmartThingsClient, StoredTokens } from "./contracts.js"
 import { OAuthStateHashSchema, RefreshClaimIdSchema } from "./contracts.js"
+import { areScopesWithin, type SmartThingsScope } from "./smartthings-scope.js"
 
 const oauthStateLifetimeMs = 10 * 60 * 1_000
 
@@ -17,6 +18,14 @@ export class OAuthConnectionRequiredError extends Error {
 
   constructor() {
     super("SmartThings OAuth connection is required")
+  }
+}
+
+export class OAuthScopeMismatchError extends Error {
+  override readonly name = "OAuthScopeMismatchError"
+
+  constructor() {
+    super("SmartThings returned scopes outside the authorized boundary")
   }
 }
 
@@ -38,19 +47,21 @@ export class OAuthService {
     this.stateGenerator = options.stateGenerator ?? (() => randomBytes(32).toString("base64url"))
   }
 
-  async startAuthorization(): Promise<URL> {
+  async startAuthorization(scopes: readonly SmartThingsScope[]): Promise<URL> {
     const state = this.stateGenerator()
     const now = this.now()
     await this.options.store.saveState(
       this.hashState(state),
       new Date(now.getTime() + oauthStateLifetimeMs),
+      scopes,
     )
-    return this.options.client.buildAuthorizationUrl(state)
+    return this.options.client.buildAuthorizationUrl(state, scopes)
   }
 
   async completeAuthorization(code: string, state: string): Promise<ConnectionStatus> {
-    await this.consumeState(state)
+    const requestedScopes = await this.consumeState(state)
     const grant = await this.options.client.exchangeCode(code)
+    this.ensureScopesWithin(grant.scopes, requestedScopes)
     const tokens = await this.options.store.saveTokens({
       grant,
       issuedAt: this.now(),
@@ -101,6 +112,7 @@ export class OAuthService {
 
     try {
       const grant = await this.options.client.refresh(tokens.refreshToken)
+      this.ensureScopesWithin(grant.scopes, tokens.scopes)
       await this.options.store.saveTokens({ claimId, grant, issuedAt: now, source: "refresh" })
       return true
     } catch (error) {
@@ -118,10 +130,17 @@ export class OAuthService {
     await this.consumeState(state)
   }
 
-  private async consumeState(state: string): Promise<void> {
+  private async consumeState(state: string): Promise<readonly SmartThingsScope[]> {
     const consumed = await this.options.store.consumeState(this.hashState(state), this.now())
-    if (!consumed) {
+    if (consumed === null) {
       throw new InvalidOAuthStateError()
+    }
+    return consumed
+  }
+
+  private ensureScopesWithin(scopes: readonly string[], allowedScopes: readonly string[]): void {
+    if (!areScopesWithin(scopes, allowedScopes)) {
+      throw new OAuthScopeMismatchError()
     }
   }
 
@@ -133,6 +152,7 @@ export class OAuthService {
     return {
       connected: true,
       expiresAt: tokens.expiresAt.toISOString(),
+      grantedScopes: tokens.scopes,
       lastRefreshedAt: tokens.lastRefreshedAt?.toISOString() ?? null,
     }
   }

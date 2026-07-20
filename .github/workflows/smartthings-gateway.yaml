@@ -38,6 +38,8 @@ jobs:
         working-directory: packages/smartthings-gateway
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           package_json_file: packages/smartthings-gateway/package.json
@@ -59,6 +61,8 @@ jobs:
       - name: Test gateway release resolution
         run: bash ../../deploy/smartthings-gateway/resolve-release.test.sh
       - name: Smoke test digest-pinned deployment image with Compose
+        env:
+          PREVIOUS_COMMIT: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           docker compose --project-name smartthings-gateway-ci-registry \
             -f ../../deploy/smartthings-gateway/ci-registry.compose.yaml up -d
@@ -73,6 +77,15 @@ jobs:
           done
           image_tag='localhost:5001/growful-smartthings-gateway:ci'
           docker build --tag "$image_tag" .
+          previous_worktree="$RUNNER_TEMP/smartthings-gateway-previous"
+          if [[ -z "$PREVIOUS_COMMIT" || "$PREVIOUS_COMMIT" =~ ^0+$ ]]; then
+            PREVIOUS_COMMIT="$(git rev-parse "$GITHUB_SHA^1")"
+          fi
+          git worktree add --detach "$previous_worktree" "$PREVIOUS_COMMIT"
+          trap 'git worktree remove --force "$previous_worktree" >/dev/null 2>&1 || true' EXIT
+          previous_image='growful-smartthings-gateway:previous'
+          docker build --tag "$previous_image" "$previous_worktree/packages/smartthings-gateway"
+          bash ../../deploy/smartthings-gateway/version-skew-smoke.sh "$previous_image" "$image_tag"
           docker push "$image_tag"
           image_reference="$(docker image inspect --format '{{index .RepoDigests 0}}' "$image_tag")"
           [[ "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]

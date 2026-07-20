@@ -1,4 +1,4 @@
-import { CamelCasePlugin, type ColumnType, Kysely, PostgresDialect } from "kysely"
+import { CamelCasePlugin, type ColumnType, Kysely, PostgresDialect, sql } from "kysely"
 import { type Migration, type MigrationProvider, Migrator } from "kysely/migration"
 import { Pool } from "pg"
 
@@ -6,6 +6,7 @@ type Timestamp = ColumnType<Date, Date, Date>
 
 export type OAuthStateTable = {
   readonly expiresAt: Timestamp
+  readonly requestedScopes: string
   readonly stateHash: string
 }
 
@@ -43,6 +44,7 @@ const initialMigration: Migration = {
       .ifNotExists()
       .addColumn("stateHash", "varchar(64)", (column) => column.primaryKey())
       .addColumn("expiresAt", "timestamptz", (column) => column.notNull())
+      .addColumn("requestedScopes", "text", (column) => column.notNull().defaultTo(""))
       .execute()
 
     await database.schema
@@ -90,4 +92,8 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   if (result.error !== undefined) {
     throw new DatabaseMigrationError({ cause: result.error })
   }
+  // Keep this additive change out of migration history so the 001-only image remains rollbackable.
+  await sql`alter table oauth_states add column if not exists requested_scopes text not null default ''`.execute(
+    database,
+  )
 }

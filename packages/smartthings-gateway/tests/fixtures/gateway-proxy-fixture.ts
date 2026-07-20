@@ -27,9 +27,10 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
     installedAppId: client.exchangeGrant.installedAppId,
     lastRefreshedAt: null,
     refreshToken: "stored-smartthings-refresh-token",
-    scope: "r:devices:*",
+    scopes: ["r:devices:*"],
     tokenType: "bearer",
   })
+  client.refreshGrant = { ...client.refreshGrant, scopes: ["r:devices:*"] }
   const service = new OAuthService({
     client,
     now: () => now,
@@ -47,7 +48,11 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
       ? proxyOptions
       : { ...proxyOptions, maxResponseBytes: options.maxResponseBytes },
   )
-  const app = createApp({ adminToken, service })
+  const app = createApp({
+    adminToken,
+    redirectOrigin: "https://smartthings.growful.click",
+    service,
+  })
   registerSmartThingsProxy(app, { gatewayApiToken, proxy })
   options.apps.push(app)
   return { app, client, store }

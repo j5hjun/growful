@@ -9,10 +9,16 @@ import {
   StaleRefreshClaimError,
   type StoredTokens,
 } from "../../src/oauth/contracts.js"
+import type { SmartThingsScope } from "../../src/oauth/smartthings-scope.js"
+
+type StoredOAuthState = {
+  readonly expiresAt: Date
+  readonly requestedScopes: readonly SmartThingsScope[]
+}
 
 export class MemoryOAuthStore implements OAuthStore {
   readonly failures: RefreshFailure[] = []
-  readonly states = new Map<OAuthStateHash, Date>()
+  readonly states = new Map<OAuthStateHash, StoredOAuthState>()
   tokens: StoredTokens | null = null
   private refreshClaimedUntil: Date | null = null
   private refreshClaimId: RefreshClaimId | null = null
@@ -39,10 +45,15 @@ export class MemoryOAuthStore implements OAuthStore {
     return tokens
   }
 
-  async consumeState(stateHash: OAuthStateHash, now: Date): Promise<boolean> {
-    const expiresAt = this.states.get(stateHash)
+  async consumeState(
+    stateHash: OAuthStateHash,
+    now: Date,
+  ): Promise<readonly SmartThingsScope[] | null> {
+    const state = this.states.get(stateHash)
     this.states.delete(stateHash)
-    return expiresAt !== undefined && expiresAt.getTime() >= now.getTime()
+    return state !== undefined && state.expiresAt.getTime() >= now.getTime()
+      ? state.requestedScopes
+      : null
   }
 
   async getTokens(): Promise<StoredTokens | null> {
@@ -56,8 +67,12 @@ export class MemoryOAuthStore implements OAuthStore {
     this.failures.push(failure)
   }
 
-  async saveState(stateHash: OAuthStateHash, expiresAt: Date): Promise<void> {
-    this.states.set(stateHash, expiresAt)
+  async saveState(
+    stateHash: OAuthStateHash,
+    expiresAt: Date,
+    requestedScopes: readonly SmartThingsScope[],
+  ): Promise<void> {
+    this.states.set(stateHash, { expiresAt, requestedScopes })
   }
 
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {
@@ -71,7 +86,7 @@ export class MemoryOAuthStore implements OAuthStore {
       installedAppId: input.grant.installedAppId,
       lastRefreshedAt,
       refreshToken: input.grant.refreshToken,
-      scope: input.grant.scope,
+      scopes: input.grant.scopes,
       tokenType: input.grant.tokenType,
     }
     this.refreshClaimedUntil = null

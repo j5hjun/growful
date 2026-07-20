@@ -12,6 +12,7 @@ image_name="${image_reference%@sha256:*}"
 image_digest="sha256:${image_reference##*@sha256:}"
 project_name="smartthings-gateway-ci-${release_id}-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-0}"
 environment_file="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-ci.XXXXXX")"
+invalid_selection_response="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-invalid-selection.XXXXXX")"
 
 export COMPOSE_PROJECT_NAME="$project_name"
 export GATEWAY_ENV_FILE="$environment_file"
@@ -23,7 +24,7 @@ compose=(docker compose --env-file "$environment_file" -f "$deployment_dir/compo
 cleanup() {
   local status=$?
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -f "$environment_file"
+  rm -f "$environment_file" "$invalid_selection_response"
   exit "$status"
 }
 trap cleanup EXIT
@@ -39,7 +40,6 @@ printf '%s\n' \
   'OAUTH_CLIENT_ID=gateway-ci-client' \
   'OAUTH_CLIENT_SECRET=gateway-ci-secret' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
-  'SMARTTHINGS_SCOPES=r:locations:* r:devices:$ r:devices:*' \
   'SMARTTHINGS_API_URL=https://api.smartthings.com' \
   'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
   'SMARTTHINGS_AUTHORIZE_URL=https://api.smartthings.com/oauth/authorize' \
@@ -74,7 +74,10 @@ done
 test "$(curl --fail --silent --show-error http://127.0.0.1:8100/healthz)" = '{"status":"ok"}'
 test "$(curl --fail --silent --show-error http://127.0.0.1:8100/connection)" = '{"connected":false}'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '401'
-test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '200'
+test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --header 'Origin: https://smartthings.growful.click' --data 'deviceRange=selected&locationRead=on' --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
+grep --quiet 'role="alert"' "$invalid_selection_response"
+test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --header 'Origin: https://smartthings.growful.click' --data 'deviceRange=selected&permissions=read&permissions=control&locationRead=on' --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/v1/devices)" = '401'
 
 restart_count="$(docker inspect --format='{{.RestartCount}}' "$container_id")"

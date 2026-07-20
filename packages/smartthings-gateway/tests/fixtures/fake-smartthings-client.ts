@@ -3,6 +3,7 @@ import {
   type SmartThingsClient,
   type TokenGrant,
 } from "../../src/oauth/contracts.js"
+import type { SmartThingsScope } from "../../src/oauth/smartthings-scope.js"
 
 export class FakeSmartThingsClient implements SmartThingsClient {
   readonly exchangedCodes: string[] = []
@@ -13,7 +14,7 @@ export class FakeSmartThingsClient implements SmartThingsClient {
     expiresInSeconds: 86_400,
     installedAppId: InstalledAppIdSchema.parse("installed-app-1"),
     refreshToken: "initial-refresh-token",
-    scope: "r:locations:* r:devices:*",
+    scopes: ["r:locations:*", "r:devices:*"],
     tokenType: "bearer",
   }
 
@@ -22,12 +23,13 @@ export class FakeSmartThingsClient implements SmartThingsClient {
     expiresInSeconds: 86_400,
     installedAppId: InstalledAppIdSchema.parse("installed-app-1"),
     refreshToken: "rotated-refresh-token",
-    scope: "r:locations:* r:devices:*",
+    scopes: ["r:locations:*", "r:devices:*"],
     tokenType: "bearer",
   }
 
-  buildAuthorizationUrl(state: string): URL {
+  buildAuthorizationUrl(state: string, scopes: readonly SmartThingsScope[]): URL {
     const url = new URL("https://api.smartthings.test/oauth/authorize")
+    url.searchParams.set("scope", scopes.join(" "))
     url.searchParams.set("state", state)
     return url
   }
