@@ -35,7 +35,7 @@ function sendOAuthScopeSelectionPage(
     .header("Cache-Control", "no-store")
     .header(
       "Content-Security-Policy",
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
     )
     .header("Referrer-Policy", "same-origin")
     .header("X-Frame-Options", "DENY")

@@ -96,6 +96,21 @@ describe("SmartThings Gateway HTTP API", () => {
     expect(oversizedAuthenticatedResponse.statusCode).toBe(413)
   })
 
+  it("allows the OAuth form submission to follow the SmartThings redirect", async () => {
+    // Given
+    const fixture = createFixture()
+
+    // When
+    const response = await fixture.app.inject({
+      headers: { authorization: adminAuthorization },
+      method: "GET",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.headers["content-security-policy"]).not.toContain("form-action")
+  })
+
   it("completes OAuth and reports connection metadata without tokens", async () => {
     // Given
     const fixture = createFixture()
