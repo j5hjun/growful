@@ -37,21 +37,42 @@ export class PostgresOAuthStore implements OAuthStore {
   }
 
   async claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null> {
-    const dueAt = new Date(claim.now.getTime() + claim.refreshBeforeExpiryMs)
-    const leaseUntil = new Date(claim.now.getTime() + claim.leaseMs)
-    const row = await this.database
-      .updateTable("oauthTokens")
-      .set({ refreshClaimedUntil: leaseUntil, refreshClaimId: claim.claimId })
-      .where("expiresAt", "<=", dueAt)
-      .where((expression) =>
-        expression.or([
-          expression("refreshClaimedUntil", "is", null),
-          expression("refreshClaimedUntil", "<=", claim.now),
-        ]),
-      )
-      .returningAll()
-      .executeTakeFirst()
-    return row === undefined ? null : this.decryptRow(row)
+    return this.database.transaction().execute(async (transaction) => {
+      const row = await transaction
+        .selectFrom("oauthTokens")
+        .selectAll()
+        .forUpdate()
+        .executeTakeFirst()
+      if (row === undefined) {
+        return null
+      }
+
+      const tokens = this.decryptRow(row)
+      const dueAt =
+        claim.refreshBeforeExpiryMs === null
+          ? null
+          : new Date(claim.now.getTime() + claim.refreshBeforeExpiryMs)
+      const claimAvailable =
+        row.refreshClaimedUntil === null || row.refreshClaimedUntil.getTime() <= claim.now.getTime()
+      if (
+        (dueAt !== null && row.expiresAt.getTime() > dueAt.getTime()) ||
+        !claimAvailable ||
+        (claim.expectedAccessToken !== undefined &&
+          tokens.accessToken !== claim.expectedAccessToken)
+      ) {
+        return null
+      }
+
+      await transaction
+        .updateTable("oauthTokens")
+        .set({
+          refreshClaimedUntil: new Date(claim.now.getTime() + claim.leaseMs),
+          refreshClaimId: claim.claimId,
+        })
+        .where("installedAppId", "=", tokens.installedAppId)
+        .execute()
+      return tokens
+    })
   }
 
   async consumeState(stateHash: OAuthStateHash, now: Date): Promise<boolean> {

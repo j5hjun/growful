@@ -1,5 +1,6 @@
 import { loadConfig } from "./config.js"
-import { createApp } from "./http/app.js"
+import { createApp, registerSmartThingsProxy } from "./http/app.js"
+import { SmartThingsProxy } from "./http/smartthings-proxy.js"
 import { OAuthService } from "./oauth/oauth-service.js"
 import { startRefreshWorker } from "./oauth/refresh-worker.js"
 import { startGatewayRuntime } from "./runtime.js"
@@ -38,6 +39,14 @@ async function main(): Promise<void> {
         redact: ["req.headers.authorization", "req.headers.cookie"],
       },
       service,
+    })
+    registerSmartThingsProxy(app, {
+      gatewayApiToken: config.gatewayApiToken,
+      proxy: new SmartThingsProxy({
+        apiBaseUrl: config.apiBaseUrl,
+        service,
+        timeoutMs: config.apiTimeoutMs,
+      }),
     })
     runtimeOwnsDatabase = true
     await startGatewayRuntime({

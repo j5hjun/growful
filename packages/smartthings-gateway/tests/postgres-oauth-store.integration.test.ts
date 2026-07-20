@@ -109,6 +109,57 @@ describe("PostgresOAuthStore", () => {
     expect(claims.filter((tokens) => tokens !== null)).toHaveLength(1)
   })
 
+  it("grants a forced refresh lease even when the access token is not near expiry", async () => {
+    // Given
+    await store.saveTokens({
+      grant: { ...grant, expiresInSeconds: 86_400 },
+      issuedAt: now,
+      source: "authorization",
+    })
+
+    // When
+    const claimed = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001"),
+      leaseMs: 60_000,
+      now,
+      refreshBeforeExpiryMs: null,
+    })
+
+    // Then
+    expect(claimed).not.toBeNull()
+  })
+
+  it("rejects a forced refresh claim for an access token that was already rotated", async () => {
+    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
+    const firstClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001")
+    await store.claimTokensForRefresh({
+      claimId: firstClaimId,
+      expectedAccessToken: grant.accessToken,
+      leaseMs: 60_000,
+      now,
+      refreshBeforeExpiryMs: null,
+    })
+    await store.saveTokens({
+      claimId: firstClaimId,
+      grant: {
+        ...grant,
+        accessToken: "rotated-access-token",
+        refreshToken: "rotated-refresh-token",
+      },
+      issuedAt: now,
+      source: "refresh",
+    })
+    const staleClaim = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000002"),
+      expectedAccessToken: grant.accessToken,
+      leaseMs: 60_000,
+      now,
+      refreshBeforeExpiryMs: null,
+    })
+
+    expect(staleClaim).toBeNull()
+  })
+
   it("prevents an expired refresh claimant from overwriting a newer claim", async () => {
     // Given
     await store.saveTokens({ grant, issuedAt: now, source: "authorization" })

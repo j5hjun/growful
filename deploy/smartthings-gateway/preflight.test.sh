@@ -48,12 +48,15 @@ write_environment() {
   printf '%s\n' \
     'POSTGRES_PASSWORD=test-password' \
     'DATABASE_URL=postgresql://gateway:test-password@postgres:5432/smartthings_gateway' \
+    'GATEWAY_API_TOKEN=test-gateway-api-token-with-32-characters' \
     "PORT=$port" \
     'OAUTH_ADMIN_TOKEN=test-admin-token-with-32-characters' \
     'OAUTH_CLIENT_ID=test-client' \
     'OAUTH_CLIENT_SECRET=test-secret' \
     'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
     'REFRESH_LEASE_SECONDS=120' \
+    'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
+    'SMARTTHINGS_API_URL=https://api.smartthings.com' \
     'SMARTTHINGS_SCOPES=r:devices:*' \
     "TOKEN_ENCRYPTION_KEY=$encryption_key" >"$deployment_root/.env"
   chmod 600 "$deployment_root/.env"
@@ -67,6 +70,38 @@ write_environment "$valid_key" 8100
 sed -i.bak 's/^OAUTH_ADMIN_TOKEN=.*/OAUTH_ADMIN_TOKEN=replace-with-a-long-random-operator-token/' "$deployment_root/.env"
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'published operator-token placeholder unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's#^SMARTTHINGS_API_URL=.*#SMARTTHINGS_API_URL=https://example.com#' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'arbitrary SmartThings API host unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's/^SMARTTHINGS_API_TIMEOUT_SECONDS=.*/SMARTTHINGS_API_TIMEOUT_SECONDS=0/' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'invalid SmartThings API timeout unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's/^GATEWAY_API_TOKEN=.*/GATEWAY_API_TOKEN=too-short/' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'short gateway API token unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's/^GATEWAY_API_TOKEN=.*/GATEWAY_API_TOKEN=test-admin-token-with-32-characters/' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'reused OAuth admin token unexpectedly passed preflight\n' >&2
   exit 1
 fi
 rm -f "$deployment_root/.env.bak"

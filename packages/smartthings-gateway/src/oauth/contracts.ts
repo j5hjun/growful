@@ -45,9 +45,10 @@ export type ConnectionStatus =
 
 export type RefreshClaim = {
   readonly claimId: RefreshClaimId
+  readonly expectedAccessToken?: string
   readonly leaseMs: number
   readonly now: Date
-  readonly refreshBeforeExpiryMs: number
+  readonly refreshBeforeExpiryMs: number | null
 }
 
 export type SaveTokensInput =

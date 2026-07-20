@@ -12,6 +12,14 @@ export class InvalidOAuthStateError extends Error {
   }
 }
 
+export class OAuthConnectionRequiredError extends Error {
+  override readonly name = "OAuthConnectionRequiredError"
+
+  constructor() {
+    super("SmartThings OAuth connection is required")
+  }
+}
+
 export type OAuthServiceOptions = {
   readonly client: SmartThingsClient
   readonly now?: () => Date
@@ -56,15 +64,37 @@ export class OAuthService {
     return tokens === null ? { connected: false } : this.toConnectionStatus(tokens)
   }
 
+  async getAccessToken(): Promise<string> {
+    const tokens = await this.options.store.getTokens()
+    if (tokens === null) {
+      throw new OAuthConnectionRequiredError()
+    }
+    return tokens.accessToken
+  }
+
   async refreshIfDue(): Promise<boolean> {
+    return this.refresh(this.options.refreshBeforeExpiryMs, undefined)
+  }
+
+  async refreshAccessToken(rejectedAccessToken: string): Promise<boolean> {
+    return this.refresh(null, rejectedAccessToken)
+  }
+
+  private async refresh(
+    refreshBeforeExpiryMs: number | null,
+    expectedAccessToken: string | undefined,
+  ): Promise<boolean> {
     const now = this.now()
     const claimId = RefreshClaimIdSchema.parse(randomUUID())
-    const tokens = await this.options.store.claimTokensForRefresh({
+    const claim = {
       claimId,
       leaseMs: this.options.refreshLeaseMs,
       now,
-      refreshBeforeExpiryMs: this.options.refreshBeforeExpiryMs,
-    })
+      refreshBeforeExpiryMs,
+    }
+    const tokens = await this.options.store.claimTokensForRefresh(
+      expectedAccessToken === undefined ? claim : { ...claim, expectedAccessToken },
+    )
     if (tokens === null) {
       return false
     }
