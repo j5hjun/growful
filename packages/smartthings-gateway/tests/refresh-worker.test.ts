@@ -6,7 +6,7 @@ class SecretBearingRefreshError extends Error {
 }
 
 class FailingRefreshService implements RefreshService {
-  async refreshIfDue(): Promise<boolean> {
+  async refreshDueConnections(): Promise<never> {
     throw new SecretBearingRefreshError("refresh-token-must-not-be-logged")
   }
 }
@@ -44,12 +44,12 @@ describe("startRefreshWorker", () => {
       notifyStarted = resolve
     })
     const service: RefreshService = {
-      async refreshIfDue() {
+      async refreshDueConnections() {
         notifyStarted?.()
         await new Promise<void>((resolve) => {
           completeRefresh = resolve
         })
-        return true
+        return { failureNames: [], refreshedCount: 1 }
       },
     }
     const stop = startRefreshWorker({

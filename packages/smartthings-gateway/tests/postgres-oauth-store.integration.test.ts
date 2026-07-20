@@ -1,4 +1,3 @@
-import { sql } from "kysely"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
 import {
@@ -8,6 +7,7 @@ import {
   StaleRefreshClaimError,
   type TokenGrant,
 } from "../src/oauth/contracts.js"
+import { GrowfulTokenSchema, hashGrowfulToken } from "../src/security/growful-token.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
 
@@ -19,13 +19,32 @@ const store = new PostgresOAuthStore({
   encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"),
 })
 const now = new Date("2026-07-19T00:00:00.000Z")
-const grant: TokenGrant = {
-  accessToken: "postgres-access-token",
-  expiresInSeconds: 30,
-  installedAppId: InstalledAppIdSchema.parse("postgres-installed-app"),
-  refreshToken: "postgres-refresh-token",
-  scopes: ["r:devices:*"],
-  tokenType: "bearer",
+
+function grant(index: number): TokenGrant {
+  return {
+    accessToken: `postgres-access-${index}`,
+    expiresInSeconds: 30,
+    installedAppId: InstalledAppIdSchema.parse(`postgres-installed-app-${index}`),
+    refreshToken: `postgres-refresh-${index}`,
+    scopes: ["r:devices:*"],
+    tokenType: "bearer",
+  }
+}
+
+function growfulToken(index: number) {
+  return GrowfulTokenSchema.parse(`grw_st_${Buffer.alloc(32, index).toString("base64url")}`)
+}
+
+async function saveAuthorization(index: number) {
+  const tokenGrant = grant(index)
+  await store.saveTokens({
+    grant: tokenGrant,
+    growfulTokenCreatedAt: now,
+    growfulTokenHash: hashGrowfulToken(growfulToken(index)),
+    issuedAt: now,
+    source: "authorization",
+  })
+  return tokenGrant
 }
 
 beforeAll(async () => {
@@ -35,6 +54,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await database.deleteFrom("oauthStates").execute()
   await database.deleteFrom("oauthTokens").execute()
+  await database.deleteFrom("smartThingsConnections").execute()
 })
 
 afterAll(async () => {
@@ -42,89 +62,100 @@ afterAll(async () => {
 })
 
 describe("PostgresOAuthStore", () => {
-  it("consumes an OAuth state only once", async () => {
+  it("consumes an OAuth state once with its requested scopes", async () => {
     // Given
     const stateHash = OAuthStateHashSchema.parse("a".repeat(64))
-    await store.saveState(stateHash, new Date(now.getTime() + 60_000), [
-      "r:devices:$",
-      "x:devices:$",
-    ])
+    await store.saveState(stateHash, new Date(now.getTime() + 60_000), ["r:devices:$"])
 
     // When
-    const firstConsumption = await store.consumeState(stateHash, now)
-    const secondConsumption = await store.consumeState(stateHash, now)
+    const first = await store.consumeState(stateHash, now)
+    const replay = await store.consumeState(stateHash, now)
 
     // Then
-    expect(firstConsumption).toEqual(["r:devices:$", "x:devices:$"])
-    expect(secondConsumption).toBeNull()
+    expect(first).toEqual(["r:devices:$"])
+    expect(replay).toBeNull()
   })
 
-  it("invalidates a state written by a pre-scope-selection gateway", async () => {
+  it("clears the legacy singleton connection while keeping its table rollbackable", async () => {
     // Given
-    const stateHash = OAuthStateHashSchema.parse("b".repeat(64))
-    await sql`insert into oauth_states (state_hash, expires_at) values (${stateHash}, ${new Date(
-      now.getTime() + 60_000,
-    )})`.execute(database)
+    await database
+      .insertInto("oauthTokens")
+      .values({
+        accessTokenCiphertext: "legacy-access",
+        expiresAt: now,
+        installedAppId: "legacy-installed-app",
+        lastRefreshError: null,
+        lastRefreshedAt: null,
+        refreshClaimedUntil: null,
+        refreshClaimId: null,
+        refreshTokenCiphertext: "legacy-refresh",
+        scope: "r:devices:*",
+        tokenType: "bearer",
+        updatedAt: now,
+      })
+      .execute()
 
     // When
-    const consumption = await store.consumeState(stateHash, now)
+    await runMigrations(database)
 
     // Then
-    expect(consumption).toBeNull()
+    await expect(database.selectFrom("oauthTokens").selectAll().execute()).resolves.toEqual([])
   })
 
-  it("stores both tokens encrypted at rest", async () => {
+  it("stores independent connections with encrypted SmartThings tokens", async () => {
     // Given
-    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
+    const first = await saveAuthorization(1)
+    const second = await saveAuthorization(2)
 
     // When
-    const rawRow = await database.selectFrom("oauthTokens").selectAll().executeTakeFirstOrThrow()
+    const rows = await database.selectFrom("smartThingsConnections").selectAll().execute()
 
     // Then
-    expect(rawRow.accessTokenCiphertext).not.toContain(grant.accessToken)
-    expect(rawRow.refreshTokenCiphertext).not.toContain(grant.refreshToken)
-    expect(await store.getTokens()).toMatchObject({
-      accessToken: grant.accessToken,
-      refreshToken: grant.refreshToken,
-      scopes: grant.scopes,
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.accessTokenCiphertext).not.toContain(first.accessToken)
+    expect(rows[1]?.refreshTokenCiphertext).not.toContain(second.refreshToken)
+    await expect(store.authenticate(hashGrowfulToken(growfulToken(1)))).resolves.toBe(
+      first.installedAppId,
+    )
+    await expect(store.getTokens(second.installedAppId)).resolves.toMatchObject({
+      accessToken: second.accessToken,
+      refreshToken: second.refreshToken,
     })
   })
 
-  it("keeps legacy granted scopes readable", async () => {
+  it("reauthorizes one installed app without replacing another connection", async () => {
     // Given
-    const legacyGrant = { ...grant, scopes: ["r:scenes:*", "x:devices:*"] }
+    const first = await saveAuthorization(1)
+    const second = await saveAuthorization(2)
 
     // When
-    await store.saveTokens({ grant: legacyGrant, issuedAt: now, source: "authorization" })
+    await store.saveTokens({
+      grant: { ...first, accessToken: "reauthorized-access", refreshToken: "reauthorized-refresh" },
+      growfulTokenCreatedAt: now,
+      growfulTokenHash: hashGrowfulToken(growfulToken(3)),
+      issuedAt: now,
+      source: "authorization",
+    })
 
     // Then
-    await expect(store.getTokens()).resolves.toMatchObject({ scopes: legacyGrant.scopes })
+    await expect(store.authenticate(hashGrowfulToken(growfulToken(1)))).resolves.toBeNull()
+    await expect(store.authenticate(hashGrowfulToken(growfulToken(3)))).resolves.toBe(
+      first.installedAppId,
+    )
+    await expect(store.getTokens(second.installedAppId)).resolves.toMatchObject({
+      accessToken: second.accessToken,
+      refreshToken: second.refreshToken,
+      scopes: second.scopes,
+    })
   })
 
-  it("keeps one token row when authorizations finish concurrently", async () => {
-    const secondGrant: TokenGrant = {
-      ...grant,
-      accessToken: "second-access-token",
-      installedAppId: InstalledAppIdSchema.parse("second-installed-app"),
-      refreshToken: "second-refresh-token",
-    }
-
-    await Promise.all([
-      store.saveTokens({ grant, issuedAt: now, source: "authorization" }),
-      store.saveTokens({ grant: secondGrant, issuedAt: now, source: "authorization" }),
-    ])
-
-    const rows = await database.selectFrom("oauthTokens").select("installedAppId").execute()
-    expect(rows).toHaveLength(1)
-    expect([grant.installedAppId, secondGrant.installedAppId]).toContain(rows[0]?.installedAppId)
-  })
-
-  it("grants a refresh lease to only one concurrent worker", async () => {
+  it("grants a due refresh lease to one worker per connection", async () => {
     // Given
-    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
+    await saveAuthorization(1)
     const claim = {
       claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001"),
-      leaseMs: 60_000,
+      kind: "due" as const,
+      leaseMs: 120_000,
       now,
       refreshBeforeExpiryMs: 60 * 60 * 1_000,
     }
@@ -139,122 +170,87 @@ describe("PostgresOAuthStore", () => {
     expect(claims.filter((tokens) => tokens !== null)).toHaveLength(1)
   })
 
-  it("grants a forced refresh lease even when the access token is not near expiry", async () => {
+  it("forces refresh only for the selected connection and rejected access token", async () => {
     // Given
-    await store.saveTokens({
-      grant: { ...grant, expiresInSeconds: 86_400 },
-      issuedAt: now,
-      source: "authorization",
-    })
+    const first = await saveAuthorization(1)
+    const second = await saveAuthorization(2)
 
     // When
     const claimed = await store.claimTokensForRefresh({
       claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001"),
-      leaseMs: 60_000,
+      expectedAccessToken: second.accessToken,
+      installedAppId: second.installedAppId,
+      kind: "forced",
+      leaseMs: 120_000,
       now,
-      refreshBeforeExpiryMs: null,
+    })
+    const wrongConnection = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000002"),
+      expectedAccessToken: second.accessToken,
+      installedAppId: first.installedAppId,
+      kind: "forced",
+      leaseMs: 120_000,
+      now,
     })
 
     // Then
-    expect(claimed).not.toBeNull()
-  })
-
-  it("rejects a forced refresh claim for an access token that was already rotated", async () => {
-    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
-    const firstClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001")
-    await store.claimTokensForRefresh({
-      claimId: firstClaimId,
-      expectedAccessToken: grant.accessToken,
-      leaseMs: 60_000,
-      now,
-      refreshBeforeExpiryMs: null,
-    })
-    await store.saveTokens({
-      claimId: firstClaimId,
-      grant: {
-        ...grant,
-        accessToken: "rotated-access-token",
-        refreshToken: "rotated-refresh-token",
-      },
-      issuedAt: now,
-      source: "refresh",
-    })
-    const staleClaim = await store.claimTokensForRefresh({
-      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000002"),
-      expectedAccessToken: grant.accessToken,
-      leaseMs: 60_000,
-      now,
-      refreshBeforeExpiryMs: null,
-    })
-
-    expect(staleClaim).toBeNull()
+    expect(claimed?.installedAppId).toBe(second.installedAppId)
+    expect(wrongConnection).toBeNull()
   })
 
   it("prevents an expired refresh claimant from overwriting a newer claim", async () => {
     // Given
-    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
+    const tokenGrant = await saveAuthorization(1)
     const firstClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001")
     const secondClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000002")
-    await store.claimTokensForRefresh({
-      claimId: firstClaimId,
-      leaseMs: 60_000,
-      now,
+    const dueClaim = {
+      kind: "due" as const,
+      leaseMs: 120_000,
       refreshBeforeExpiryMs: 60 * 60 * 1_000,
-    })
-    const secondClaimTime = new Date(now.getTime() + 60_001)
-    await store.claimTokensForRefresh({
-      claimId: secondClaimId,
-      leaseMs: 60_000,
-      now: secondClaimTime,
-      refreshBeforeExpiryMs: 60 * 60 * 1_000,
-    })
-    const rotatedGrant = {
-      ...grant,
-      accessToken: "rotated-access-token",
-      refreshToken: "rotated-refresh-token",
     }
+    await store.claimTokensForRefresh({ ...dueClaim, claimId: firstClaimId, now })
+    const secondClaimTime = new Date(now.getTime() + 120_001)
+    await store.claimTokensForRefresh({
+      ...dueClaim,
+      claimId: secondClaimId,
+      now: secondClaimTime,
+    })
 
     // When
     const staleSave = store.saveTokens({
       claimId: firstClaimId,
-      grant: rotatedGrant,
+      grant: { ...tokenGrant, accessToken: "stale-access", refreshToken: "stale-refresh" },
       issuedAt: secondClaimTime,
       source: "refresh",
     })
 
     // Then
     await expect(staleSave).rejects.toBeInstanceOf(StaleRefreshClaimError)
-    await store.recordRefreshFailure({
-      claimId: firstClaimId,
-      installedAppId: grant.installedAppId,
-      message: "stale worker",
-      occurredAt: secondClaimTime,
-    })
     await expect(
       store.saveTokens({
         claimId: secondClaimId,
-        grant: rotatedGrant,
+        grant: { ...tokenGrant, accessToken: "current-access", refreshToken: "current-refresh" },
         issuedAt: secondClaimTime,
         source: "refresh",
       }),
-    ).resolves.toMatchObject({ refreshToken: "rotated-refresh-token" })
+    ).resolves.toMatchObject({ accessToken: "current-access" })
   })
 
-  it("keeps a failed refresh claim leased before allowing a retry", async () => {
+  it("keeps a failed refresh leased until its connection lease expires", async () => {
     // Given
-    await store.saveTokens({ grant, issuedAt: now, source: "authorization" })
-    const firstClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001")
+    const tokenGrant = await saveAuthorization(1)
     const leaseMs = 120_000
-    const claimed = await store.claimTokensForRefresh({
+    const firstClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001")
+    await store.claimTokensForRefresh({
       claimId: firstClaimId,
+      kind: "due",
       leaseMs,
       now,
       refreshBeforeExpiryMs: 60 * 60 * 1_000,
     })
-    expect(claimed).not.toBeNull()
     await store.recordRefreshFailure({
       claimId: firstClaimId,
-      installedAppId: grant.installedAppId,
+      installedAppId: tokenGrant.installedAppId,
       message: "SmartThingsTokenRequestError",
       occurredAt: now,
     })
@@ -262,12 +258,14 @@ describe("PostgresOAuthStore", () => {
     // When
     const immediateRetry = await store.claimTokensForRefresh({
       claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000002"),
+      kind: "due",
       leaseMs,
       now: new Date(now.getTime() + leaseMs - 1),
       refreshBeforeExpiryMs: 60 * 60 * 1_000,
     })
     const retryAfterLease = await store.claimTokensForRefresh({
       claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000003"),
+      kind: "due",
       leaseMs,
       now: new Date(now.getTime() + leaseMs),
       refreshBeforeExpiryMs: 60 * 60 * 1_000,
@@ -275,6 +273,6 @@ describe("PostgresOAuthStore", () => {
 
     // Then
     expect(immediateRetry).toBeNull()
-    expect(retryAfterLease).not.toBeNull()
+    expect(retryAfterLease?.installedAppId).toBe(tokenGrant.installedAppId)
   })
 })

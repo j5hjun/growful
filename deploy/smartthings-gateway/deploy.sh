@@ -186,13 +186,20 @@ rollback_release() {
   export RELEASE_ID="$previous_release_id"
   export SMARTTHINGS_GATEWAY_IMAGE_NAME="${previous_image_reference%@sha256:*}"
   export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="sha256:${previous_image_reference##*@sha256:}"
-  export GATEWAY_ENV_FILE="$environment_file"
+  rollback_environment_file="$(mktemp "${environment_file}.rollback.XXXXXX")"
+  cp "$environment_file" "$rollback_environment_file"
   if ! grep --quiet '^SMARTTHINGS_SCOPES=..*' "$environment_file"; then
-    rollback_environment_file="$(mktemp "${environment_file}.rollback.XXXXXX")"
-    cp "$environment_file" "$rollback_environment_file"
     printf '\n%s\n' 'SMARTTHINGS_SCOPES=r:devices:$' >>"$rollback_environment_file"
-    export GATEWAY_ENV_FILE="$rollback_environment_file"
   fi
+  if ! grep --quiet '^OAUTH_ADMIN_TOKEN=..*' "$environment_file"; then
+    printf '%s=%s\n' 'OAUTH_ADMIN_TOKEN' "$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
+      >>"$rollback_environment_file"
+  fi
+  if ! grep --quiet '^GATEWAY_API_TOKEN=..*' "$environment_file"; then
+    printf '%s=%s\n' 'GATEWAY_API_TOKEN' "$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
+      >>"$rollback_environment_file"
+  fi
+  export GATEWAY_ENV_FILE="$rollback_environment_file"
   compose=(docker compose --env-file "$GATEWAY_ENV_FILE" -f "$previous_release/compose.yaml")
 
   if ! docker image inspect "$previous_image_reference" >/dev/null 2>&1; then

@@ -24,9 +24,15 @@ export type OAuthTokenTable = {
   readonly updatedAt: Timestamp
 }
 
+export type SmartThingsConnectionTable = OAuthTokenTable & {
+  readonly growfulTokenCreatedAt: Timestamp
+  readonly growfulTokenHash: string
+}
+
 export type GatewayDatabase = {
   readonly oauthStates: OAuthStateTable
   readonly oauthTokens: OAuthTokenTable
+  readonly smartThingsConnections: SmartThingsConnectionTable
 }
 
 export class DatabaseMigrationError extends Error {
@@ -96,4 +102,24 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   await sql`alter table oauth_states add column if not exists requested_scopes text not null default ''`.execute(
     database,
   )
+  // Keep the multi-connection table outside migration history so the previous image can roll back.
+  // The previous image sees an empty oauth_tokens table and therefore fails closed as disconnected.
+  await sql`
+    create table if not exists smart_things_connections (
+      installed_app_id text primary key,
+      growful_token_hash varchar(64) not null unique,
+      growful_token_created_at timestamptz not null,
+      access_token_ciphertext text not null,
+      refresh_token_ciphertext text not null,
+      expires_at timestamptz not null,
+      scope text not null,
+      token_type text not null,
+      updated_at timestamptz not null,
+      last_refreshed_at timestamptz,
+      last_refresh_error text,
+      refresh_claimed_until timestamptz,
+      refresh_claim_id text
+    )
+  `.execute(database)
+  await database.deleteFrom("oauthTokens").execute()
 }

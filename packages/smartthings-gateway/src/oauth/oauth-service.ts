@@ -1,5 +1,16 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto"
-import type { ConnectionStatus, OAuthStore, SmartThingsClient, StoredTokens } from "./contracts.js"
+import {
+  type GrowfulToken,
+  generateGrowfulToken,
+  hashGrowfulToken,
+} from "../security/growful-token.js"
+import type {
+  ConnectionStatus,
+  InstalledAppId,
+  OAuthStore,
+  SmartThingsClient,
+  StoredTokens,
+} from "./contracts.js"
 import { OAuthStateHashSchema, RefreshClaimIdSchema } from "./contracts.js"
 import { areScopesWithin, type SmartThingsScope } from "./smartthings-scope.js"
 
@@ -29,8 +40,19 @@ export class OAuthScopeMismatchError extends Error {
   }
 }
 
+export type AuthorizationCompletion = {
+  readonly connection: ConnectionStatus
+  readonly growfulToken: GrowfulToken
+}
+
+export type RefreshBatchResult = {
+  readonly failureNames: readonly string[]
+  readonly refreshedCount: number
+}
+
 export type OAuthServiceOptions = {
   readonly client: SmartThingsClient
+  readonly growfulTokenGenerator?: () => GrowfulToken
   readonly now?: () => Date
   readonly refreshBeforeExpiryMs: number
   readonly refreshLeaseMs: number
@@ -39,12 +61,18 @@ export type OAuthServiceOptions = {
 }
 
 export class OAuthService {
+  private readonly growfulTokenGenerator: () => GrowfulToken
   private readonly now: () => Date
   private readonly stateGenerator: () => string
 
   constructor(private readonly options: OAuthServiceOptions) {
+    this.growfulTokenGenerator = options.growfulTokenGenerator ?? generateGrowfulToken
     this.now = options.now ?? (() => new Date())
     this.stateGenerator = options.stateGenerator ?? (() => randomBytes(32).toString("base64url"))
+  }
+
+  async authenticate(growfulToken: GrowfulToken): Promise<InstalledAppId | null> {
+    return this.options.store.authenticate(hashGrowfulToken(growfulToken))
   }
 
   async startAuthorization(scopes: readonly SmartThingsScope[]): Promise<URL> {
@@ -58,63 +86,109 @@ export class OAuthService {
     return this.options.client.buildAuthorizationUrl(state, scopes)
   }
 
-  async completeAuthorization(code: string, state: string): Promise<ConnectionStatus> {
+  async completeAuthorization(code: string, state: string): Promise<AuthorizationCompletion> {
     const requestedScopes = await this.consumeState(state)
     const grant = await this.options.client.exchangeCode(code)
     this.ensureScopesWithin(grant.scopes, requestedScopes)
+    const issuedAt = this.now()
+    const growfulToken = this.growfulTokenGenerator()
     const tokens = await this.options.store.saveTokens({
       grant,
-      issuedAt: this.now(),
+      growfulTokenCreatedAt: issuedAt,
+      growfulTokenHash: hashGrowfulToken(growfulToken),
+      issuedAt,
       source: "authorization",
     })
-    return this.toConnectionStatus(tokens)
+    return { connection: this.toConnectionStatus(tokens), growfulToken }
   }
 
-  async getConnectionStatus(): Promise<ConnectionStatus> {
-    const tokens = await this.options.store.getTokens()
-    return tokens === null ? { connected: false } : this.toConnectionStatus(tokens)
+  async getConnectionStatus(installedAppId: InstalledAppId): Promise<ConnectionStatus> {
+    return this.toConnectionStatus(await this.requireTokens(installedAppId))
   }
 
-  async getAccessToken(): Promise<string> {
-    const tokens = await this.options.store.getTokens()
-    if (tokens === null) {
+  async getAccessToken(installedAppId: InstalledAppId): Promise<string> {
+    return (await this.requireTokens(installedAppId)).accessToken
+  }
+
+  async rotateGrowfulToken(installedAppId: InstalledAppId): Promise<GrowfulToken> {
+    const growfulToken = this.growfulTokenGenerator()
+    const replaced = await this.options.store.replaceGrowfulToken(
+      installedAppId,
+      hashGrowfulToken(growfulToken),
+      this.now(),
+    )
+    if (!replaced) {
       throw new OAuthConnectionRequiredError()
     }
-    return tokens.accessToken
+    return growfulToken
   }
 
-  async refreshIfDue(): Promise<boolean> {
-    return this.refresh(this.options.refreshBeforeExpiryMs, undefined)
+  async disconnect(installedAppId: InstalledAppId): Promise<void> {
+    const deleted = await this.options.store.deleteConnection(installedAppId)
+    if (!deleted) {
+      throw new OAuthConnectionRequiredError()
+    }
   }
 
-  async refreshAccessToken(rejectedAccessToken: string): Promise<boolean> {
-    return this.refresh(null, rejectedAccessToken)
+  async refreshDueConnections(): Promise<RefreshBatchResult> {
+    const failureNames: string[] = []
+    let refreshedCount = 0
+    while (true) {
+      const now = this.now()
+      const claimId = RefreshClaimIdSchema.parse(randomUUID())
+      const tokens = await this.options.store.claimTokensForRefresh({
+        claimId,
+        kind: "due",
+        leaseMs: this.options.refreshLeaseMs,
+        now,
+        refreshBeforeExpiryMs: this.options.refreshBeforeExpiryMs,
+      })
+      if (tokens === null) {
+        return { failureNames, refreshedCount }
+      }
+      try {
+        await this.refreshClaimedTokens(tokens, claimId, now)
+        refreshedCount += 1
+      } catch (error) {
+        failureNames.push(error instanceof Error ? error.name : "UnknownError")
+      }
+    }
   }
 
-  private async refresh(
-    refreshBeforeExpiryMs: number | null,
-    expectedAccessToken: string | undefined,
+  async refreshAccessToken(
+    installedAppId: InstalledAppId,
+    rejectedAccessToken: string,
   ): Promise<boolean> {
     const now = this.now()
     const claimId = RefreshClaimIdSchema.parse(randomUUID())
-    const claim = {
+    const tokens = await this.options.store.claimTokensForRefresh({
       claimId,
+      expectedAccessToken: rejectedAccessToken,
+      installedAppId,
+      kind: "forced",
       leaseMs: this.options.refreshLeaseMs,
       now,
-      refreshBeforeExpiryMs,
-    }
-    const tokens = await this.options.store.claimTokensForRefresh(
-      expectedAccessToken === undefined ? claim : { ...claim, expectedAccessToken },
-    )
+    })
     if (tokens === null) {
       return false
     }
+    await this.refreshClaimedTokens(tokens, claimId, now)
+    return true
+  }
 
+  async cancelAuthorization(state: string): Promise<void> {
+    await this.consumeState(state)
+  }
+
+  private async refreshClaimedTokens(
+    tokens: StoredTokens,
+    claimId: ReturnType<typeof RefreshClaimIdSchema.parse>,
+    now: Date,
+  ): Promise<void> {
     try {
       const grant = await this.options.client.refresh(tokens.refreshToken)
       this.ensureScopesWithin(grant.scopes, tokens.scopes)
       await this.options.store.saveTokens({ claimId, grant, issuedAt: now, source: "refresh" })
-      return true
     } catch (error) {
       await this.options.store.recordRefreshFailure({
         claimId,
@@ -126,8 +200,12 @@ export class OAuthService {
     }
   }
 
-  async cancelAuthorization(state: string): Promise<void> {
-    await this.consumeState(state)
+  private async requireTokens(installedAppId: InstalledAppId): Promise<StoredTokens> {
+    const tokens = await this.options.store.getTokens(installedAppId)
+    if (tokens === null) {
+      throw new OAuthConnectionRequiredError()
+    }
+    return tokens
   }
 
   private async consumeState(state: string): Promise<readonly SmartThingsScope[]> {

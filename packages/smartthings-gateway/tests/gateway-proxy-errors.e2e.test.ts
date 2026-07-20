@@ -20,7 +20,7 @@ describe("SmartThings API passthrough errors", () => {
     await api.close()
   })
 
-  it("requires an OAuth connection before forwarding authenticated requests", async () => {
+  it("rejects a Growful token after its connection is deleted", async () => {
     // Given
     const fixture = createGatewayProxyFixture({ api, apps })
     fixture.store.tokens = null
@@ -33,8 +33,8 @@ describe("SmartThings API passthrough errors", () => {
     })
 
     // Then
-    expect(response.statusCode).toBe(503)
-    expect(response.json()).toEqual({ error: "oauth_connection_required" })
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toEqual({ error: "unauthorized" })
     expect(api.requests).toHaveLength(0)
   })
 

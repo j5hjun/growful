@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { GrowfulTokenHash } from "../security/growful-token.js"
 import type { SmartThingsScope } from "./smartthings-scope.js"
 
 export const InstalledAppIdSchema = z.string().min(1).brand("InstalledAppId")
@@ -36,26 +37,35 @@ export type StoredTokens = {
   readonly tokenType: string
 }
 
-export type ConnectionStatus =
-  | { readonly connected: false }
-  | {
-      readonly connected: true
-      readonly expiresAt: string
-      readonly grantedScopes: readonly string[]
-      readonly lastRefreshedAt: string | null
-    }
-
-export type RefreshClaim = {
-  readonly claimId: RefreshClaimId
-  readonly expectedAccessToken?: string
-  readonly leaseMs: number
-  readonly now: Date
-  readonly refreshBeforeExpiryMs: number | null
+export type ConnectionStatus = {
+  readonly connected: true
+  readonly expiresAt: string
+  readonly grantedScopes: readonly string[]
+  readonly lastRefreshedAt: string | null
 }
+
+export type RefreshClaim =
+  | {
+      readonly claimId: RefreshClaimId
+      readonly kind: "due"
+      readonly leaseMs: number
+      readonly now: Date
+      readonly refreshBeforeExpiryMs: number
+    }
+  | {
+      readonly claimId: RefreshClaimId
+      readonly expectedAccessToken: string
+      readonly installedAppId: InstalledAppId
+      readonly kind: "forced"
+      readonly leaseMs: number
+      readonly now: Date
+    }
 
 export type SaveTokensInput =
   | {
       readonly grant: TokenGrant
+      readonly growfulTokenCreatedAt: Date
+      readonly growfulTokenHash: GrowfulTokenHash
       readonly issuedAt: Date
       readonly source: "authorization"
     }
@@ -74,10 +84,17 @@ export type RefreshFailure = {
 }
 
 export interface OAuthStore {
+  authenticate(growfulTokenHash: GrowfulTokenHash): Promise<InstalledAppId | null>
   claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null>
   consumeState(stateHash: OAuthStateHash, now: Date): Promise<readonly SmartThingsScope[] | null>
-  getTokens(): Promise<StoredTokens | null>
+  deleteConnection(installedAppId: InstalledAppId): Promise<boolean>
+  getTokens(installedAppId: InstalledAppId): Promise<StoredTokens | null>
   recordRefreshFailure(failure: RefreshFailure): Promise<void>
+  replaceGrowfulToken(
+    installedAppId: InstalledAppId,
+    growfulTokenHash: GrowfulTokenHash,
+    createdAt: Date,
+  ): Promise<boolean>
   saveState(
     stateHash: OAuthStateHash,
     expiresAt: Date,

@@ -293,24 +293,20 @@ jobs:
       - name: Verify public HTTPS endpoints from deployment host
         if: steps.mutation_freshness.outputs.deploy == 'true'
         run: |
-          connection_response="$(
-            tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
-              bash -s -- "$PUBLIC_BASE_URL" <<'REMOTE'
+          tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s -- "$PUBLIC_BASE_URL" <<'REMOTE'
           set -euo pipefail
           public_base_url="${1:?public base URL is required}"
 
           health_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/healthz")"
           test "$health_response" = '{"status":"ok"}'
 
-          connection_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/connection")"
+          connection_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/connection")"
+          test "$connection_status" = '401'
 
           oauth_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/oauth/start")"
-          test "$oauth_status" = '401'
+          test "$oauth_status" = '200'
 
           api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/v1/devices")"
           test "$api_status" = '401'
-
-          printf '%s\n' "$connection_response"
           REMOTE
-          )"
-          jq --exit-status '.connected == true or .connected == false' <<<"$connection_response" >/dev/null
