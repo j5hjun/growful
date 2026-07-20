@@ -69,6 +69,7 @@ class ProxyRequestBodyTooLargeError extends Error {
 
 export type AppOptions = {
   readonly adminToken: string
+  readonly authorizationOrigin: string
   readonly logger?: FastifyServerOptions["logger"]
   readonly redirectOrigin: string
   readonly service: OAuthService
@@ -138,6 +139,7 @@ export function createApp(options: AppOptions): FastifyInstance {
   app.get("/healthz", async () => ({ status: "ok" as const }))
   registerOAuthRoutes(app, {
     adminToken: options.adminToken,
+    authorizationOrigin: options.authorizationOrigin,
     redirectOrigin: options.redirectOrigin,
     service: options.service,
   })

@@ -33,6 +33,7 @@ async function main(): Promise<void> {
     })
     const app = createApp({
       adminToken: config.adminToken,
+      authorizationOrigin: config.authorizationUrl.origin,
       logger: {
         level: config.logLevel,
         redact: ["req.headers.authorization", "req.headers.cookie"],
