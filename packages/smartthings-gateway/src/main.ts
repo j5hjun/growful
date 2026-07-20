@@ -32,7 +32,7 @@ async function main(): Promise<void> {
       store,
     })
     const app = createApp({
-      adminToken: config.adminToken,
+      authorizationOrigin: config.authorizationUrl.origin,
       logger: {
         level: config.logLevel,
         redact: ["req.headers.authorization", "req.headers.cookie"],
@@ -41,12 +41,12 @@ async function main(): Promise<void> {
       service,
     })
     registerSmartThingsProxy(app, {
-      gatewayApiToken: config.gatewayApiToken,
       proxy: new SmartThingsProxy({
         apiBaseUrl: config.apiBaseUrl,
         service,
         timeoutMs: config.apiTimeoutMs,
       }),
+      service,
     })
     runtimeOwnsDatabase = true
     await startGatewayRuntime({

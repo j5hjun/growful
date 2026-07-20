@@ -1,5 +1,8 @@
 export interface RefreshService {
-  refreshIfDue(): Promise<boolean>
+  refreshDueConnections(): Promise<{
+    readonly failureNames: readonly string[]
+    readonly refreshedCount: number
+  }>
 }
 
 export interface RefreshLogger {
@@ -17,8 +20,11 @@ export function startRefreshWorker(options: RefreshWorkerOptions): () => Promise
   let activeRun: Promise<void> | undefined
   const execute = async (): Promise<void> => {
     try {
-      const refreshed = await options.service.refreshIfDue()
-      if (refreshed) {
+      const result = await options.service.refreshDueConnections()
+      for (const errorName of result.failureNames) {
+        options.logger.error({ errorName }, "token.refresh.failed")
+      }
+      if (result.refreshedCount > 0) {
         options.logger.info("token.refresh.completed")
       }
     } catch (error) {

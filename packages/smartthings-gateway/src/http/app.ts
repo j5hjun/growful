@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto"
 import type { IncomingMessage } from "node:http"
 import Fastify, { type FastifyInstance, type FastifyServerOptions, LogController } from "fastify"
 import { z } from "zod"
@@ -9,6 +8,11 @@ import {
   type OAuthService,
 } from "../oauth/oauth-service.js"
 import { SmartThingsTokenRequestError } from "../smartthings/smartthings-client.js"
+import {
+  getGrowfulConnectionId,
+  registerGrowfulAuthentication,
+  requireGrowfulAuthentication,
+} from "./growful-auth.js"
 import { InvalidOAuthOriginError, registerOAuthRoutes } from "./oauth-routes.js"
 import {
   SmartThingsGatewayResponseTooLargeError,
@@ -17,7 +21,6 @@ import {
   type SmartThingsProxy,
 } from "./smartthings-proxy.js"
 
-const bearerAuthorizationSchema = z.string().regex(/^Bearer [A-Za-z0-9._~+/=-]+$/)
 const pathsWithSensitiveRequestData = new Set(["/healthz", "/oauth/callback", "/oauth/start"])
 const allowedProxyMethods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
 const allowedProxyMethodSet = new Set(allowedProxyMethods)
@@ -68,30 +71,15 @@ class ProxyRequestBodyTooLargeError extends Error {
 }
 
 export type AppOptions = {
-  readonly adminToken: string
+  readonly authorizationOrigin: string
   readonly logger?: FastifyServerOptions["logger"]
   readonly redirectOrigin: string
   readonly service: OAuthService
 }
 
 export type SmartThingsProxyRouteOptions = {
-  readonly gatewayApiToken: string
   readonly proxy: SmartThingsProxy
-}
-
-function hasValidGatewayAuthorization(
-  authorization: string | undefined,
-  gatewayApiToken: string,
-): boolean {
-  const parsed = bearerAuthorizationSchema.safeParse(authorization)
-  if (!parsed.success) {
-    return false
-  }
-  const suppliedToken = Buffer.from(parsed.data.slice("Bearer ".length), "utf8")
-  const expectedToken = Buffer.from(gatewayApiToken, "utf8")
-  return (
-    suppliedToken.length === expectedToken.length && timingSafeEqual(suppliedToken, expectedToken)
-  )
+  readonly service: OAuthService
 }
 
 function containsSensitiveRequestData(pathname: string): boolean {
@@ -135,12 +123,46 @@ export function createApp(options: AppOptions): FastifyInstance {
       done(null, body)
     },
   )
+  registerGrowfulAuthentication(app)
   app.get("/healthz", async () => ({ status: "ok" as const }))
   registerOAuthRoutes(app, {
-    adminToken: options.adminToken,
+    authorizationOrigin: options.authorizationOrigin,
     redirectOrigin: options.redirectOrigin,
     service: options.service,
   })
+  app.get(
+    "/connection",
+    {
+      onRequest: async (request, reply) =>
+        requireGrowfulAuthentication(request, reply, options.service),
+    },
+    async (request, reply) =>
+      reply
+        .header("Cache-Control", "no-store")
+        .send(await options.service.getConnectionStatus(getGrowfulConnectionId(request))),
+  )
+  app.post(
+    "/token/rotate",
+    {
+      onRequest: async (request, reply) =>
+        requireGrowfulAuthentication(request, reply, options.service),
+    },
+    async (request, reply) =>
+      reply.header("Cache-Control", "no-store").send({
+        growfulToken: await options.service.rotateGrowfulToken(getGrowfulConnectionId(request)),
+      }),
+  )
+  app.delete(
+    "/connection",
+    {
+      onRequest: async (request, reply) =>
+        requireGrowfulAuthentication(request, reply, options.service),
+    },
+    async (request, reply) => {
+      await options.service.disconnect(getGrowfulConnectionId(request))
+      return reply.status(204).send()
+    },
+  )
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof z.ZodError) {
@@ -195,8 +217,13 @@ export function registerSmartThingsProxy(
     "/v1/*",
     {
       onRequest: async (request, reply) => {
-        if (!hasValidGatewayAuthorization(request.headers.authorization, options.gatewayApiToken)) {
-          return reply.status(401).send({ error: "unauthorized" as const })
+        const unauthorizedReply = await requireGrowfulAuthentication(
+          request,
+          reply,
+          options.service,
+        )
+        if (unauthorizedReply !== undefined) {
+          return unauthorizedReply
         }
         if (!allowedProxyMethodSet.has(request.method)) {
           return reply
@@ -207,12 +234,15 @@ export function registerSmartThingsProxy(
       },
     },
     async (request, reply) => {
-      const response = await options.proxy.forward({
-        body: await readProxyRequestBody(request.body, request.raw),
-        headers: request.headers,
-        method: request.method,
-        rawUrl: proxyUrlSchema.parse(request.raw.url),
-      })
+      const response = await options.proxy.forward(
+        {
+          body: await readProxyRequestBody(request.body, request.raw),
+          headers: request.headers,
+          method: request.method,
+          rawUrl: proxyUrlSchema.parse(request.raw.url),
+        },
+        getGrowfulConnectionId(request),
+      )
       for (const [header, value] of Object.entries(response.headers)) {
         reply.raw.setHeader(header, typeof value === "string" ? value : [...value])
       }

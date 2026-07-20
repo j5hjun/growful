@@ -14,7 +14,7 @@ fi
 image_name="${image_reference%@sha256:*}"
 image_digest="sha256:${image_reference##*@sha256:}"
 
-for command_name in base64 curl docker flock stat; do
+for command_name in base64 curl docker flock head stat tr; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'required command is missing: %s\n' "$command_name" >&2
     exit 1
@@ -54,8 +54,6 @@ fi
 
 required_keys=(
   DATABASE_URL
-  GATEWAY_API_TOKEN
-  OAUTH_ADMIN_TOKEN
   OAUTH_CLIENT_ID
   OAUTH_CLIENT_SECRET
   OAUTH_REDIRECT_URI
@@ -111,22 +109,6 @@ fi
 redirect_uri="$(sed -n 's/^OAUTH_REDIRECT_URI=//p' "$environment_file")"
 if [[ "$redirect_uri" != 'https://smartthings.growful.click/oauth/callback' ]]; then
   printf 'OAUTH_REDIRECT_URI does not match the registered production callback\n' >&2
-  exit 1
-fi
-
-admin_token="$(sed -n 's/^OAUTH_ADMIN_TOKEN=//p' "$environment_file")"
-if ((${#admin_token} < 32)); then
-  printf 'OAUTH_ADMIN_TOKEN must contain at least 32 characters\n' >&2
-  exit 1
-fi
-
-gateway_api_token="$(sed -n 's/^GATEWAY_API_TOKEN=//p' "$environment_file")"
-if ((${#gateway_api_token} < 32)); then
-  printf 'GATEWAY_API_TOKEN must contain at least 32 characters\n' >&2
-  exit 1
-fi
-if [[ "$gateway_api_token" == "$admin_token" ]]; then
-  printf 'GATEWAY_API_TOKEN must differ from OAUTH_ADMIN_TOKEN\n' >&2
   exit 1
 fi
 

@@ -10,39 +10,69 @@ import {
   type StoredTokens,
 } from "../../src/oauth/contracts.js"
 import type { SmartThingsScope } from "../../src/oauth/smartthings-scope.js"
+import {
+  type GrowfulTokenHash,
+  GrowfulTokenSchema,
+  hashGrowfulToken,
+} from "../../src/security/growful-token.js"
 
 type StoredOAuthState = {
   readonly expiresAt: Date
   readonly requestedScopes: readonly SmartThingsScope[]
 }
 
+type MemoryConnection = {
+  growfulTokenCreatedAt: Date
+  growfulTokenHash: GrowfulTokenHash
+  refreshClaimedUntil: Date | null
+  refreshClaimId: RefreshClaimId | null
+  tokens: StoredTokens
+}
+
+export const memoryStoreGrowfulToken = GrowfulTokenSchema.parse(
+  `grw_st_${Buffer.alloc(32, 5).toString("base64url")}`,
+)
+
 export class MemoryOAuthStore implements OAuthStore {
+  readonly connections = new Map<InstalledAppId, MemoryConnection>()
   readonly failures: RefreshFailure[] = []
   readonly states = new Map<OAuthStateHash, StoredOAuthState>()
-  tokens: StoredTokens | null = null
-  private refreshClaimedUntil: Date | null = null
-  private refreshClaimId: RefreshClaimId | null = null
+
+  async authenticate(growfulTokenHash: GrowfulTokenHash): Promise<InstalledAppId | null> {
+    for (const [installedAppId, connection] of this.connections) {
+      if (connection.growfulTokenHash === growfulTokenHash) {
+        return installedAppId
+      }
+    }
+    return null
+  }
 
   async claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null> {
-    const tokens = this.tokens
-    const dueAt =
-      claim.refreshBeforeExpiryMs === null
-        ? null
-        : new Date(claim.now.getTime() + claim.refreshBeforeExpiryMs)
-    const claimAvailable =
-      this.refreshClaimedUntil === null || this.refreshClaimedUntil.getTime() <= claim.now.getTime()
-    if (
-      tokens === null ||
-      (dueAt !== null && tokens.expiresAt.getTime() > dueAt.getTime()) ||
-      (claim.expectedAccessToken !== undefined &&
-        tokens.accessToken !== claim.expectedAccessToken) ||
-      !claimAvailable
-    ) {
-      return null
+    const candidates =
+      claim.kind === "forced"
+        ? [this.connections.get(claim.installedAppId)].filter(
+            (connection): connection is MemoryConnection => connection !== undefined,
+          )
+        : [...this.connections.values()].sort(
+            (left, right) => left.tokens.expiresAt.getTime() - right.tokens.expiresAt.getTime(),
+          )
+    for (const connection of candidates) {
+      const claimAvailable =
+        connection.refreshClaimedUntil === null ||
+        connection.refreshClaimedUntil.getTime() <= claim.now.getTime()
+      const due =
+        claim.kind === "forced" ||
+        connection.tokens.expiresAt.getTime() <= claim.now.getTime() + claim.refreshBeforeExpiryMs
+      const expectedTokenMatches =
+        claim.kind === "due" || connection.tokens.accessToken === claim.expectedAccessToken
+      if (!claimAvailable || !due || !expectedTokenMatches) {
+        continue
+      }
+      connection.refreshClaimedUntil = new Date(claim.now.getTime() + claim.leaseMs)
+      connection.refreshClaimId = claim.claimId
+      return connection.tokens
     }
-    this.refreshClaimedUntil = new Date(claim.now.getTime() + claim.leaseMs)
-    this.refreshClaimId = claim.claimId
-    return tokens
+    return null
   }
 
   async consumeState(
@@ -56,15 +86,33 @@ export class MemoryOAuthStore implements OAuthStore {
       : null
   }
 
-  async getTokens(): Promise<StoredTokens | null> {
-    return this.tokens
+  async deleteConnection(installedAppId: InstalledAppId): Promise<boolean> {
+    return this.connections.delete(installedAppId)
+  }
+
+  async getTokens(installedAppId: InstalledAppId): Promise<StoredTokens | null> {
+    return this.connections.get(installedAppId)?.tokens ?? null
   }
 
   async recordRefreshFailure(failure: RefreshFailure): Promise<void> {
-    if (this.refreshClaimId !== failure.claimId) {
-      return
+    const connection = this.connections.get(failure.installedAppId)
+    if (connection?.refreshClaimId === failure.claimId) {
+      this.failures.push(failure)
     }
-    this.failures.push(failure)
+  }
+
+  async replaceGrowfulToken(
+    installedAppId: InstalledAppId,
+    growfulTokenHash: GrowfulTokenHash,
+    createdAt: Date,
+  ): Promise<boolean> {
+    const connection = this.connections.get(installedAppId)
+    if (connection === undefined) {
+      return false
+    }
+    connection.growfulTokenCreatedAt = createdAt
+    connection.growfulTokenHash = growfulTokenHash
+    return true
   }
 
   async saveState(
@@ -76,29 +124,58 @@ export class MemoryOAuthStore implements OAuthStore {
   }
 
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {
-    if (input.source === "refresh" && this.refreshClaimId !== input.claimId) {
+    const existing = this.connections.get(input.grant.installedAppId)
+    if (input.source === "refresh" && existing?.refreshClaimId !== input.claimId) {
       throw new StaleRefreshClaimError()
     }
-    const lastRefreshedAt = input.source === "refresh" ? input.issuedAt : null
-    this.tokens = {
+    const tokens: StoredTokens = {
       accessToken: input.grant.accessToken,
       expiresAt: new Date(input.issuedAt.getTime() + input.grant.expiresInSeconds * 1_000),
       installedAppId: input.grant.installedAppId,
-      lastRefreshedAt,
+      lastRefreshedAt: input.source === "refresh" ? input.issuedAt : null,
       refreshToken: input.grant.refreshToken,
       scopes: input.grant.scopes,
       tokenType: input.grant.tokenType,
     }
-    this.refreshClaimedUntil = null
-    this.refreshClaimId = null
-    return this.tokens
+    const growfulTokenCreatedAt =
+      input.source === "authorization"
+        ? input.growfulTokenCreatedAt
+        : (existing?.growfulTokenCreatedAt ?? input.issuedAt)
+    const growfulTokenHash =
+      input.source === "authorization"
+        ? input.growfulTokenHash
+        : (existing?.growfulTokenHash ?? hashGrowfulToken(memoryStoreGrowfulToken))
+    this.connections.set(input.grant.installedAppId, {
+      growfulTokenCreatedAt,
+      growfulTokenHash,
+      refreshClaimedUntil: null,
+      refreshClaimId: null,
+      tokens,
+    })
+    return tokens
   }
 
-  seedTokens(tokens: StoredTokens): void {
-    this.tokens = tokens
+  seedTokens(
+    tokens: StoredTokens,
+    growfulTokenHash: GrowfulTokenHash = hashGrowfulToken(memoryStoreGrowfulToken),
+  ): void {
+    this.connections.set(tokens.installedAppId, {
+      growfulTokenCreatedAt: new Date("2026-07-19T00:00:00.000Z"),
+      growfulTokenHash,
+      refreshClaimedUntil: null,
+      refreshClaimId: null,
+      tokens,
+    })
   }
 
-  get installedAppId(): InstalledAppId | null {
-    return this.tokens?.installedAppId ?? null
+  get tokens(): StoredTokens | null {
+    return this.connections.values().next().value?.tokens ?? null
+  }
+
+  set tokens(tokens: StoredTokens | null) {
+    this.connections.clear()
+    if (tokens !== null) {
+      this.seedTokens(tokens)
+    }
   }
 }

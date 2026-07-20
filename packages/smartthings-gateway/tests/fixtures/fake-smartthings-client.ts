@@ -7,6 +7,7 @@ import type { SmartThingsScope } from "../../src/oauth/smartthings-scope.js"
 
 export class FakeSmartThingsClient implements SmartThingsClient {
   readonly exchangedCodes: string[] = []
+  readonly refreshGrants = new Map<string, TokenGrant>()
   readonly refreshedTokens: string[] = []
 
   exchangeGrant: TokenGrant = {
@@ -41,6 +42,6 @@ export class FakeSmartThingsClient implements SmartThingsClient {
 
   async refresh(refreshToken: string): Promise<TokenGrant> {
     this.refreshedTokens.push(refreshToken)
-    return this.refreshGrant
+    return this.refreshGrants.get(refreshToken) ?? this.refreshGrant
   }
 }

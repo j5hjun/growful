@@ -1,5 +1,6 @@
 import { type IncomingHttpHeaders, type IncomingMessage, request as requestHttp } from "node:http"
 import { request as requestHttps } from "node:https"
+import type { InstalledAppId } from "../oauth/contracts.js"
 import { OAuthConnectionRequiredError, type OAuthService } from "../oauth/oauth-service.js"
 
 const defaultMaxResponseBytes = 10 * 1_024 * 1_024
@@ -81,16 +82,22 @@ export class SmartThingsProxy {
     this.maxResponseBytes = options.maxResponseBytes ?? defaultMaxResponseBytes
   }
 
-  async forward(request: SmartThingsProxyRequest): Promise<SmartThingsProxyResponse> {
+  async forward(
+    request: SmartThingsProxyRequest,
+    installedAppId: InstalledAppId,
+  ): Promise<SmartThingsProxyResponse> {
     try {
-      const rejectedAccessToken = await this.options.service.getAccessToken()
+      const rejectedAccessToken = await this.options.service.getAccessToken(installedAppId)
       const firstResponse = await this.request(request, rejectedAccessToken)
       if (firstResponse.statusCode !== 401) {
         return firstResponse
       }
 
-      const refreshed = await this.options.service.refreshAccessToken(rejectedAccessToken)
-      const retryAccessToken = await this.options.service.getAccessToken()
+      const refreshed = await this.options.service.refreshAccessToken(
+        installedAppId,
+        rejectedAccessToken,
+      )
+      const retryAccessToken = await this.options.service.getAccessToken(installedAppId)
       if (!refreshed && retryAccessToken === rejectedAccessToken) {
         return firstResponse
       }

@@ -5,8 +5,6 @@ import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 
 const apps: ReturnType<typeof createApp>[] = []
-const adminToken = "test-admin-token-with-32-characters"
-const adminAuthorization = `Basic ${Buffer.from(`operator:${adminToken}`).toString("base64")}`
 const redirectOrigin = "https://smartthings.growful.click"
 const deviceRanges = ["selected", "all"] as const
 const devicePermissions = ["read", "control", "write"] as const
@@ -74,7 +72,11 @@ function createFixture() {
     stateGenerator: () => "exhaustive-selection-test-state",
     store: new MemoryOAuthStore(),
   })
-  const app = createApp({ adminToken, redirectOrigin, service })
+  const app = createApp({
+    authorizationOrigin: "https://api.smartthings.test",
+    redirectOrigin,
+    service,
+  })
   apps.push(app)
   return app
 }
@@ -93,7 +95,6 @@ describe("SmartThings OAuth scope combinations", () => {
       // When
       const response = await app.inject({
         headers: {
-          authorization: adminAuthorization,
           "content-type": "application/x-www-form-urlencoded",
           origin: redirectOrigin,
         },
@@ -120,7 +121,6 @@ describe("SmartThings OAuth scope combinations", () => {
     // When
     const response = await app.inject({
       headers: {
-        authorization: adminAuthorization,
         "content-type": "application/x-www-form-urlencoded",
         origin: redirectOrigin,
       },

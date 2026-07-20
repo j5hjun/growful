@@ -32,11 +32,9 @@ trap cleanup EXIT
 printf '%s\n' \
   'POSTGRES_PASSWORD=gateway-ci-password' \
   'DATABASE_URL=postgresql://gateway:gateway-ci-password@postgres:5432/smartthings_gateway' \
-  'GATEWAY_API_TOKEN=gateway-ci-api-token-with-32-characters' \
   'PORT=8100' \
   'HOST=0.0.0.0' \
   'LOG_LEVEL=info' \
-  'OAUTH_ADMIN_TOKEN=gateway-ci-admin-token-with-32-characters' \
   'OAUTH_CLIENT_ID=gateway-ci-client' \
   'OAUTH_CLIENT_SECRET=gateway-ci-secret' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
@@ -72,9 +70,8 @@ for attempt in {1..30}; do
 done
 
 test "$(curl --fail --silent --show-error http://127.0.0.1:8100/healthz)" = '{"status":"ok"}'
-test "$(curl --fail --silent --show-error http://127.0.0.1:8100/connection)" = '{"connected":false}'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '401'
-test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '200'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/connection)" = '401'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '200'
 
 permission_selections=(
   'read'
@@ -93,7 +90,7 @@ for device_range in selected all; do
       payload+="&permissions=$permission"
     done
     for location_selection in '' '&locationRead=on'; do
-      test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --header 'Origin: https://smartthings.growful.click' --data "$payload$location_selection" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+      test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "$payload$location_selection" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
       ((valid_selection_count += 1))
     done
   done
@@ -103,13 +100,12 @@ test "$valid_selection_count" = '28'
 invalid_selection_count=0
 for device_range in selected all; do
   for location_selection in '' '&locationRead=on'; do
-    test "$(curl --silent --show-error --user operator:gateway-ci-admin-token-with-32-characters --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range$location_selection" --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
+    test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range$location_selection" --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
     grep --quiet 'role="alert"' "$invalid_selection_response"
     ((invalid_selection_count += 1))
   done
 done
 test "$invalid_selection_count" = '4'
-
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/v1/devices)" = '401'
 
 restart_count="$(docker inspect --format='{{.RestartCount}}' "$container_id")"

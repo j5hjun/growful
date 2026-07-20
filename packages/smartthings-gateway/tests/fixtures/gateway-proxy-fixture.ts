@@ -4,11 +4,9 @@ import { SmartThingsProxy } from "../../src/http/smartthings-proxy.js"
 import { OAuthService } from "../../src/oauth/oauth-service.js"
 import type { FakeSmartThingsApi } from "./fake-smartthings-api.js"
 import { FakeSmartThingsClient } from "./fake-smartthings-client.js"
-import { MemoryOAuthStore } from "./memory-oauth-store.js"
+import { MemoryOAuthStore, memoryStoreGrowfulToken } from "./memory-oauth-store.js"
 
-const adminToken = "test-admin-token-with-32-characters"
-export const gatewayApiToken = "test-gateway-api-token-with-32-characters"
-export const gatewayAuthorization = `Bearer ${gatewayApiToken}`
+export const gatewayAuthorization = `Bearer ${memoryStoreGrowfulToken}`
 export const now = new Date("2026-07-19T00:00:00.000Z")
 
 export type GatewayProxyFixtureOptions = {
@@ -49,11 +47,11 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
       : { ...proxyOptions, maxResponseBytes: options.maxResponseBytes },
   )
   const app = createApp({
-    adminToken,
+    authorizationOrigin: "https://api.smartthings.test",
     redirectOrigin: "https://smartthings.growful.click",
     service,
   })
-  registerSmartThingsProxy(app, { gatewayApiToken, proxy })
+  registerSmartThingsProxy(app, { proxy, service })
   options.apps.push(app)
   return { app, client, store }
 }

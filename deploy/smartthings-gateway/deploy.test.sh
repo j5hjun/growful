@@ -95,6 +95,13 @@ printf '%s\n' \
   '  else' \
   '    printf "%s|rollback-scope=absent\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
   '  fi' \
+  '  admin_token="$(sed -n "s/^OAUTH_ADMIN_TOKEN=//p" "${GATEWAY_ENV_FILE:?}")"' \
+  '  gateway_token="$(sed -n "s/^GATEWAY_API_TOKEN=//p" "${GATEWAY_ENV_FILE:?}")"' \
+  '  if ((${#admin_token} >= 32 && ${#gateway_token} >= 32)) && [[ "$admin_token" != "$gateway_token" ]]; then' \
+  '    printf "%s|rollback-credentials=valid\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
+  '  else' \
+  '    printf "%s|rollback-credentials=invalid\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
+  '  fi' \
   'fi' >"$fake_bin/docker"
 
 # Dollar expressions below belong to the generated fake executable.
@@ -202,6 +209,7 @@ grep -Eq '^broken\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Fq "previous|image inspect $previous_image_reference" "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Fq 'previous|rollback-scope=exact' "$fake_log"
+grep -Fq 'previous|rollback-credentials=valid' "$fake_log"
 test ! -s "$deployment_root/.env"
 grep -Eq '^previous\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1

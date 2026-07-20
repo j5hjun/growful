@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { RefreshClaimIdSchema } from "../src/oauth/contracts.js"
+import { InstalledAppIdSchema, RefreshClaimIdSchema } from "../src/oauth/contracts.js"
+import { GrowfulTokenSchema, hashGrowfulToken } from "../src/security/growful-token.js"
 import { FakeSmartThingsApi } from "./fixtures/fake-smartthings-api.js"
 import {
   createGatewayProxyFixture,
@@ -54,6 +55,45 @@ describe("SmartThings API passthrough", () => {
     expect(api.requests).toHaveLength(1)
     expect(api.requests[0]?.url).toBe("/v1/devices?locationId=location%2Fone&includeHealth=true")
     expect(api.requests[0]?.headers.authorization).toBe("Bearer stored-smartthings-access-token")
+  })
+
+  it("selects an isolated SmartThings connection for each Growful token", async () => {
+    // Given
+    const fixture = createFixture()
+    const secondGrowfulToken = GrowfulTokenSchema.parse(
+      `grw_st_${Buffer.alloc(32, 8).toString("base64url")}`,
+    )
+    fixture.store.seedTokens(
+      {
+        accessToken: "second-smartthings-access-token",
+        expiresAt: new Date("2026-07-20T00:00:00.000Z"),
+        installedAppId: InstalledAppIdSchema.parse("installed-app-2"),
+        lastRefreshedAt: null,
+        refreshToken: "second-smartthings-refresh-token",
+        scopes: ["r:devices:*"],
+        tokenType: "bearer",
+      },
+      hashGrowfulToken(secondGrowfulToken),
+    )
+
+    // When
+    const firstResponse = await fixture.app.inject({
+      headers: { authorization: gatewayAuthorization },
+      method: "GET",
+      url: "/v1/devices",
+    })
+    const secondResponse = await fixture.app.inject({
+      headers: { authorization: `Bearer ${secondGrowfulToken}` },
+      method: "GET",
+      url: "/v1/devices",
+    })
+
+    // Then
+    expect([firstResponse.statusCode, secondResponse.statusCode]).toEqual([200, 200])
+    expect(api.requests.map((request) => request.headers.authorization)).toEqual([
+      "Bearer stored-smartthings-access-token",
+      "Bearer second-smartthings-access-token",
+    ])
   })
 
   it("returns the upstream status headers and body without JSON transformation", async () => {
@@ -146,9 +186,11 @@ describe("SmartThings API passthrough", () => {
     const fixture = createFixture()
     await fixture.store.claimTokensForRefresh({
       claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000001"),
+      expectedAccessToken: "stored-smartthings-access-token",
+      installedAppId: fixture.client.exchangeGrant.installedAppId,
+      kind: "forced",
       leaseMs: 60_000,
       now,
-      refreshBeforeExpiryMs: null,
     })
     const rejectedBody = Buffer.from('{ "error" : "lease-busy" }')
     api.enqueueResponse({

@@ -95,16 +95,29 @@ docker rm --force "$previous" >/dev/null
 docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
   --command "insert into oauth_states (state_hash, expires_at) values ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', now() + interval '10 minutes')" \
   >/dev/null
-grep --invert-match '^SMARTTHINGS_SCOPES=' "$environment_file" >"$candidate_environment_file"
+docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --command "insert into oauth_tokens (installed_app_id, access_token_ciphertext, refresh_token_ciphertext, expires_at, scope, token_type, updated_at) values ('legacy-installed-app', 'legacy-access', 'legacy-refresh', now() + interval '1 day', 'r:devices:*', 'bearer', now())" \
+  >/dev/null
+grep --extended-regexp --invert-match \
+  '^(SMARTTHINGS_SCOPES|GATEWAY_API_TOKEN|OAUTH_ADMIN_TOKEN)=' \
+  "$environment_file" >"$candidate_environment_file"
 cp "$candidate_environment_file" "$rollback_environment_file"
-printf '\n%s\n' 'SMARTTHINGS_SCOPES=r:devices:$' >>"$rollback_environment_file"
+printf '\n%s\n' \
+  'SMARTTHINGS_SCOPES=r:devices:$' \
+  'GATEWAY_API_TOKEN=gateway-version-skew-api-token-32-characters' \
+  'OAUTH_ADMIN_TOKEN=gateway-version-skew-admin-token-32-characters' \
+  >>"$rollback_environment_file"
 test "$(grep --count '^SMARTTHINGS_SCOPES=' "$candidate_environment_file" || true)" = "0"
+test "$(grep --count '^GATEWAY_API_TOKEN=' "$candidate_environment_file" || true)" = "0"
+test "$(grep --count '^OAUTH_ADMIN_TOKEN=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --fixed-strings --line-regexp --count 'SMARTTHINGS_SCOPES=r:devices:$' "$rollback_environment_file")" = "1"
 
 run_migrations "$candidate_image" "$candidate_environment_file"
 test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
   --tuples-only --no-align \
   --command "select count(*) from oauth_states where state_hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' and requested_scopes = ''")" = "1"
+test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --tuples-only --no-align --command "select count(*) from oauth_tokens")" = "0"
 start_and_verify "$candidate" "$candidate_image" "$candidate_environment_file"
 docker rm --force "$candidate" >/dev/null
 
