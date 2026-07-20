@@ -1,0 +1,290 @@
+name: SmartThings Gateway
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/smartthings-gateway/**"
+      - "deploy/smartthings-gateway/**"
+      - ".github/workflows/smartthings-gateway.yaml"
+
+env:
+  IMAGE_NAME: ghcr.io/j5hjun/growful-smartthings-gateway
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+        env:
+          POSTGRES_DB: gateway_test
+          POSTGRES_PASSWORD: gateway-test-password
+          POSTGRES_USER: gateway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gateway -d gateway_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: packages/smartthings-gateway
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          package_json_file: packages/smartthings-gateway/package.json
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: packages/smartthings-gateway/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test:integration
+        env:
+          TEST_DATABASE_URL: postgresql://gateway:gateway-test-password@127.0.0.1:5432/gateway_test
+      - run: pnpm build
+      - name: Test deployment rollback
+        run: bash ../../deploy/smartthings-gateway/deploy.test.sh
+      - name: Test production preflight
+        run: bash ../../deploy/smartthings-gateway/preflight.test.sh
+      - name: Test gateway release resolution
+        run: bash ../../deploy/smartthings-gateway/resolve-release.test.sh
+      - name: Smoke test digest-pinned deployment image with Compose
+        run: |
+          docker compose --project-name smartthings-gateway-ci-registry \
+            -f ../../deploy/smartthings-gateway/ci-registry.compose.yaml up -d
+          for attempt in {1..30}; do
+            if curl --fail --silent 'http://127.0.0.1:5001/v2/' >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == 30 ]]; then
+              exit 1
+            fi
+            sleep 1
+          done
+          image_tag='localhost:5001/growful-smartthings-gateway:ci'
+          docker build --tag "$image_tag" .
+          docker push "$image_tag"
+          image_reference="$(docker image inspect --format '{{index .RepoDigests 0}}' "$image_tag")"
+          [[ "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]
+          bash ../../deploy/smartthings-gateway/ci-smoke.sh "$image_reference" ci
+      - name: Clean up local image registry
+        if: always()
+        run: |
+          docker compose --project-name smartthings-gateway-ci-registry \
+            -f ../../deploy/smartthings-gateway/ci-registry.compose.yaml down --volumes >/dev/null 2>&1 || true
+
+  publish:
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.existing_image.outputs.digest || steps.build.outputs.digest }}
+      ready: ${{ steps.post_push_freshness.outputs.deploy }}
+      release-id: ${{ steps.release.outputs.release }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - id: release
+        name: Resolve gateway release in this push
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          candidate_release="$(bash deploy/smartthings-gateway/resolve-release.sh "$GITHUB_SHA")"
+          current_release="$(bash deploy/smartthings-gateway/resolve-release.sh origin/main)"
+          test -n "$candidate_release"
+          test -n "$current_release"
+          echo "release=$candidate_release" >> "$GITHUB_OUTPUT"
+          if [[ "$current_release" == "$candidate_release" ]]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping stale gateway release $candidate_release; current release is $current_release"
+          fi
+      - if: steps.release.outputs.publish == 'true'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - if: steps.release.outputs.publish == 'true'
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: existing_image
+        name: Reuse an existing immutable release image
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          RELEASE_ID: ${{ steps.release.outputs.release }}
+        run: |
+          registry_token="$(curl --fail --silent --show-error \
+            --user "$GHCR_USER:$GHCR_TOKEN" \
+            --get 'https://ghcr.io/token' \
+            --data-urlencode 'service=ghcr.io' \
+            --data-urlencode 'scope=repository:j5hjun/growful-smartthings-gateway:pull' |
+            jq --exit-status --raw-output '.token // .access_token')"
+          manifest_headers="$RUNNER_TEMP/smartthings-gateway-manifest.headers"
+          manifest_status="$(curl --silent --show-error \
+            --output /dev/null \
+            --dump-header "$manifest_headers" \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer $registry_token" \
+            --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/j5hjun/growful-smartthings-gateway/manifests/$RELEASE_ID")"
+          case "$manifest_status" in
+            200)
+              image_digest="$(awk 'tolower($1) == "docker-content-digest:" { gsub("\\r", "", $2); print $2; exit }' "$manifest_headers")"
+              [[ "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+              echo "digest=$image_digest" >> "$GITHUB_OUTPUT"
+              echo 'build=false' >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo 'build=true' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              printf 'GHCR manifest lookup failed with HTTP %s\n' "$manifest_status" >&2
+              exit 1
+              ;;
+          esac
+      - id: push_freshness
+        name: Recheck gateway release before build and push
+        if: steps.release.outputs.publish == 'true'
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_release="$(bash deploy/smartthings-gateway/resolve-release.sh origin/main)"
+          test -n "$current_release"
+          if [[ "$current_release" == "$RELEASE_ID" ]]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping stale gateway release $RELEASE_ID; current release is $current_release"
+          fi
+      - id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        if: steps.push_freshness.outputs.publish == 'true' && steps.existing_image.outputs.build == 'true'
+        with:
+          context: packages/smartthings-gateway
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.release.outputs.release }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - id: post_push_freshness
+        name: Recheck gateway release after publishing
+        if: steps.push_freshness.outputs.publish == 'true'
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release }}
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_release="$(bash deploy/smartthings-gateway/resolve-release.sh origin/main)"
+          test -n "$current_release"
+          if [[ "$current_release" == "$RELEASE_ID" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo "Published immutable release $RELEASE_ID but skipping stale deployment; current release is $current_release"
+          fi
+
+  deploy:
+    if: needs.publish.outputs.ready == 'true'
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: 100.72.144.111
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      IMAGE_REFERENCE: ghcr.io/j5hjun/growful-smartthings-gateway@${{ needs.publish.outputs.image-digest }}
+      PUBLIC_BASE_URL: https://smartthings.growful.click
+      RELEASE_ID: ${{ needs.publish.outputs.release-id }}
+      DEPLOY_SEQUENCE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - id: freshness
+        name: Check commit is current gateway release
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_release="$(bash deploy/smartthings-gateway/resolve-release.sh origin/main)"
+          test -n "$current_release"
+          if [[ "$current_release" == "$RELEASE_ID" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping stale gateway release $RELEASE_ID; current release is $current_release"
+          fi
+      - if: steps.freshness.outputs.deploy == 'true'
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          ping: 100.72.144.111
+      - name: Copy deployment files
+        if: steps.freshness.outputs.deploy == 'true'
+        run: |
+          test -n "$DEPLOY_USER"
+          tar -C deploy/smartthings-gateway -cf - compose.yaml deploy.sh preflight.sh |
+            tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+              "mkdir -p \"\$HOME/app/smartthings-gateway/releases/$RELEASE_ID\" && tar -xf - -C \"\$HOME/app/smartthings-gateway/releases/$RELEASE_ID\""
+      - name: Check production prerequisites
+        if: steps.freshness.outputs.deploy == 'true'
+        run: |
+          tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s -- "$IMAGE_REFERENCE" "$RELEASE_ID" <<'REMOTE'
+          set -e
+          deployment_root="$HOME/app/smartthings-gateway"
+          release_dir="$deployment_root/releases/$2"
+          DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$1" "$2"
+          REMOTE
+      - id: mutation_freshness
+        name: Recheck gateway release before mutation
+        if: steps.freshness.outputs.deploy == 'true'
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_release="$(bash deploy/smartthings-gateway/resolve-release.sh origin/main)"
+          test -n "$current_release"
+          if [[ "$current_release" == "$RELEASE_ID" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo "Skipping stale gateway release $RELEASE_ID; current release is $current_release"
+          fi
+      - name: Deploy image
+        if: steps.mutation_freshness.outputs.deploy == 'true'
+        run: |
+          tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s -- "$IMAGE_REFERENCE" "$RELEASE_ID" "$PUBLIC_BASE_URL" "$DEPLOY_SEQUENCE" <<'REMOTE'
+          set -e
+          deployment_root="$HOME/app/smartthings-gateway"
+          release_dir="$deployment_root/releases/$2"
+          DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="$3" bash "$release_dir/deploy.sh" "$1" "$2" "$4"
+          REMOTE
+      - name: Verify public HTTPS endpoints
+        if: steps.mutation_freshness.outputs.deploy == 'true'
+        run: |
+          health_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$PUBLIC_BASE_URL/healthz")"
+          test "$health_response" = '{"status":"ok"}'
+
+          connection_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$PUBLIC_BASE_URL/connection")"
+          jq --exit-status '.connected == true or .connected == false' <<<"$connection_response" >/dev/null
+
+          oauth_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$PUBLIC_BASE_URL/oauth/start")"
+          test "$oauth_status" = '401'
