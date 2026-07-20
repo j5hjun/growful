@@ -5,13 +5,18 @@ import {
   type SmartThingsClient,
   type TokenGrant,
 } from "../oauth/contracts.js"
+import {
+  SmartThingsGrantedScopeStringSchema,
+  type SmartThingsScope,
+  serializeSmartThingsScopes,
+} from "../oauth/smartthings-scope.js"
 
 const tokenResponseSchema = z.object({
   access_token: z.string().min(1),
   expires_in: z.number().int().positive(),
   installed_app_id: InstalledAppIdSchema,
   refresh_token: z.string().min(1),
-  scope: z.string(),
+  scope: SmartThingsGrantedScopeStringSchema,
   token_type: z.string().min(1),
 })
 
@@ -20,7 +25,6 @@ export type HttpSmartThingsClientOptions = {
   readonly clientId: string
   readonly clientSecret: string
   readonly redirectUri: URL
-  readonly scopes: readonly string[]
   readonly tokenUrl: URL
 }
 
@@ -38,12 +42,12 @@ export class SmartThingsTokenRequestError extends Error {
 export class HttpSmartThingsClient implements SmartThingsClient {
   constructor(private readonly options: HttpSmartThingsClientOptions) {}
 
-  buildAuthorizationUrl(state: string): URL {
+  buildAuthorizationUrl(state: string, scopes: readonly SmartThingsScope[]): URL {
     const url = new URL(this.options.authorizationUrl)
     url.searchParams.set("client_id", this.options.clientId)
     url.searchParams.set("redirect_uri", this.options.redirectUri.toString())
     url.searchParams.set("response_type", "code")
-    url.searchParams.set("scope", this.options.scopes.join(" "))
+    url.searchParams.set("scope", serializeSmartThingsScopes(scopes))
     url.searchParams.set("state", state)
     return url
   }
@@ -89,7 +93,7 @@ export class HttpSmartThingsClient implements SmartThingsClient {
         expiresInSeconds: parsed.expires_in,
         installedAppId: parsed.installed_app_id,
         refreshToken: parsed.refresh_token,
-        scope: parsed.scope,
+        scopes: parsed.scope,
         tokenType: parsed.token_type,
       }
     } catch (error) {

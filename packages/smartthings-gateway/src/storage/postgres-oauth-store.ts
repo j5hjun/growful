@@ -9,6 +9,12 @@ import {
   StaleRefreshClaimError,
   type StoredTokens,
 } from "../oauth/contracts.js"
+import {
+  SmartThingsGrantedScopeStringSchema,
+  type SmartThingsScope,
+  SmartThingsScopeStringSchema,
+  serializeSmartThingsScopes,
+} from "../oauth/smartthings-scope.js"
 import { decodeEncryptionKey, decryptSecret, encryptSecret } from "../security/token-encryption.js"
 import type { GatewayDatabase, OAuthTokenTable } from "./database.js"
 
@@ -75,13 +81,23 @@ export class PostgresOAuthStore implements OAuthStore {
     })
   }
 
-  async consumeState(stateHash: OAuthStateHash, now: Date): Promise<boolean> {
+  async consumeState(
+    stateHash: OAuthStateHash,
+    now: Date,
+  ): Promise<readonly SmartThingsScope[] | null> {
     const state = await this.database
       .deleteFrom("oauthStates")
       .where("stateHash", "=", stateHash)
-      .returning("expiresAt")
+      .returning(["expiresAt", "requestedScopes"])
       .executeTakeFirst()
-    return state !== undefined && state.expiresAt.getTime() >= now.getTime()
+    if (
+      state === undefined ||
+      state.expiresAt.getTime() < now.getTime() ||
+      state.requestedScopes.length === 0
+    ) {
+      return null
+    }
+    return SmartThingsScopeStringSchema.parse(state.requestedScopes)
   }
 
   async getTokens(): Promise<StoredTokens | null> {
@@ -98,11 +114,18 @@ export class PostgresOAuthStore implements OAuthStore {
       .execute()
   }
 
-  async saveState(stateHash: OAuthStateHash, expiresAt: Date): Promise<void> {
+  async saveState(
+    stateHash: OAuthStateHash,
+    expiresAt: Date,
+    requestedScopes: readonly SmartThingsScope[],
+  ): Promise<void> {
+    const serializedScopes = serializeSmartThingsScopes(requestedScopes)
     await this.database
       .insertInto("oauthStates")
-      .values({ expiresAt, stateHash })
-      .onConflict((conflict) => conflict.column("stateHash").doUpdateSet({ expiresAt }))
+      .values({ expiresAt, requestedScopes: serializedScopes, stateHash })
+      .onConflict((conflict) =>
+        conflict.column("stateHash").doUpdateSet({ expiresAt, requestedScopes: serializedScopes }),
+      )
       .execute()
   }
 
@@ -154,7 +177,7 @@ export class PostgresOAuthStore implements OAuthStore {
       refreshClaimedUntil: null,
       refreshClaimId: null,
       refreshTokenCiphertext: encryptSecret(input.grant.refreshToken, this.encryptionKey),
-      scope: input.grant.scope,
+      scope: serializeSmartThingsScopes(input.grant.scopes),
       tokenType: input.grant.tokenType,
       updatedAt: input.issuedAt,
     }
@@ -167,7 +190,7 @@ export class PostgresOAuthStore implements OAuthStore {
       installedAppId: InstalledAppIdSchema.parse(row.installedAppId),
       lastRefreshedAt: row.lastRefreshedAt,
       refreshToken: decryptSecret(row.refreshTokenCiphertext, this.encryptionKey),
-      scope: row.scope,
+      scopes: SmartThingsGrantedScopeStringSchema.parse(row.scope),
       tokenType: row.tokenType,
     }
   }

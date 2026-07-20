@@ -39,7 +39,12 @@ highest_deployment_image_reference=""
 highest_deployment_sequence=0
 state_temp=""
 sequence_temp=""
-trap 'rm -f "${state_temp:-}" "${sequence_temp:-}"' EXIT
+rollback_environment_file=""
+trap 'rm -f "${state_temp:-}" "${sequence_temp:-}" "${rollback_environment_file:-}"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+find "$deployment_root" -maxdepth 1 -type f -name '.env.rollback.*' -delete
 
 if [[ -f "$release_state_file" ]]; then
   deployed_state=()
@@ -181,7 +186,14 @@ rollback_release() {
   export RELEASE_ID="$previous_release_id"
   export SMARTTHINGS_GATEWAY_IMAGE_NAME="${previous_image_reference%@sha256:*}"
   export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="sha256:${previous_image_reference##*@sha256:}"
-  compose=(docker compose --env-file "$environment_file" -f "$previous_release/compose.yaml")
+  export GATEWAY_ENV_FILE="$environment_file"
+  if ! grep --quiet '^SMARTTHINGS_SCOPES=..*' "$environment_file"; then
+    rollback_environment_file="$(mktemp "${environment_file}.rollback.XXXXXX")"
+    cp "$environment_file" "$rollback_environment_file"
+    printf '\n%s\n' 'SMARTTHINGS_SCOPES=r:devices:$' >>"$rollback_environment_file"
+    export GATEWAY_ENV_FILE="$rollback_environment_file"
+  fi
+  compose=(docker compose --env-file "$GATEWAY_ENV_FILE" -f "$previous_release/compose.yaml")
 
   if ! docker image inspect "$previous_image_reference" >/dev/null 2>&1; then
     "${compose[@]}" pull gateway || return 1

@@ -20,7 +20,10 @@ async function readBody(request: IncomingMessage): Promise<string> {
   return body
 }
 
-async function createTokenServer(capturedRequests: CapturedRequest[]): Promise<URL> {
+async function createTokenServer(
+  capturedRequests: CapturedRequest[],
+  grantedScope = "r:devices:*",
+): Promise<URL> {
   const server = createServer(async (request, response) => {
     const body = new URLSearchParams(await readBody(request))
     capturedRequests.push({ authorization: request.headers.authorization, body })
@@ -31,7 +34,7 @@ async function createTokenServer(capturedRequests: CapturedRequest[]): Promise<U
         expires_in: 86_399,
         installed_app_id: "installed-app-1",
         refresh_token: "refresh-token",
-        scope: "r:devices:*",
+        scope: grantedScope,
         token_type: "bearer",
       }),
     )
@@ -51,7 +54,6 @@ function createClient(tokenUrl: URL): HttpSmartThingsClient {
     clientId: "client-id",
     clientSecret: "client-secret",
     redirectUri: new URL("https://smartthings.growful.click/oauth/callback"),
-    scopes: ["r:devices:*"],
     tokenUrl,
   })
 }
@@ -73,7 +75,7 @@ describe("HttpSmartThingsClient", () => {
     const client = createClient(new URL("https://api.smartthings.test/oauth/token"))
 
     // When
-    const url = client.buildAuthorizationUrl("unguessable-state")
+    const url = client.buildAuthorizationUrl("unguessable-state", ["r:devices:*"])
 
     // Then
     expect(Object.fromEntries(url.searchParams)).toEqual({
@@ -95,6 +97,7 @@ describe("HttpSmartThingsClient", () => {
 
     // Then
     expect(grant.accessToken).toBe("access-token")
+    expect(grant.scopes).toEqual(["r:devices:*"])
     expect(capturedRequests[0]?.authorization).toBe(
       `Basic ${Buffer.from("client-id:client-secret").toString("base64")}`,
     )
@@ -120,5 +123,14 @@ describe("HttpSmartThingsClient", () => {
       grant_type: "refresh_token",
       refresh_token: "latest-refresh-token",
     })
+  })
+
+  it("preserves a registered legacy scope in a token response", async () => {
+    const capturedRequests: CapturedRequest[] = []
+    const client = createClient(await createTokenServer(capturedRequests, "r:scenes:*"))
+
+    const grant = await client.refresh("latest-refresh-token")
+
+    expect(grant.scopes).toEqual(["r:scenes:*"])
   })
 })

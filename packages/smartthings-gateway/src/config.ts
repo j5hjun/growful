@@ -30,7 +30,6 @@ const environmentSchema = z
     SMARTTHINGS_API_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(60).default(15),
     SMARTTHINGS_API_URL: z.url().default("https://api.smartthings.com"),
     SMARTTHINGS_AUTHORIZE_URL: z.url().default("https://api.smartthings.com/oauth/authorize"),
-    SMARTTHINGS_SCOPES: z.string().min(1),
     SMARTTHINGS_TOKEN_URL: z.url().default("https://api.smartthings.com/oauth/token"),
     TOKEN_ENCRYPTION_KEY: configuredSecret,
   })
@@ -56,7 +55,6 @@ export type AppConfig = {
   readonly refreshBeforeExpiryMs: number
   readonly refreshCheckIntervalMs: number
   readonly refreshLeaseMs: number
-  readonly scopes: readonly string[]
   readonly tokenUrl: URL
 }
 
@@ -79,7 +77,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
     refreshBeforeExpiryMs: parsed.REFRESH_BEFORE_EXPIRY_SECONDS * 1_000,
     refreshCheckIntervalMs: parsed.REFRESH_CHECK_INTERVAL_SECONDS * 1_000,
     refreshLeaseMs: parsed.REFRESH_LEASE_SECONDS * 1_000,
-    scopes: parsed.SMARTTHINGS_SCOPES.split(/\s+/).filter((scope) => scope.length > 0),
     tokenUrl: new URL(parsed.SMARTTHINGS_TOKEN_URL),
   }
 }

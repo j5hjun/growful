@@ -23,7 +23,6 @@ async function main(): Promise<void> {
       clientId: config.clientId,
       clientSecret: config.clientSecret,
       redirectUri: config.redirectUri,
-      scopes: config.scopes,
       tokenUrl: config.tokenUrl,
     })
     const service = new OAuthService({
@@ -38,6 +37,7 @@ async function main(): Promise<void> {
         level: config.logLevel,
         redact: ["req.headers.authorization", "req.headers.cookie"],
       },
+      redirectOrigin: config.redirectUri.origin,
       service,
     })
     registerSmartThingsProxy(app, {

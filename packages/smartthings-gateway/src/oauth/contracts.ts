@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { SmartThingsScope } from "./smartthings-scope.js"
 
 export const InstalledAppIdSchema = z.string().min(1).brand("InstalledAppId")
 export const OAuthStateHashSchema = z.string().length(64).brand("OAuthStateHash")
@@ -21,7 +22,7 @@ export type TokenGrant = {
   readonly expiresInSeconds: number
   readonly installedAppId: InstalledAppId
   readonly refreshToken: string
-  readonly scope: string
+  readonly scopes: readonly string[]
   readonly tokenType: string
 }
 
@@ -31,7 +32,7 @@ export type StoredTokens = {
   readonly installedAppId: InstalledAppId
   readonly lastRefreshedAt: Date | null
   readonly refreshToken: string
-  readonly scope: string
+  readonly scopes: readonly string[]
   readonly tokenType: string
 }
 
@@ -40,6 +41,7 @@ export type ConnectionStatus =
   | {
       readonly connected: true
       readonly expiresAt: string
+      readonly grantedScopes: readonly string[]
       readonly lastRefreshedAt: string | null
     }
 
@@ -73,15 +75,19 @@ export type RefreshFailure = {
 
 export interface OAuthStore {
   claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null>
-  consumeState(stateHash: OAuthStateHash, now: Date): Promise<boolean>
+  consumeState(stateHash: OAuthStateHash, now: Date): Promise<readonly SmartThingsScope[] | null>
   getTokens(): Promise<StoredTokens | null>
   recordRefreshFailure(failure: RefreshFailure): Promise<void>
-  saveState(stateHash: OAuthStateHash, expiresAt: Date): Promise<void>
+  saveState(
+    stateHash: OAuthStateHash,
+    expiresAt: Date,
+    requestedScopes: readonly SmartThingsScope[],
+  ): Promise<void>
   saveTokens(input: SaveTokensInput): Promise<StoredTokens>
 }
 
 export interface SmartThingsClient {
-  buildAuthorizationUrl(state: string): URL
+  buildAuthorizationUrl(state: string, scopes: readonly SmartThingsScope[]): URL
   exchangeCode(code: string): Promise<TokenGrant>
   refresh(refreshToken: string): Promise<TokenGrant>
 }

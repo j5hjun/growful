@@ -10,6 +10,7 @@ previous_release="$deployment_root/releases/previous"
 fake_bin="$test_root/bin"
 fake_log="$test_root/docker.log"
 fail_once_marker="$test_root/public-health-failed-once"
+rollback_block_marker="$test_root/rollback-blocked"
 previous_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000001'
 broken_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000003'
 public_broken_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000004'
@@ -62,6 +63,7 @@ cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$release_dir/"
 cp "$source_dir/compose.yaml" "$previous_release/"
 grep -Fq 'stop_grace_period: 120s' "$source_dir/compose.yaml"
 touch "$deployment_root/.env"
+touch "$deployment_root/.env.rollback.stale"
 printf '%s\n' "$previous_image_reference" 'previous' "$previous_release" '1' >"$release_state_file"
 
 # Dollar expressions below belong to the generated fake executable.
@@ -70,7 +72,10 @@ printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
   'printf "%s|%s\n" "${RELEASE_ID:-}" "$*" >>"$FAKE_LOG"' \
-  'if [[ "$1" == "compose" && "${FAIL_STOP:-}" == "1" && "$*" == *" stop gateway"* ]]; then' \
+  'if [[ "$1" == "compose" && "${BLOCK_ROLLBACK:-}" == "1" && "${RELEASE_ID:-}" != "broken" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
+  '  printf "%s\n" "$$" >"$ROLLBACK_BLOCK_MARKER"' \
+  '  while :; do sleep 1; done' \
+  'elif [[ "$1" == "compose" && "${FAIL_STOP:-}" == "1" && "$*" == *" stop gateway"* ]]; then' \
   '  exit 1' \
   'elif [[ "$1" == "compose" && "${FAIL_ROLLBACK:-}" == "1" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
   '  exit 1' \
@@ -84,6 +89,12 @@ printf '%s\n' \
   '  fi' \
   'elif [[ "$1" == "compose" && "$*" == *" ps --all -q gateway"* ]]; then' \
   '  printf "gateway-container\n"' \
+  'elif [[ "$1" == "compose" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
+  '  if grep --fixed-strings --line-regexp --quiet "SMARTTHINGS_SCOPES=r:devices:$" "${GATEWAY_ENV_FILE:?}"; then' \
+  '    printf "%s|rollback-scope=exact\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
+  '  else' \
+  '    printf "%s|rollback-scope=absent\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
+  '  fi' \
   'fi' >"$fake_bin/docker"
 
 # Dollar expressions below belong to the generated fake executable.
@@ -122,6 +133,7 @@ printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/flock"
 chmod +x "$fake_bin/docker" "$fake_bin/curl" "$fake_bin/flock" "$fake_bin/mv"
 export FAKE_LOG="$fake_log"
 export FAIL_ONCE_MARKER="$fail_once_marker"
+export ROLLBACK_BLOCK_MARKER="$rollback_block_marker"
 export RELEASE_STATE_FILE="$release_state_file"
 export DEPLOYMENT_SEQUENCE_FILE="$deployment_sequence_file"
 export HEALTHCHECK_ATTEMPTS=1
@@ -138,6 +150,7 @@ if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_ima
 fi
 mv "$previous_release/compose.yaml.unavailable" "$previous_release/compose.yaml"
 test ! -s "$fake_log"
+test ! -e "$deployment_root/.env.rollback.stale"
 
 : >"$fake_log"
 mv "$release_state_file" "$release_state_file.saved"
@@ -188,6 +201,8 @@ fi
 grep -Eq '^broken\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Fq "previous|image inspect $previous_image_reference" "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
+grep -Fq 'previous|rollback-scope=exact' "$fake_log"
+test ! -s "$deployment_root/.env"
 grep -Eq '^previous\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1
 assert_deployment_sequence 3 broken "$broken_image_reference"
@@ -321,3 +336,25 @@ if grep -Eq '^healthy\|compose .* (pull gateway|run --rm gateway|up -d|stop gate
 fi
 assert_release_state "$healthy_image_reference" healthy "$release_dir" 9
 assert_deployment_sequence 9 healthy "$healthy_image_reference"
+
+rm -f "$rollback_block_marker"
+BLOCK_ROLLBACK=1 DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/deploy.sh" "$broken_image_reference" interrupted 10 &
+interrupted_deploy_pid=$!
+for attempt in {1..50}; do
+  if [[ -s "$rollback_block_marker" ]]; then
+    break
+  fi
+  if [[ "$attempt" == 50 ]]; then
+    printf 'interrupted rollback did not reach the blocking command\n' >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+kill -TERM "$interrupted_deploy_pid"
+kill -TERM "$(<"$rollback_block_marker")"
+if wait "$interrupted_deploy_pid"; then
+  printf 'interrupted deployment unexpectedly succeeded\n' >&2
+  exit 1
+fi
+test -z "$(find "$deployment_root" -maxdepth 1 -type f -name '.env.rollback.*' -print -quit)"

@@ -57,7 +57,6 @@ write_environment() {
     'REFRESH_LEASE_SECONDS=120' \
     'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
     'SMARTTHINGS_API_URL=https://api.smartthings.com' \
-    'SMARTTHINGS_SCOPES=r:devices:*' \
     "TOKEN_ENCRYPTION_KEY=$encryption_key" >"$deployment_root/.env"
   chmod 600 "$deployment_root/.env"
 }

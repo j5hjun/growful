@@ -1,3 +1,4 @@
+import { sql } from "kysely"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
 import {
@@ -23,7 +24,7 @@ const grant: TokenGrant = {
   expiresInSeconds: 30,
   installedAppId: InstalledAppIdSchema.parse("postgres-installed-app"),
   refreshToken: "postgres-refresh-token",
-  scope: "r:devices:*",
+  scopes: ["r:devices:*"],
   tokenType: "bearer",
 }
 
@@ -44,15 +45,32 @@ describe("PostgresOAuthStore", () => {
   it("consumes an OAuth state only once", async () => {
     // Given
     const stateHash = OAuthStateHashSchema.parse("a".repeat(64))
-    await store.saveState(stateHash, new Date(now.getTime() + 60_000))
+    await store.saveState(stateHash, new Date(now.getTime() + 60_000), [
+      "r:devices:$",
+      "x:devices:$",
+    ])
 
     // When
     const firstConsumption = await store.consumeState(stateHash, now)
     const secondConsumption = await store.consumeState(stateHash, now)
 
     // Then
-    expect(firstConsumption).toBe(true)
-    expect(secondConsumption).toBe(false)
+    expect(firstConsumption).toEqual(["r:devices:$", "x:devices:$"])
+    expect(secondConsumption).toBeNull()
+  })
+
+  it("invalidates a state written by a pre-scope-selection gateway", async () => {
+    // Given
+    const stateHash = OAuthStateHashSchema.parse("b".repeat(64))
+    await sql`insert into oauth_states (state_hash, expires_at) values (${stateHash}, ${new Date(
+      now.getTime() + 60_000,
+    )})`.execute(database)
+
+    // When
+    const consumption = await store.consumeState(stateHash, now)
+
+    // Then
+    expect(consumption).toBeNull()
   })
 
   it("stores both tokens encrypted at rest", async () => {
@@ -68,7 +86,19 @@ describe("PostgresOAuthStore", () => {
     expect(await store.getTokens()).toMatchObject({
       accessToken: grant.accessToken,
       refreshToken: grant.refreshToken,
+      scopes: grant.scopes,
     })
+  })
+
+  it("keeps legacy granted scopes readable", async () => {
+    // Given
+    const legacyGrant = { ...grant, scopes: ["r:scenes:*", "x:devices:*"] }
+
+    // When
+    await store.saveTokens({ grant: legacyGrant, issuedAt: now, source: "authorization" })
+
+    // Then
+    await expect(store.getTokens()).resolves.toMatchObject({ scopes: legacyGrant.scopes })
   })
 
   it("keeps one token row when authorizations finish concurrently", async () => {
