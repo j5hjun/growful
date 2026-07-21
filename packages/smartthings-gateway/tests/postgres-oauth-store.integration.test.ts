@@ -65,14 +65,23 @@ describe("PostgresOAuthStore", () => {
   it("consumes an OAuth state once with its requested scopes", async () => {
     // Given
     const stateHash = OAuthStateHashSchema.parse("a".repeat(64))
-    await store.saveState(stateHash, new Date(now.getTime() + 60_000), ["r:devices:$"])
+    const requestedScopes = [
+      "r:hubs:*",
+      "w:locations:*",
+      "x:locations:*",
+      "r:scenes:*",
+      "x:scenes:*",
+      "r:rules:*",
+      "w:rules:*",
+    ] as const
+    await store.saveState(stateHash, new Date(now.getTime() + 60_000), requestedScopes)
 
     // When
     const first = await store.consumeState(stateHash, now)
     const replay = await store.consumeState(stateHash, now)
 
     // Then
-    expect(first).toEqual(["r:devices:$"])
+    expect(first).toEqual(requestedScopes)
     expect(replay).toBeNull()
   })
 

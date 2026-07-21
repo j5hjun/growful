@@ -1,14 +1,23 @@
 import { z } from "zod"
 
-export const SmartThingsScopeSchema = z.enum([
+export const smartThingsScopes = [
   "r:devices:$",
   "r:devices:*",
   "x:devices:$",
   "x:devices:*",
   "w:devices:$",
   "w:devices:*",
+  "r:hubs:*",
   "r:locations:*",
-])
+  "w:locations:*",
+  "x:locations:*",
+  "r:scenes:*",
+  "x:scenes:*",
+  "r:rules:*",
+  "w:rules:*",
+] as const
+
+export const SmartThingsScopeSchema = z.enum(smartThingsScopes)
 
 export const SmartThingsScopesSchema = z
   .array(SmartThingsScopeSchema)
