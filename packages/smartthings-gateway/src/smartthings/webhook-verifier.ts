@@ -1,4 +1,9 @@
-import { createHash, timingSafeEqual, verify as verifySignature } from "node:crypto"
+import {
+  createHash,
+  createPublicKey,
+  timingSafeEqual,
+  verify as verifySignature,
+} from "node:crypto"
 import ky from "ky"
 import { z } from "zod"
 
@@ -95,7 +100,7 @@ export class SmartThingsWebhookPublicKeyClient {
 
   private async fetchAndCache(keyId: string, nowMs: number): Promise<string> {
     try {
-      const pem = publicKeySchema.parse(await this.requestPublicKey(keyId))
+      const pem = parsePublicKey(await this.requestPublicKey(keyId))
       this.setCached(keyId, { expiresAtMs: nowMs + publicKeyCacheLifetimeMs, pem })
       return pem
     } catch {
@@ -119,6 +124,12 @@ export class SmartThingsWebhookPublicKeyClient {
     }
     this.cache.set(keyId, cached)
   }
+}
+
+function parsePublicKey(value: unknown): string {
+  const pem = publicKeySchema.parse(value)
+  const key = createPublicKey(pem)
+  return key.asymmetricKeyType === "rsa" ? pem : invalidSignature()
 }
 
 function invalidSignature(): never {

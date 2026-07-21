@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto"
 import { describe, expect, it, vi } from "vitest"
 import {
   InvalidSmartThingsWebhookSignatureError,
@@ -5,7 +6,12 @@ import {
 } from "../src/smartthings/webhook-verifier.js"
 
 const now = new Date("2026-07-22T00:00:00.000Z")
-const publicKey = "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----"
+const publicKey = generateKeyPairSync("rsa", { modulusLength: 2_048 })
+  .publicKey.export({
+    format: "pem",
+    type: "spki",
+  })
+  .toString()
 
 describe("SmartThings webhook public key client", () => {
   it("coalesces concurrent requests for the same public key", async () => {
@@ -42,6 +48,21 @@ describe("SmartThings webhook public key client", () => {
       InvalidSmartThingsWebhookSignatureError,
     )
     await expect(client.getPublicKey("/pl/useast2/missing-key")).rejects.toBeInstanceOf(
+      InvalidSmartThingsWebhookSignatureError,
+    )
+    expect(requestPublicKey).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects and temporarily caches malformed public keys", async () => {
+    // Given
+    const requestPublicKey = vi.fn(async () => "not-a-public-key")
+    const client = new SmartThingsWebhookPublicKeyClient(() => now, requestPublicKey)
+
+    // When / Then
+    await expect(client.getPublicKey("/pl/useast2/malformed-key")).rejects.toBeInstanceOf(
+      InvalidSmartThingsWebhookSignatureError,
+    )
+    await expect(client.getPublicKey("/pl/useast2/malformed-key")).rejects.toBeInstanceOf(
       InvalidSmartThingsWebhookSignatureError,
     )
     expect(requestPublicKey).toHaveBeenCalledTimes(1)
