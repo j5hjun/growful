@@ -156,7 +156,7 @@ export function renderOAuthScopeSelection(options: {
     ? ' aria-invalid="true" aria-describedby="permission-error"'
     : ""
   const permissionError = showSelectionError
-    ? '<p class="error" id="permission-error" role="alert"><span class="phrase">선택값을 확인하세요.</span> <span class="phrase">권한을 하나 이상 선택하고 정책 동의에 체크하세요.</span></p>'
+    ? '<p class="error" id="permission-error" role="alert"><span class="phrase">선택값을 확인하세요.</span> <span class="phrase">권한을 하나 이상 선택하세요.</span> <span class="phrase">정책 동의에도 체크하세요.</span></p>'
     : ""
   const operatorName = escapeHtml(options.disclosures.operatorName)
   const privacyPolicyUrl = escapeHtml(options.disclosures.privacyPolicyUrl.toString())
