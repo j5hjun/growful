@@ -176,7 +176,7 @@ const state = process.argv[1]
 fetch(`http://127.0.0.1:8100/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`)
   .then(async (response) => {
     const body = await response.json().catch(() => null)
-    if (response.status !== 400 || body?.error !== "authorization_denied") process.exit(1)
+    if (response.status !== 400 || body?.error !== "invalid_oauth_state") process.exit(1)
   })
   .catch(() => process.exit(1))
 ' -- "$rollback_state"
