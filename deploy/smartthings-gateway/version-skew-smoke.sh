@@ -132,7 +132,7 @@ test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gat
 start_and_verify "$candidate" "$candidate_image" "$candidate_environment_file"
 rollback_state="$(docker exec "$candidate" node -e '
 fetch("http://127.0.0.1:8100/oauth/start", {
-  body: "deviceRange=selected&scenePermissions=read",
+  body: "deviceRange=selected&scenePermissions=read&policyConsent=accepted",
   headers: {
     authorization: `Basic ${Buffer.from("gateway-version-skew-beta:gateway-version-skew-beta-password").toString("base64")}`,
     "content-type": "application/x-www-form-urlencoded",
