@@ -104,6 +104,10 @@ grep --extended-regexp --invert-match \
   "$environment_file" >"$candidate_environment_file"
 cp "$candidate_environment_file" "$rollback_environment_file"
 printf '\n%s\n' \
+  'SERVICE_ACCESS_MODE=private_beta' \
+  'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-version-skew-beta","passwordHash":"5ddf8b91211dce99eacd9d5923f5a6fa47c4943630855c921a50c47f111aa2ee"}]' \
+  >>"$candidate_environment_file"
+printf '\n%s\n' \
   'SMARTTHINGS_SCOPES=r:devices:$' \
   'GATEWAY_API_TOKEN=gateway-version-skew-api-token-32-characters' \
   'OAUTH_ADMIN_TOKEN=gateway-version-skew-admin-token-32-characters' \
@@ -111,6 +115,8 @@ printf '\n%s\n' \
 test "$(grep --count '^SMARTTHINGS_SCOPES=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^GATEWAY_API_TOKEN=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^OAUTH_ADMIN_TOKEN=' "$candidate_environment_file" || true)" = "0"
+test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$candidate_environment_file" || true)" = "1"
+test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$rollback_environment_file" || true)" = "0"
 test "$(grep --fixed-strings --line-regexp --count 'SMARTTHINGS_SCOPES=r:devices:$' "$rollback_environment_file")" = "1"
 
 run_migrations "$candidate_image" "$candidate_environment_file"
@@ -124,6 +130,7 @@ rollback_state="$(docker exec "$candidate" node -e '
 fetch("http://127.0.0.1:8100/oauth/start", {
   body: "deviceRange=selected&scenePermissions=read",
   headers: {
+    authorization: `Basic ${Buffer.from("gateway-version-skew-beta:gateway-version-skew-beta-password").toString("base64")}`,
     "content-type": "application/x-www-form-urlencoded",
     origin: "https://smartthings.growful.click",
   },

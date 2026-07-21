@@ -162,4 +162,3 @@ Internal interpretation owner:
 원문 답변 파일이나 티켓 URL을 `SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE`에 직접 넣지
 않습니다. 해당 환경변수에는 운영자가 접근할 수 있는 안정적인 내부 참조번호만 넣고, 원문은
 접근 통제된 기록 시스템에 보관합니다.
-
