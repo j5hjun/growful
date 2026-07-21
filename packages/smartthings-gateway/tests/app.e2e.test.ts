@@ -52,7 +52,8 @@ async function authorize(app: ReturnType<typeof createApp>) {
       origin: redirectOrigin,
     },
     method: "POST",
-    payload: "deviceRange=selected&permissions=read&permissions=control&locationRead=on",
+    payload:
+      "deviceRange=selected&devicePermissions=read&devicePermissions=control&locationPermissions=read",
     url: "/oauth/start",
   })
   const state =
@@ -215,7 +216,7 @@ describe("SmartThings Gateway HTTP API", () => {
         origin: "https://attacker.example",
       },
       method: "POST",
-      payload: "deviceRange=all&permissions=read",
+      payload: "deviceRange=all&devicePermissions=read",
       url: "/oauth/start",
     })
 
@@ -246,7 +247,7 @@ describe("SmartThings Gateway HTTP API", () => {
     const start = await fixture.app.inject({
       headers: { "content-type": "application/x-www-form-urlencoded", origin: redirectOrigin },
       method: "POST",
-      payload: "deviceRange=all&permissions=read",
+      payload: "deviceRange=all&devicePermissions=read",
       url: "/oauth/start",
     })
     const state = new URL(start.headers.location ?? "").searchParams.get("state") ?? ""

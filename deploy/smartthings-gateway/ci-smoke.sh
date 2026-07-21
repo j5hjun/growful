@@ -87,25 +87,48 @@ for device_range in selected all; do
   for permission_selection in "${permission_selections[@]}"; do
     payload="deviceRange=$device_range"
     for permission in $permission_selection; do
-      payload+="&permissions=$permission"
+      payload+="&devicePermissions=$permission"
     done
-    for location_selection in '' '&locationRead=on'; do
-      test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "$payload$location_selection" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
-      ((valid_selection_count += 1))
-    done
+    test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "$payload" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+    ((valid_selection_count += 1))
   done
 done
-test "$valid_selection_count" = '28'
+
+resource_selections=(
+  'hubPermissions=read'
+  'locationPermissions=read'
+  'locationPermissions=write'
+  'locationPermissions=execute'
+  'locationPermissions=read&locationPermissions=write'
+  'locationPermissions=read&locationPermissions=execute'
+  'locationPermissions=write&locationPermissions=execute'
+  'locationPermissions=read&locationPermissions=write&locationPermissions=execute'
+  'scenePermissions=read'
+  'scenePermissions=execute'
+  'scenePermissions=read&scenePermissions=execute'
+  'rulePermissions=read'
+  'rulePermissions=write'
+  'rulePermissions=read&rulePermissions=write'
+)
+for resource_selection in "${resource_selections[@]}"; do
+  test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=selected&$resource_selection" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+  ((valid_selection_count += 1))
+done
+
+every_resource_permissions='devicePermissions=read&devicePermissions=control&devicePermissions=write&hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write'
+for device_range in selected all; do
+  test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range&$every_resource_permissions" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+  ((valid_selection_count += 1))
+done
+test "$valid_selection_count" = '30'
 
 invalid_selection_count=0
 for device_range in selected all; do
-  for location_selection in '' '&locationRead=on'; do
-    test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range$location_selection" --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
-    grep --quiet 'role="alert"' "$invalid_selection_response"
-    ((invalid_selection_count += 1))
-  done
+  test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range" --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
+  grep --quiet 'role="alert"' "$invalid_selection_response"
+  ((invalid_selection_count += 1))
 done
-test "$invalid_selection_count" = '4'
+test "$invalid_selection_count" = '2'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/v1/devices)" = '401'
 
 restart_count="$(docker inspect --format='{{.RestartCount}}' "$container_id")"

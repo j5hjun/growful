@@ -69,7 +69,23 @@ offset은 `--focus-ring` (`3px`)을 사용한다.
 - Structure: `fieldset > legend + label[]`
 - States: 기본, 체크됨, 키보드 focus
 - Accessibility: 네이티브 radio/checkbox와 명시적 label 사용
-- Validation: 디바이스 권한이 없으면 같은 화면의 `role="alert"`로 복구 방법 안내
+- Validation: 전체 리소스 권한이 없으면 제출한 디바이스 범위를 유지하고 같은 화면의
+  `role="alert"`로 복구 방법 안내
+- Motion: 없음
+
+### Resource permission group
+
+- Structure: 리소스별 `fieldset > legend + p.hint + label[]`
+- Order: 디바이스 범위, 디바이스, 허브, 위치, 장면, 규칙
+- Copy: 권한 동작과 대상 리소스를 함께 표시하고 OAuth scope 문자열은 보조 설명으로 제공
+- Default: 선택 디바이스 범위와 상태 읽기만 선택하고 제어·쓰기 권한은 명시적 동의로 추가
+- Device wording: `*` 범위는 계정 전체가 아니라 설치 principal에 연결된 모든 디바이스로 표현하고,
+  `w:devices`는 이름 변경·삭제 용도로 설명
+- States: 기본, 체크됨, 키보드 focus, 전체 선택 오류
+- Accessibility: 각 리소스 이름을 `legend`로 제공하고 scope 문자열은 label 안의 설명으로 연결
+- Validation semantics: 모든 리소스 fieldset을 감싼 단일 `role="group"`에 전역
+  `aria-invalid`와 오류 설명을 연결하며, 선택적인 개별 fieldset에는 invalid 상태를 표시하지 않음
+- Responsive: 375px부터 한 열을 유지하며 문서 세로 스크롤만 사용
 - Motion: 없음
 
 ### Primary action

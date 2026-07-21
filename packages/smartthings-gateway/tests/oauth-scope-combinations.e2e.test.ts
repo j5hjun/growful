@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { createApp } from "../src/http/app.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
+import type { SmartThingsScope } from "../src/oauth/smartthings-scope.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 
@@ -9,8 +10,7 @@ const authorizationOrigin = "https://api.smartthings.test"
 const redirectOrigin = "https://smartthings.growful.click"
 const deviceRanges = ["selected", "all"] as const
 const devicePermissions = ["read", "control", "write"] as const
-const locationSelections = [false, true] as const
-const scopeByRangeAndPermission = {
+const deviceScopeByRangeAndPermission = {
   all: {
     control: "x:devices:*",
     read: "r:devices:*",
@@ -21,48 +21,107 @@ const scopeByRangeAndPermission = {
     read: "r:devices:$",
     write: "w:devices:$",
   },
-} as const
+} as const satisfies Record<
+  (typeof deviceRanges)[number],
+  Record<(typeof devicePermissions)[number], SmartThingsScope>
+>
+const resourceDefinitions: readonly {
+  field: string
+  label: string
+  permissions: readonly { scope: SmartThingsScope; value: string }[]
+}[] = [
+  {
+    field: "hubPermissions",
+    label: "hub",
+    permissions: [{ scope: "r:hubs:*", value: "read" }],
+  },
+  {
+    field: "locationPermissions",
+    label: "location",
+    permissions: [
+      { scope: "r:locations:*", value: "read" },
+      { scope: "w:locations:*", value: "write" },
+      { scope: "x:locations:*", value: "execute" },
+    ],
+  },
+  {
+    field: "scenePermissions",
+    label: "scene",
+    permissions: [
+      { scope: "r:scenes:*", value: "read" },
+      { scope: "x:scenes:*", value: "execute" },
+    ],
+  },
+  {
+    field: "rulePermissions",
+    label: "rule",
+    permissions: [
+      { scope: "r:rules:*", value: "read" },
+      { scope: "w:rules:*", value: "write" },
+    ],
+  },
+]
 
-const permissionSelections = Array.from({ length: 7 }, (_, maskIndex) =>
-  devicePermissions.filter(
-    (_, permissionIndex) => ((maskIndex + 1) & (1 << permissionIndex)) !== 0,
-  ),
-)
+function nonEmptySelections<Value>(values: readonly Value[]): readonly (readonly Value[])[] {
+  return Array.from({ length: 2 ** values.length - 1 }, (_, maskIndex) =>
+    values.filter((_, valueIndex) => ((maskIndex + 1) & (1 << valueIndex)) !== 0),
+  )
+}
 
-const validSelectionCases = deviceRanges.flatMap((deviceRange) =>
-  permissionSelections.flatMap((permissions) =>
-    locationSelections.map((locationRead) => {
-      const parameters = new URLSearchParams({ deviceRange })
-      for (const permission of permissions) {
-        parameters.append("permissions", permission)
-      }
-      if (locationRead) {
-        parameters.set("locationRead", "on")
-      }
-      const deviceScopes = permissions.map(
-        (permission) => scopeByRangeAndPermission[deviceRange][permission],
-      )
-      return {
-        expectedScopes: locationRead ? [...deviceScopes, "r:locations:*"] : deviceScopes,
-        label: `${deviceRange}-${permissions.join("+")}-location-${locationRead}`,
-        payload: parameters.toString(),
-      }
-    }),
-  ),
-)
-
-const emptyPermissionCases = deviceRanges.flatMap((deviceRange) =>
-  locationSelections.map((locationRead) => {
+const deviceSelectionCases = deviceRanges.flatMap((deviceRange) =>
+  nonEmptySelections(devicePermissions).map((permissions) => {
     const parameters = new URLSearchParams({ deviceRange })
-    if (locationRead) {
-      parameters.set("locationRead", "on")
+    for (const permission of permissions) {
+      parameters.append("devicePermissions", permission)
     }
     return {
-      label: `${deviceRange}-no-device-permission-location-${locationRead}`,
+      expectedScopes: permissions.map(
+        (permission) => deviceScopeByRangeAndPermission[deviceRange][permission],
+      ),
+      label: `${deviceRange}-device-${permissions.join("+")}`,
       payload: parameters.toString(),
     }
   }),
 )
+
+const resourceSelectionCases = resourceDefinitions.flatMap((definition) =>
+  nonEmptySelections(definition.permissions).map((permissions) => {
+    const parameters = new URLSearchParams({ deviceRange: "selected" })
+    for (const permission of permissions) {
+      parameters.append(definition.field, permission.value)
+    }
+    return {
+      expectedScopes: permissions.map(({ scope }) => scope),
+      label: `${definition.label}-${permissions.map(({ value }) => value).join("+")}`,
+      payload: parameters.toString(),
+    }
+  }),
+)
+
+const everyResourcePermissions =
+  "hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write"
+const combinedSelectionCases = deviceRanges.map((deviceRange) => ({
+  expectedScopes: [
+    `r:devices:${deviceRange === "selected" ? "$" : "*"}`,
+    `x:devices:${deviceRange === "selected" ? "$" : "*"}`,
+    `w:devices:${deviceRange === "selected" ? "$" : "*"}`,
+    "r:hubs:*",
+    "r:locations:*",
+    "w:locations:*",
+    "x:locations:*",
+    "r:scenes:*",
+    "x:scenes:*",
+    "r:rules:*",
+    "w:rules:*",
+  ],
+  label: `${deviceRange}-every-resource-permission`,
+  payload: `deviceRange=${deviceRange}&devicePermissions=read&devicePermissions=control&devicePermissions=write&${everyResourcePermissions}`,
+}))
+const validSelectionCases = [
+  ...deviceSelectionCases,
+  ...resourceSelectionCases,
+  ...combinedSelectionCases,
+]
 
 function createFixture() {
   const service = new OAuthService({
@@ -73,11 +132,7 @@ function createFixture() {
     stateGenerator: () => "exhaustive-selection-test-state",
     store: new MemoryOAuthStore(),
   })
-  const app = createApp({
-    authorizationOrigin,
-    redirectOrigin,
-    service,
-  })
+  const app = createApp({ authorizationOrigin, redirectOrigin, service })
   apps.push(app)
   return app
 }
@@ -90,10 +145,8 @@ describe("SmartThings OAuth scope combinations", () => {
   it.each(validSelectionCases)(
     "redirects the valid $label selection",
     async ({ expectedScopes, payload }) => {
-      // Given
       const app = createFixture()
 
-      // When
       const response = await app.inject({
         headers: {
           "content-type": "application/x-www-form-urlencoded",
@@ -104,7 +157,6 @@ describe("SmartThings OAuth scope combinations", () => {
         url: "/oauth/start",
       })
 
-      // Then
       expect(response.statusCode).toBe(302)
       const authorizationUrl = new URL(response.headers.location ?? "")
       expect(`${authorizationUrl.origin}${authorizationUrl.pathname}`).toBe(
@@ -115,25 +167,23 @@ describe("SmartThings OAuth scope combinations", () => {
     },
   )
 
-  it.each(emptyPermissionCases)("returns guidance for $label", async ({ payload }) => {
-    // Given
+  it.each(deviceRanges)("returns guidance for an empty %s selection", async (deviceRange) => {
     const app = createFixture()
 
-    // When
     const response = await app.inject({
       headers: {
         "content-type": "application/x-www-form-urlencoded",
         origin: redirectOrigin,
       },
       method: "POST",
-      payload,
+      payload: `deviceRange=${deviceRange}`,
       url: "/oauth/start",
     })
 
-    // Then
     expect(response.statusCode).toBe(400)
     expect(response.headers["content-type"]).toContain("text/html")
     expect(response.body).toContain('role="alert"')
+    expect(response.body).toContain(`name="deviceRange" value="${deviceRange}" checked`)
     expect(response.headers.location).toBeUndefined()
   })
 })
