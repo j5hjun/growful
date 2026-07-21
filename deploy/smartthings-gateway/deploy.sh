@@ -40,6 +40,7 @@ highest_deployment_sequence=0
 state_temp=""
 sequence_temp=""
 rollback_environment_file=""
+candidate_migrations_completed=0
 trap 'rm -f "${state_temp:-}" "${sequence_temp:-}" "${rollback_environment_file:-}"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
@@ -167,6 +168,7 @@ deploy_release() {
   "${compose[@]}" pull gateway || return 1
   "${compose[@]}" up -d postgres || return 1
   "${compose[@]}" run --rm gateway node dist/migrate.js || return 1
+  candidate_migrations_completed=1
   "${compose[@]}" up -d --no-deps gateway || return 1
   wait_for_gateway || return 1
   verify_local_http || return 1
@@ -181,6 +183,17 @@ rollback_release() {
     fi
     printf 'deployment failed and no previous release is available\n' >&2
     return 0
+  fi
+
+  if ((candidate_migrations_completed == 1)); then
+    if ! "${compose[@]}" stop gateway >/dev/null 2>&1; then
+      printf 'failed to stop the rejected gateway before rollback preparation\n' >&2
+      return 1
+    fi
+    if ! "${compose[@]}" run --rm --no-deps gateway node dist/prepare-rollback.js; then
+      printf 'failed to revoke candidate credentials before rollback\n' >&2
+      return 1
+    fi
   fi
 
   export RELEASE_ID="$previous_release_id"

@@ -153,3 +153,13 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   )
   await database.deleteFrom("oauthTokens").execute()
 }
+
+export async function revokeCredentialsForLegacyRollback(
+  database: Kysely<GatewayDatabase>,
+): Promise<void> {
+  await database.transaction().execute(async (transaction) => {
+    await transaction.deleteFrom("oauthStates").execute()
+    await transaction.deleteFrom("smartThingsConnections").execute()
+    await transaction.deleteFrom("oauthTokens").execute()
+  })
+}

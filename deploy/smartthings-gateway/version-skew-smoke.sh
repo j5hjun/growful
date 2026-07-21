@@ -152,9 +152,25 @@ test -n "$rollback_state"
 test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
   --tuples-only --no-align \
   --command "select count(*) from oauth_states where requested_scopes = 'r:scenes:*'")" = "1"
+rollback_token="grw_st_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+rollback_token_hash="$(printf '%s' "$rollback_token" | openssl dgst -sha256 -r | cut -d' ' -f1)"
+docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --command "insert into smart_things_connections (installed_app_id, growful_token_hash, growful_token_created_at, consented_at, policy_version, private_beta_username, access_token_ciphertext, refresh_token_ciphertext, expires_at, scope, token_type, updated_at) values ('candidate-installed-app', '$rollback_token_hash', now(), now(), repeat('b', 64), 'gateway-version-skew-beta', 'candidate-access', 'candidate-refresh', now() + interval '1 day', 'r:devices:*', 'bearer', now())" \
+  >/dev/null
 docker rm --force "$candidate" >/dev/null
+docker run --rm --network "$network" --env-file "$candidate_environment_file" \
+  "$candidate_image" node dist/prepare-rollback.js
+test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --tuples-only --no-align --command "select count(*) from oauth_states")" = "0"
+test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --tuples-only --no-align --command "select count(*) from smart_things_connections")" = "0"
 
 start_and_verify "$previous" "$previous_image" "$rollback_environment_file"
+test "$(docker exec "$previous" node -e '
+fetch("http://127.0.0.1:8100/connection", {
+  headers: { authorization: `Bearer ${process.argv[1]}` },
+}).then((response) => process.stdout.write(String(response.status))).catch(() => process.exit(1))
+' -- "$rollback_token")" = "401"
 docker exec "$previous" node -e '
 const state = process.argv[1]
 fetch(`http://127.0.0.1:8100/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`)

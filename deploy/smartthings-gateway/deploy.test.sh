@@ -79,6 +79,8 @@ printf '%s\n' \
   '  exit 1' \
   'elif [[ "$1" == "compose" && "${FAIL_ROLLBACK:-}" == "1" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
   '  exit 1' \
+  'elif [[ "$1" == "compose" && "${FAIL_ROLLBACK_PREPARATION:-}" == "1" && "$*" == *" run --rm --no-deps gateway node dist/prepare-rollback.js"* ]]; then' \
+  '  exit 1' \
   'elif [[ "$1" == "inspect" ]]; then' \
   '  if [[ "$*" == *RestartCount* ]]; then' \
   '    printf "0\n"' \
@@ -206,6 +208,8 @@ if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_ima
 fi
 
 grep -Eq '^broken\|compose .* up -d --no-deps gateway$' "$fake_log"
+grep -Eq '^broken\|compose .* stop gateway$' "$fake_log"
+grep -Eq '^broken\|compose .* run --rm --no-deps gateway node dist/prepare-rollback\.js$' "$fake_log"
 grep -Fq "previous|image inspect $previous_image_reference" "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Fq 'previous|rollback-scope=exact' "$fake_log"
@@ -214,6 +218,21 @@ test ! -s "$deployment_root/.env"
 grep -Eq '^previous\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1
 assert_deployment_sequence 3 broken "$broken_image_reference"
+
+: >"$fake_log"
+if FAIL_ROLLBACK_PREPARATION=1 DEPLOYMENT_ROOT="$deployment_root" \
+  PUBLIC_BASE_URL="https://smartthings.growful.click" \
+  bash "$release_dir/deploy.sh" "$public_broken_image_reference" public-broken 4; then
+  printf 'deployment with failed rollback credential revocation unexpectedly succeeded\n' >&2
+  exit 1
+fi
+grep -Eq '^public-broken\|compose .* run --rm --no-deps gateway node dist/prepare-rollback\.js$' "$fake_log"
+if grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"; then
+  printf 'previous gateway started after rollback credential revocation failed\n' >&2
+  exit 1
+fi
+assert_release_state "$previous_image_reference" previous "$previous_release" 1
+assert_deployment_sequence 4 public-broken "$public_broken_image_reference"
 
 : >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
