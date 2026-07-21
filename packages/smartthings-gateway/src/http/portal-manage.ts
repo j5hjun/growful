@@ -1,7 +1,8 @@
 import { renderGatewayPage } from "./oauth-page.js"
+import type { OAuthAccessPolicy } from "./oauth-routes.js"
 import { portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
 
-export function renderPortalManagement(): string {
+export function renderPortalManagement(access: OAuthAccessPolicy): string {
   return renderGatewayPage({
     body: `
     ${renderPortalNavigation("manage")}
@@ -21,7 +22,7 @@ export function renderPortalManagement(): string {
     </form>
     <p class="feedback" data-portal-feedback role="status" aria-live="polite" hidden></p>
     <div class="error" data-portal-error role="alert" hidden><p data-portal-error-message></p><a href="/oauth/start" data-reconnect hidden>SmartThings 다시 연결</a></div>
-    <section class="connection-status" data-portal-status aria-labelledby="connection-title" hidden>
+    <section class="connection-status" data-portal-status aria-labelledby="connection-title" tabindex="-1" hidden>
       <div class="status-heading">
         <div><p class="status-indicator">연결됨</p><h2 id="connection-title">SmartThings 연결 상태</h2></div>
         <button class="secondary" type="button" data-forget-token>이 탭에서 토큰 지우기</button>
@@ -59,7 +60,7 @@ export function renderPortalManagement(): string {
     description:
       "Growful 토큰으로 SmartThings 연결 상태와 만료 시각을 확인하고 토큰을 교체하거나 연결을 해제합니다.",
     layout: "manage",
-    robots: "index,follow",
+    robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
     scriptSource: "/portal.js",
     styles: `${portalSharedStyles}
     .manage-header { padding: var(--space-8) 0 var(--space-4); }
@@ -77,6 +78,7 @@ export function renderPortalManagement(): string {
     .feedback { color: var(--success); }
     .error { color: var(--error); }
     .connection-status, .credential-output { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
+    .connection-status:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .status-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
     .status-heading h2, .status-indicator { margin: 0; }
     .status-indicator { color: var(--success); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); }

@@ -13,6 +13,7 @@ class PortalElement {
   readonly attributes = new Map<string, string>()
   readonly listeners = new Map<string, PortalListener>()
   disabled = false
+  focusCount = 0
   hidden = false
   open = false
   textContent = ""
@@ -44,7 +45,9 @@ class PortalElement {
     this.open = false
   }
 
-  focus(): void {}
+  focus(): void {
+    this.focusCount += 1
+  }
 
   replaceChildren(..._children: unknown[]): void {}
 
@@ -132,6 +135,7 @@ describe("Growful portal token mutations", () => {
     const form = getElement(elements, "form")
     const input = getElement(elements, "input")
     const rotate = getElement(elements, "rotate")
+    const status = getElement(elements, "status")
     let serverToken: string | null = tokenA
     let deleteGate: ReturnType<typeof deferred<void>> | undefined
     let rotationRequests = 0
@@ -174,6 +178,7 @@ describe("Growful portal token mutations", () => {
     input.value = tokenA
     await form.dispatch("submit", { preventDefault() {} })
     await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(status.focusCount).toBe(1)
 
     // When
     const pendingRotation = rotate.dispatch("click")

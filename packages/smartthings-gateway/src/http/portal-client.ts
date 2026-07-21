@@ -209,6 +209,7 @@ function initializePortal(): void {
     scopeList.replaceChildren(...items)
     tokenForm.hidden = true
     statusSection.hidden = false
+    statusSection.focus()
   }
 
   function resetToTokenEntry(message: string): void {
@@ -331,7 +332,7 @@ function initializePortal(): void {
   })
 
   disconnectForm.addEventListener("submit", async (event) => {
-    if ((event as SubmitEvent).submitter !== disconnectConfirm) return
+    if (event.submitter !== disconnectConfirm) return
     event.preventDefault()
     tokenGeneration += 1
     rotateTokenButton.disabled = true

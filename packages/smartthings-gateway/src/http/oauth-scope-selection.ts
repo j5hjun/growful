@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { ServiceDisclosures } from "../config.js"
+import { type ServiceDisclosures, smartThingsPolicyConsentStatement } from "../config.js"
 import type { SmartThingsScope } from "../oauth/smartthings-scope.js"
 import { renderGatewayPage } from "./oauth-page.js"
 
@@ -156,7 +156,7 @@ export function renderOAuthScopeSelection(options: {
     ? ' aria-invalid="true" aria-describedby="permission-error"'
     : ""
   const permissionError = showSelectionError
-    ? '<p class="error" id="permission-error" role="alert"><span class="phrase">선택값을 확인하세요.</span> <span class="phrase">권한을 하나 이상 선택하세요.</span></p>'
+    ? '<p class="error" id="permission-error" role="alert"><span class="phrase">선택값을 확인하세요.</span> <span class="phrase">권한을 하나 이상 선택하고 정책 동의에 체크하세요.</span></p>'
     : ""
   const operatorName = escapeHtml(options.disclosures.operatorName)
   const privacyPolicyUrl = escapeHtml(options.disclosures.privacyPolicyUrl.toString())
@@ -210,7 +210,7 @@ export function renderOAuthScopeSelection(options: {
         <h2 id="policy-title">연결 전 확인</h2>
         <p><strong>${operatorName}</strong>에서 SmartThings 연결 정보와 암호화된 OAuth 토큰을 관리합니다.</p>
         <p><a href="${privacyPolicyUrl}" aria-label="개인정보처리방침(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">개인정보처리방침</a> · <a href="${termsUrl}" aria-label="이용약관(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">이용약관</a> · <a href="mailto:${supportEmail}">지원 문의</a></p>
-        <label><input type="checkbox" name="policyConsent" value="accepted" required><span>개인정보처리방침과 이용약관을 확인했으며, 선택한 SmartThings 권한과 연결 토큰 처리에 동의합니다.</span></label>
+        <label><input type="checkbox" name="policyConsent" value="accepted" required><span>${smartThingsPolicyConsentStatement}</span></label>
       </section>
       <button type="submit">SmartThings에서 계속</button>
     </form>`,

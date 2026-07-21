@@ -22,12 +22,13 @@ function sendPortalPage(reply: FastifyReply, html: string, contentSecurityPolicy
 }
 
 export function registerPortalRoutes(app: FastifyInstance, access: OAuthAccessPolicy): void {
+  const isPublic = access.mode === "public"
   app.get("/robots.txt", async (_request, reply) =>
     reply
-      .header("Cache-Control", "public, max-age=3600")
+      .header("Cache-Control", isPublic ? "public, max-age=3600" : "no-store")
       .header("X-Content-Type-Options", "nosniff")
       .type("text/plain; charset=utf-8")
-      .send("User-agent: *\nAllow: /\n"),
+      .send(isPublic ? "User-agent: *\nAllow: /\n" : "User-agent: *\nDisallow: /\n"),
   )
   app.get("/", async (_request, reply) =>
     sendPortalPage(reply, renderPortalHome(access), sharedContentSecurityPolicy),
@@ -35,7 +36,7 @@ export function registerPortalRoutes(app: FastifyInstance, access: OAuthAccessPo
   app.get("/manage", async (_request, reply) =>
     sendPortalPage(
       reply,
-      renderPortalManagement(),
+      renderPortalManagement(access),
       `${sharedContentSecurityPolicy}; script-src 'self'`,
     ),
   )

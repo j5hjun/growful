@@ -68,6 +68,37 @@ describe("loadConfig", () => {
     ).toThrow()
   })
 
+  it("pins runtime SmartThings credential destinations", () => {
+    expect(() =>
+      loadConfig({ ...requiredEnvironment, SMARTTHINGS_API_URL: "https://attacker.example" }),
+    ).toThrow()
+    expect(() =>
+      loadConfig({
+        ...requiredEnvironment,
+        SMARTTHINGS_AUTHORIZE_URL: "https://attacker.example/oauth/authorize",
+      }),
+    ).toThrow()
+    expect(() =>
+      loadConfig({
+        ...requiredEnvironment,
+        SMARTTHINGS_TOKEN_URL: "https://attacker.example/oauth/token",
+      }),
+    ).toThrow()
+  })
+
+  it("changes policy identity with service mode and approval facts", () => {
+    const privatePolicyVersion = loadConfig(requiredEnvironment).serviceAccess.policyVersion
+    const publicPolicyVersion = loadConfig({
+      ...requiredEnvironment,
+      PRIVATE_BETA_INVITES_JSON: undefined,
+      SERVICE_ACCESS_MODE: "public",
+      SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: "smartthings-case-123",
+      SMARTTHINGS_PUBLIC_USE_APPROVED_AT: "2026-07-22",
+    }).serviceAccess.policyVersion
+
+    expect(publicPolicyVersion).not.toBe(privatePolicyVersion)
+  })
+
   it("rejects private beta mode without an invitation list", () => {
     expect(() =>
       loadConfig({ ...requiredEnvironment, PRIVATE_BETA_INVITES_JSON: undefined }),

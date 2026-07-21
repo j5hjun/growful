@@ -1,20 +1,20 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { createApp } from "../src/http/app.js"
+import { type AppOptions, createApp } from "../src/http/app.js"
 import { renderOAuthCompletion } from "../src/http/oauth-completion.js"
 import { portalClientScript } from "../src/http/portal-client.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import { GrowfulTokenSchema } from "../src/security/growful-token.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
-import { publicOAuthAccess } from "./fixtures/oauth-access.js"
+import { privateBetaOAuthAccess, publicOAuthAccess } from "./fixtures/oauth-access.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const redirectOrigin = "https://smartthings.growful.click"
 
-function createFixture() {
+function createFixture(oauthAccess: AppOptions["oauthAccess"] = publicOAuthAccess) {
   const app = createApp({
     authorizationOrigin: "https://api.smartthings.test",
-    oauthAccess: publicOAuthAccess,
+    oauthAccess,
     redirectOrigin,
     service: new OAuthService({
       client: new FakeSmartThingsClient(),
@@ -96,6 +96,28 @@ describe("Growful portal HTTP surface", () => {
     expect(response.statusCode).toBe(200)
     expect(response.headers["content-type"]).toContain("text/plain")
     expect(response.body).toBe("User-agent: *\nAllow: /\n")
+  })
+
+  it("blocks indexing for private beta portal routes", async () => {
+    const app = createFixture(
+      privateBetaOAuthAccess([
+        {
+          passwordHash: "dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42",
+          username: "private-user",
+        },
+      ]),
+    )
+
+    const [home, manage, robots] = await Promise.all([
+      app.inject({ method: "GET", url: "/" }),
+      app.inject({ method: "GET", url: "/manage" }),
+      app.inject({ method: "GET", url: "/robots.txt" }),
+    ])
+
+    expect(home.body).toContain('<meta name="robots" content="noindex,nofollow">')
+    expect(manage.body).toContain('<meta name="robots" content="noindex,nofollow">')
+    expect(robots.headers["cache-control"]).toBe("no-store")
+    expect(robots.body).toBe("User-agent: *\nDisallow: /\n")
   })
 
   it("serves the compiled browser client without caching it", async () => {

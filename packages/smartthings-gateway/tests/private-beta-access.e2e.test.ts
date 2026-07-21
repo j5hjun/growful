@@ -142,18 +142,30 @@ describe("Private-beta OAuth access HTTP surface", () => {
     for (let attempt = 0; attempt < 6; attempt += 1) {
       responses.push(
         await fixture.app.inject({
-          headers: { authorization: invalidAuthorization },
+          headers: {
+            authorization: invalidAuthorization,
+            "x-forwarded-for": "192.0.2.10",
+          },
           method: "GET",
           url: "/oauth/start",
         }),
       )
     }
+    const otherClient = await fixture.app.inject({
+      headers: {
+        authorization: invalidAuthorization,
+        "x-forwarded-for": "192.0.2.11",
+      },
+      method: "GET",
+      url: "/oauth/start",
+    })
 
     // Then
     expect(responses.slice(0, 5).map((response) => response.statusCode)).toEqual(Array(5).fill(401))
     expect(responses[5]?.statusCode).toBe(429)
     expect(responses[5]?.headers["retry-after"]).toBe("60")
     expect(responses[5]?.json()).toEqual({ error: "private_beta_access_rate_limited" })
+    expect(otherClient.statusCode).toBe(401)
   })
 
   it("rejects an existing Growful token that is not bound to an active invitation", async () => {

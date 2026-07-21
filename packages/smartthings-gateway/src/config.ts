@@ -8,6 +8,18 @@ const configuredSecret = z
   .refine((value) => !value.startsWith("replace-with-"), "replace placeholder secrets")
 
 const httpsUrl = z.url().refine((value) => new URL(value).protocol === "https:", "use HTTPS")
+const smartThingsApiUrl = "https://api.smartthings.com"
+const smartThingsAuthorizationUrls = [
+  "https://api.smartthings.com/oauth/authorize",
+  "https://api.smartthings.com/v1/oauth/authorize",
+] as const
+const smartThingsTokenUrls = [
+  "https://api.smartthings.com/oauth/token",
+  "https://api.smartthings.com/v1/oauth/token",
+] as const
+
+export const smartThingsPolicyConsentStatement =
+  "개인정보처리방침과 이용약관을 확인했으며, 선택한 SmartThings 권한과 연결 토큰 처리에 동의합니다."
 
 const environmentSchema = z.object({
   DATABASE_URL: z.url(),
@@ -26,10 +38,12 @@ const environmentSchema = z.object({
   REFRESH_CHECK_INTERVAL_SECONDS: z.coerce.number().int().min(1).max(300).default(300),
   REFRESH_LEASE_SECONDS: z.coerce.number().int().min(120).default(120),
   SMARTTHINGS_API_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(60).default(15),
-  SMARTTHINGS_API_URL: z.url().default("https://api.smartthings.com"),
+  SMARTTHINGS_API_URL: z.literal(smartThingsApiUrl).default(smartThingsApiUrl),
   SMARTTHINGS_APP_ID: configuredSecret,
-  SMARTTHINGS_AUTHORIZE_URL: z.url().default("https://api.smartthings.com/oauth/authorize"),
-  SMARTTHINGS_TOKEN_URL: z.url().default("https://api.smartthings.com/oauth/token"),
+  SMARTTHINGS_AUTHORIZE_URL: z
+    .enum(smartThingsAuthorizationUrls)
+    .default(smartThingsAuthorizationUrls[0]),
+  SMARTTHINGS_TOKEN_URL: z.enum(smartThingsTokenUrls).default(smartThingsTokenUrls[0]),
   SERVICE_ACCESS_MODE: z.enum(["private_beta", "public"]).default("private_beta"),
   SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: z.string().optional(),
   SMARTTHINGS_PUBLIC_USE_APPROVED_AT: z.string().optional(),
@@ -103,8 +117,12 @@ export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
         JSON.stringify({
           operatorName: disclosure.PUBLIC_OPERATOR_NAME,
           privacyPolicyUrl: disclosure.PUBLIC_PRIVACY_POLICY_URL,
+          serviceAccessMode: parsed.SERVICE_ACCESS_MODE,
+          smartThingsApprovalReference: parsed.SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE ?? null,
+          smartThingsApprovedAt: parsed.SMARTTHINGS_PUBLIC_USE_APPROVED_AT ?? null,
           supportEmail: disclosure.PUBLIC_SUPPORT_EMAIL,
           termsUrl: disclosure.PUBLIC_TERMS_URL,
+          userConsentStatement: smartThingsPolicyConsentStatement,
         }),
         "utf8",
       )

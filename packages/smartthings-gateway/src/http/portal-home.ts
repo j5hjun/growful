@@ -56,7 +56,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     </section>`,
     description: `SmartThings OAuth 토큰을 대신 보관하고 Growful 토큰으로 안전하게 연결하는 ${descriptionSuffix}입니다.`,
     layout: "wide",
-    robots: "index,follow",
+    robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
     styles: `${portalSharedStyles}
     .hero { max-width: var(--panel-manage); padding: var(--space-12) 0 var(--space-16); }
     .hero h1 { margin-bottom: var(--space-6); }
@@ -74,7 +74,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     .service-disclosures h2, .service-disclosures dl { margin: 0; }
     .service-disclosures dl { display: grid; gap: var(--space-3); }
     .service-disclosures dt { color: var(--text-muted); font-size: var(--font-small); }
-    .service-disclosures dd { margin: var(--space-1) 0 0; }
+    .service-disclosures dd { margin: var(--space-2) 0 0; }
     .service-disclosures a { color: var(--text); }
     @media (max-width: 48rem) {
       .hero { padding: var(--space-8) 0 var(--space-12); }
