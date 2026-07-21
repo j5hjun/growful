@@ -38,8 +38,10 @@ function createFixture(logger?: AppOptions["logger"]) {
   const app = createApp({
     authorizationOrigin,
     logger,
+    oauthAccess: { mode: "public" },
     redirectOrigin,
     service,
+    smartThingsAppId: "growful-app",
   })
   apps.push(app)
   return { app, client, store }

@@ -34,6 +34,7 @@ printf '%s\n' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
   'SMARTTHINGS_API_URL=https://api.smartthings.com' \
   'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
+  'SMARTTHINGS_APP_ID=gateway-version-skew-app' \
   'SMARTTHINGS_AUTHORIZE_URL=https://api.smartthings.com/oauth/authorize' \
   'SMARTTHINGS_TOKEN_URL=https://api.smartthings.com/oauth/token' \
   'SMARTTHINGS_SCOPES=r:locations:* r:devices:$ r:devices:*' \

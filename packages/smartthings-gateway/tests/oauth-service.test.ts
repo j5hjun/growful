@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { InstalledAppIdSchema, type StoredTokens } from "../src/oauth/contracts.js"
+import {
+  InstalledAppIdSchema,
+  OAuthStateHashSchema,
+  type StoredTokens,
+} from "../src/oauth/contracts.js"
 import {
   OAuthConnectionRequiredError,
   OAuthScopeMismatchError,
@@ -61,6 +65,28 @@ describe("OAuthService", () => {
     // Then
     expect(authorizationUrl.searchParams.get("scope")).toBe("r:devices:$ x:devices:$")
     expect(fixture.store.states.size).toBe(1)
+  })
+
+  it("purges only OAuth states that have reached their retention deadline", async () => {
+    // Given
+    const fixture = createFixture()
+    const expiredState = OAuthStateHashSchema.parse("a".repeat(64))
+    const activeState = OAuthStateHashSchema.parse("b".repeat(64))
+    fixture.store.states.set(expiredState, {
+      expiresAt: new Date(now.getTime() - 1),
+      requestedScopes: ["r:devices:$"],
+    })
+    fixture.store.states.set(activeState, {
+      expiresAt: new Date(now.getTime() + 1),
+      requestedScopes: ["r:devices:$"],
+    })
+
+    // When
+    const purgedCount = await fixture.service.purgeExpiredAuthorizationStates()
+
+    // Then
+    expect(purgedCount).toBe(1)
+    expect([...fixture.store.states.keys()]).toEqual([activeState])
   })
 
   it("issues one Growful token for an authorized SmartThings connection", async () => {

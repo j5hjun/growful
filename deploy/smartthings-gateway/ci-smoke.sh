@@ -38,8 +38,11 @@ printf '%s\n' \
   'OAUTH_CLIENT_ID=gateway-ci-client' \
   'OAUTH_CLIENT_SECRET=gateway-ci-secret' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
+  'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-ci-beta","passwordHash":"1176116bf496de8e723bf66b3c09dd7534b9898bcdc91450e074513014df81a1"}]' \
+  'SERVICE_ACCESS_MODE=private_beta' \
   'SMARTTHINGS_API_URL=https://api.smartthings.com' \
   'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
+  'SMARTTHINGS_APP_ID=gateway-ci-smartthings-app' \
   'SMARTTHINGS_AUTHORIZE_URL=https://api.smartthings.com/oauth/authorize' \
   'SMARTTHINGS_TOKEN_URL=https://api.smartthings.com/oauth/token' \
   'TOKEN_ENCRYPTION_KEY=MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=' \
@@ -70,8 +73,13 @@ for attempt in {1..30}; do
 done
 
 test "$(curl --fail --silent --show-error http://127.0.0.1:8100/healthz)" = '{"status":"ok"}'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/)" = '200'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/manage)" = '200'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/robots.txt)" = '200'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/connection)" = '401'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '200'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '401'
+test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '200'
+test "$(curl --silent --show-error --header 'Content-Type: application/json' --data '{"messageType":"EVENT"}' --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/smartthings/webhook)" = '401'
 
 permission_selections=(
   'read'
@@ -89,7 +97,7 @@ for device_range in selected all; do
     for permission in $permission_selection; do
       payload+="&devicePermissions=$permission"
     done
-    test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "$payload" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+    test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "$payload" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
     ((valid_selection_count += 1))
   done
 done
@@ -111,20 +119,20 @@ resource_selections=(
   'rulePermissions=read&rulePermissions=write'
 )
 for resource_selection in "${resource_selections[@]}"; do
-  test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=selected&$resource_selection" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=selected&$resource_selection" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
   ((valid_selection_count += 1))
 done
 
 every_resource_permissions='devicePermissions=read&devicePermissions=control&devicePermissions=write&hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write'
 for device_range in selected all; do
-  test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range&$every_resource_permissions" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range&$every_resource_permissions" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
   ((valid_selection_count += 1))
 done
 test "$valid_selection_count" = '30'
 
 invalid_selection_count=0
 for device_range in selected all; do
-  test "$(curl --silent --show-error --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range" --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range" --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
   grep --quiet 'role="alert"' "$invalid_selection_response"
   ((invalid_selection_count += 1))
 done

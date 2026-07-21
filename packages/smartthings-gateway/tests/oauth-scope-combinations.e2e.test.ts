@@ -132,7 +132,13 @@ function createFixture() {
     stateGenerator: () => "exhaustive-selection-test-state",
     store: new MemoryOAuthStore(),
   })
-  const app = createApp({ authorizationOrigin, redirectOrigin, service })
+  const app = createApp({
+    authorizationOrigin,
+    oauthAccess: { mode: "public" },
+    redirectOrigin,
+    service,
+    smartThingsAppId: "growful-app",
+  })
   apps.push(app)
   return app
 }

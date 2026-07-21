@@ -20,8 +20,8 @@
     "lint:fix": "biome check --write .",
     "migrate": "node dist/migrate.js",
     "start": "node dist/main.js",
-    "test": "vitest run --exclude tests/postgres-oauth-store.integration.test.ts",
-    "test:integration": "vitest run tests/postgres-oauth-store.integration.test.ts",
+    "test": "vitest run --exclude tests/postgres-oauth-store.integration.test.ts --exclude tests/oauth-state-retention.integration.test.ts",
+    "test:integration": "vitest run --no-file-parallelism tests/postgres-oauth-store.integration.test.ts tests/oauth-state-retention.integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

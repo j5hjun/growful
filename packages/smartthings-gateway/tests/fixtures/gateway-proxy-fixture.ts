@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify"
-import { createApp, registerSmartThingsProxy } from "../../src/http/app.js"
+import { createApp } from "../../src/http/app.js"
 import { SmartThingsProxy } from "../../src/http/smartthings-proxy.js"
+import { registerSmartThingsProxy } from "../../src/http/smartthings-proxy-route.js"
 import { OAuthService } from "../../src/oauth/oauth-service.js"
 import type { FakeSmartThingsApi } from "./fake-smartthings-api.js"
 import { FakeSmartThingsClient } from "./fake-smartthings-client.js"
@@ -48,8 +49,10 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
   )
   const app = createApp({
     authorizationOrigin: "https://api.smartthings.test",
+    oauthAccess: { mode: "public" },
     redirectOrigin: "https://smartthings.growful.click",
     service,
+    smartThingsAppId: "growful-app",
   })
   registerSmartThingsProxy(app, { proxy, service })
   options.apps.push(app)

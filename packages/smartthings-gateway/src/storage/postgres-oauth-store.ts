@@ -107,7 +107,7 @@ export class PostgresOAuthStore implements OAuthStore {
       .executeTakeFirst()
     if (
       state === undefined ||
-      state.expiresAt.getTime() < now.getTime() ||
+      state.expiresAt.getTime() <= now.getTime() ||
       state.requestedScopes.length === 0
     ) {
       return null
@@ -122,6 +122,14 @@ export class PostgresOAuthStore implements OAuthStore {
       .returning("installedAppId")
       .executeTakeFirst()
     return deleted !== undefined
+  }
+
+  async deleteExpiredStates(now: Date): Promise<number> {
+    const result = await this.database
+      .deleteFrom("oauthStates")
+      .where("expiresAt", "<=", now)
+      .executeTakeFirst()
+    return Number(result.numDeletedRows)
   }
 
   async getTokens(
@@ -164,18 +172,13 @@ export class PostgresOAuthStore implements OAuthStore {
     requestedScopes: readonly SmartThingsScope[],
   ): Promise<void> {
     const serializedScopes = serializeSmartThingsScopes(requestedScopes)
-    await this.database.transaction().execute(async (transaction) => {
-      await transaction.deleteFrom("oauthStates").where("expiresAt", "<", new Date()).execute()
-      await transaction
-        .insertInto("oauthStates")
-        .values({ expiresAt, requestedScopes: serializedScopes, stateHash })
-        .onConflict((conflict) =>
-          conflict
-            .column("stateHash")
-            .doUpdateSet({ expiresAt, requestedScopes: serializedScopes }),
-        )
-        .execute()
-    })
+    await this.database
+      .insertInto("oauthStates")
+      .values({ expiresAt, requestedScopes: serializedScopes, stateHash })
+      .onConflict((conflict) =>
+        conflict.column("stateHash").doUpdateSet({ expiresAt, requestedScopes: serializedScopes }),
+      )
+      .execute()
   }
 
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {

@@ -81,13 +81,23 @@ export class MemoryOAuthStore implements OAuthStore {
   ): Promise<readonly SmartThingsScope[] | null> {
     const state = this.states.get(stateHash)
     this.states.delete(stateHash)
-    return state !== undefined && state.expiresAt.getTime() >= now.getTime()
+    return state !== undefined && state.expiresAt.getTime() > now.getTime()
       ? state.requestedScopes
       : null
   }
 
   async deleteConnection(installedAppId: InstalledAppId): Promise<boolean> {
     return this.connections.delete(installedAppId)
+  }
+
+  async deleteExpiredStates(now: Date): Promise<number> {
+    let deletedCount = 0
+    for (const [stateHash, state] of this.states) {
+      if (state.expiresAt.getTime() <= now.getTime() && this.states.delete(stateHash)) {
+        deletedCount += 1
+      }
+    }
+    return deletedCount
   }
 
   async getTokens(installedAppId: InstalledAppId): Promise<StoredTokens | null> {

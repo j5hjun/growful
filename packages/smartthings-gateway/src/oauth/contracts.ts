@@ -88,6 +88,7 @@ export interface OAuthStore {
   claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null>
   consumeState(stateHash: OAuthStateHash, now: Date): Promise<readonly SmartThingsScope[] | null>
   deleteConnection(installedAppId: InstalledAppId): Promise<boolean>
+  deleteExpiredStates(now: Date): Promise<number>
   getTokens(installedAppId: InstalledAppId): Promise<StoredTokens | null>
   recordRefreshFailure(failure: RefreshFailure): Promise<void>
   replaceGrowfulToken(

@@ -102,6 +102,9 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   await sql`alter table oauth_states add column if not exists requested_scopes text not null default ''`.execute(
     database,
   )
+  await sql`create index if not exists oauth_states_expires_at_index on oauth_states (expires_at)`.execute(
+    database,
+  )
   // Keep the multi-connection table outside migration history so the previous image can roll back.
   // The previous image sees an empty oauth_tokens table and therefore fails closed as disconnected.
   await sql`

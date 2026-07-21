@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { SmartThingsScope } from "../oauth/smartthings-scope.js"
-import { renderOAuthPage } from "./oauth-page.js"
+import { renderGatewayPage } from "./oauth-page.js"
 
 const deviceRangeSchema = z.enum(["selected", "all"])
 const devicePermissions = ["read", "control", "write"] as const
@@ -143,7 +143,7 @@ export function renderOAuthScopeSelection(
   const permissionError = showSelectionError
     ? '<p class="error" id="permission-error" role="alert"><span class="phrase">선택값을 확인하세요.</span> <span class="phrase">권한을 하나 이상 선택하세요.</span></p>'
     : ""
-  return renderOAuthPage({
+  return renderGatewayPage({
     body: `
     <h1>SmartThings 권한 연결</h1>
     <p class="intro"><span>Gateway에 허용할 리소스와 기능을 선택하세요.</span><span><span class="phrase">선택한 디바이스만 범위의 실제 대상은</span> <span class="phrase">SmartThings 화면에서 지정합니다.</span></span></p>

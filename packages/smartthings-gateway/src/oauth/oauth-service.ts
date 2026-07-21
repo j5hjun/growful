@@ -110,6 +110,10 @@ export class OAuthService {
     return (await this.requireTokens(installedAppId)).accessToken
   }
 
+  async purgeExpiredAuthorizationStates(): Promise<number> {
+    return this.options.store.deleteExpiredStates(this.now())
+  }
+
   async rotateGrowfulToken(installedAppId: InstalledAppId): Promise<GrowfulToken> {
     const growfulToken = this.growfulTokenGenerator()
     const replaced = await this.options.store.replaceGrowfulToken(
@@ -128,6 +132,10 @@ export class OAuthService {
     if (!deleted) {
       throw new OAuthConnectionRequiredError()
     }
+  }
+
+  async forgetConnection(installedAppId: InstalledAppId): Promise<void> {
+    await this.options.store.deleteConnection(installedAppId)
   }
 
   async refreshDueConnections(): Promise<RefreshBatchResult> {

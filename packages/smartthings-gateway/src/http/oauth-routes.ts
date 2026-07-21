@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyReply } from "fastify"
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { z } from "zod"
 import type { OAuthService } from "../oauth/oauth-service.js"
+import { matchesPrivateBetaInvite, type PrivateBetaInvite } from "../private-beta/invite.js"
 import { renderOAuthCompletion } from "./oauth-completion.js"
 import {
   type OAuthDeviceRange,
@@ -16,9 +17,17 @@ const callbackQuerySchema = z.union([
 
 export type OAuthRouteOptions = {
   readonly authorizationOrigin: string
+  readonly oauthAccess: OAuthAccessPolicy
   readonly redirectOrigin: string
   readonly service: OAuthService
 }
+
+export type OAuthAccessPolicy =
+  | { readonly mode: "public" }
+  | {
+      readonly invites: readonly PrivateBetaInvite[]
+      readonly mode: "private_beta"
+    }
 
 export class InvalidOAuthOriginError extends Error {
   override readonly name = "InvalidOAuthOriginError"
@@ -58,16 +67,43 @@ function sendOAuthScopeSelectionPage(
     )
 }
 
+function requireOAuthStartAccess(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  access: OAuthAccessPolicy,
+) {
+  if (
+    access.mode === "public" ||
+    matchesPrivateBetaInvite(request.headers.authorization, access.invites)
+  ) {
+    return undefined
+  }
+  return reply
+    .header("Cache-Control", "no-store")
+    .header("WWW-Authenticate", 'Basic realm="Growful private beta", charset="UTF-8"')
+    .status(401)
+    .send({ error: "private_beta_access_required" as const })
+}
+
 export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOptions): void {
-  app.get("/oauth/start", async (_request, reply) =>
-    sendOAuthScopeSelectionPage(reply, options.authorizationOrigin),
+  app.get(
+    "/oauth/start",
+    {
+      onRequest: async (request, reply) =>
+        requireOAuthStartAccess(request, reply, options.oauthAccess),
+    },
+    async (_request, reply) => sendOAuthScopeSelectionPage(reply, options.authorizationOrigin),
   )
 
   app.post(
     "/oauth/start",
     {
       bodyLimit: 4_096,
-      onRequest: async (request) => {
+      onRequest: async (request, reply) => {
+        const accessDenied = requireOAuthStartAccess(request, reply, options.oauthAccess)
+        if (accessDenied !== undefined) {
+          return accessDenied
+        }
         if (request.headers.origin !== options.redirectOrigin) {
           throw new InvalidOAuthOriginError()
         }
