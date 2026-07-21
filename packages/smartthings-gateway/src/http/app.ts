@@ -70,7 +70,7 @@ export function createApp(options: AppOptions): FastifyInstance {
         containsSensitiveRequestData(new URL(request.url, "http://localhost").pathname),
     }),
     logger: options.logger ?? false,
-    trustProxy: ["127.0.0.1", "::1"],
+    trustProxy: 1,
   })
   app.addContentTypeParser<Buffer>(
     "application/x-www-form-urlencoded",

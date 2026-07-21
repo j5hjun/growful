@@ -92,6 +92,12 @@ test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}'
 test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '200'
 test "$(curl --silent --show-error --header 'Content-Type: application/json' --data '{"messageType":"EVENT"}' --output /dev/null --write-out '%{http_code}' "$gateway_origin/smartthings/webhook")" = '401'
 
+for attempt in {1..5}; do
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:wrong-password' --header 'X-Forwarded-For: 192.0.2.10' --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '401'
+done
+test "$(curl --silent --show-error --user 'gateway-ci-beta:wrong-password' --header 'X-Forwarded-For: 192.0.2.10' --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '429'
+test "$(curl --silent --show-error --user 'gateway-ci-beta:wrong-password' --header 'X-Forwarded-For: 192.0.2.11' --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '401'
+
 permission_selections=(
   'read'
   'control'
