@@ -2,7 +2,12 @@ import type { FastifyInstance, FastifyReply } from "fastify"
 import { z } from "zod"
 import type { OAuthService } from "../oauth/oauth-service.js"
 import { renderOAuthCompletion } from "./oauth-completion.js"
-import { parseOAuthScopeSelection, renderOAuthScopeSelection } from "./oauth-scope-selection.js"
+import {
+  type OAuthDeviceRange,
+  parseOAuthDeviceRangeSelection,
+  parseOAuthScopeSelection,
+  renderOAuthScopeSelection,
+} from "./oauth-scope-selection.js"
 
 const callbackQuerySchema = z.union([
   z.object({ code: z.string().min(1), state: z.string().min(1) }),
@@ -26,7 +31,11 @@ export class InvalidOAuthOriginError extends Error {
 function sendOAuthScopeSelectionPage(
   reply: FastifyReply,
   authorizationOrigin: string,
-  options: { readonly showSelectionError: boolean; readonly statusCode: 200 | 400 } = {
+  options: {
+    readonly deviceRange?: OAuthDeviceRange
+    readonly showSelectionError: boolean
+    readonly statusCode: 200 | 400
+  } = {
     showSelectionError: false,
     statusCode: 200,
   },
@@ -41,7 +50,12 @@ function sendOAuthScopeSelectionPage(
     .header("X-Frame-Options", "DENY")
     .type("text/html; charset=utf-8")
     .status(options.statusCode)
-    .send(renderOAuthScopeSelection(options.showSelectionError))
+    .send(
+      renderOAuthScopeSelection({
+        deviceRange: options.deviceRange ?? "selected",
+        showSelectionError: options.showSelectionError,
+      }),
+    )
 }
 
 export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOptions): void {
@@ -64,6 +78,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
       const scopes = parseOAuthScopeSelection(request.body)
       if (scopes === null) {
         return sendOAuthScopeSelectionPage(reply, options.authorizationOrigin, {
+          deviceRange: parseOAuthDeviceRangeSelection(request.body) ?? "selected",
           showSelectionError: true,
           statusCode: 400,
         })

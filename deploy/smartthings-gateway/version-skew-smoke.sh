@@ -119,6 +119,39 @@ test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gat
 test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
   --tuples-only --no-align --command "select count(*) from oauth_tokens")" = "0"
 start_and_verify "$candidate" "$candidate_image" "$candidate_environment_file"
+rollback_state="$(docker exec "$candidate" node -e '
+fetch("http://127.0.0.1:8100/oauth/start", {
+  body: "deviceRange=selected&scenePermissions=read",
+  headers: {
+    "content-type": "application/x-www-form-urlencoded",
+    origin: "https://smartthings.growful.click",
+  },
+  method: "POST",
+  redirect: "manual",
+}).then((response) => {
+  const location = response.headers.get("location")
+  if (response.status !== 302 || location === null) process.exit(1)
+  const state = new URL(location).searchParams.get("state")
+  if (state === null) process.exit(1)
+  process.stdout.write(state)
+}).catch(() => process.exit(1))
+')"
+test -n "$rollback_state"
+test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --tuples-only --no-align \
+  --command "select count(*) from oauth_states where requested_scopes = 'r:scenes:*'")" = "1"
 docker rm --force "$candidate" >/dev/null
 
 start_and_verify "$previous" "$previous_image" "$rollback_environment_file"
+docker exec "$previous" node -e '
+const state = process.argv[1]
+fetch(`http://127.0.0.1:8100/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`)
+  .then(async (response) => {
+    const body = await response.text()
+    if (response.status !== 400 || body !== "{\"error\":\"authorization_denied\"}") process.exit(1)
+  })
+  .catch(() => process.exit(1))
+' -- "$rollback_state"
+test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --tuples-only --no-align \
+  --command "select count(*) from oauth_states where requested_scopes = 'r:scenes:*'")" = "0"
