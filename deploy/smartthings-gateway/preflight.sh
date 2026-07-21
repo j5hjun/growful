@@ -65,6 +65,8 @@ required_keys=(
   SMARTTHINGS_API_TIMEOUT_SECONDS
   SMARTTHINGS_API_URL
   SMARTTHINGS_APP_ID
+  SMARTTHINGS_AUTHORIZE_URL
+  SMARTTHINGS_TOKEN_URL
   TOKEN_ENCRYPTION_KEY
 )
 for key in "${required_keys[@]}"; do
@@ -80,16 +82,18 @@ for key in "${required_keys[@]}"; do
 done
 
 service_access_mode="$(sed -n 's/^SERVICE_ACCESS_MODE=//p' "$environment_file")"
+access_keys=(
+  PUBLIC_OPERATOR_NAME
+  PUBLIC_PRIVACY_POLICY_URL
+  PUBLIC_SUPPORT_EMAIL
+  PUBLIC_TERMS_URL
+)
 case "$service_access_mode" in
   private_beta)
-    access_keys=(PRIVATE_BETA_INVITES_JSON)
+    access_keys+=(PRIVATE_BETA_INVITES_JSON)
     ;;
   public)
-    access_keys=(
-      PUBLIC_OPERATOR_NAME
-      PUBLIC_PRIVACY_POLICY_URL
-      PUBLIC_SUPPORT_EMAIL
-      PUBLIC_TERMS_URL
+    access_keys+=(
       SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE
       SMARTTHINGS_PUBLIC_USE_APPROVED_AT
     )
@@ -107,19 +111,19 @@ for key in "${access_keys[@]}"; do
   fi
 done
 
+privacy_policy_url="$(sed -n 's/^PUBLIC_PRIVACY_POLICY_URL=//p' "$environment_file")"
+terms_url="$(sed -n 's/^PUBLIC_TERMS_URL=//p' "$environment_file")"
+support_email="$(sed -n 's/^PUBLIC_SUPPORT_EMAIL=//p' "$environment_file")"
+if [[ ! "$privacy_policy_url" =~ ^https:// ]] || [[ ! "$terms_url" =~ ^https:// ]]; then
+  printf 'service policy URLs must use HTTPS\n' >&2
+  exit 1
+fi
+if [[ ! "$support_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
+  printf 'PUBLIC_SUPPORT_EMAIL must be an email address\n' >&2
+  exit 1
+fi
 if [[ "$service_access_mode" == 'public' ]]; then
-  privacy_policy_url="$(sed -n 's/^PUBLIC_PRIVACY_POLICY_URL=//p' "$environment_file")"
-  terms_url="$(sed -n 's/^PUBLIC_TERMS_URL=//p' "$environment_file")"
-  support_email="$(sed -n 's/^PUBLIC_SUPPORT_EMAIL=//p' "$environment_file")"
   approved_at="$(sed -n 's/^SMARTTHINGS_PUBLIC_USE_APPROVED_AT=//p' "$environment_file")"
-  if [[ ! "$privacy_policy_url" =~ ^https:// ]] || [[ ! "$terms_url" =~ ^https:// ]]; then
-    printf 'public policy URLs must use HTTPS\n' >&2
-    exit 1
-  fi
-  if [[ ! "$support_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
-    printf 'PUBLIC_SUPPORT_EMAIL must be an email address\n' >&2
-    exit 1
-  fi
   if [[ ! "$approved_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
     printf 'SMARTTHINGS_PUBLIC_USE_APPROVED_AT must use YYYY-MM-DD\n' >&2
     exit 1
@@ -162,6 +166,24 @@ if [[ "$smartthings_api_url" != 'https://api.smartthings.com' ]]; then
   printf 'SMARTTHINGS_API_URL must be the fixed production SmartThings API origin\n' >&2
   exit 1
 fi
+
+smartthings_authorize_url="$(sed -n 's/^SMARTTHINGS_AUTHORIZE_URL=//p' "$environment_file")"
+case "$smartthings_authorize_url" in
+  https://api.smartthings.com/oauth/authorize | https://api.smartthings.com/v1/oauth/authorize) ;;
+  *)
+    printf 'SMARTTHINGS_AUTHORIZE_URL must use a supported production SmartThings endpoint\n' >&2
+    exit 1
+    ;;
+esac
+
+smartthings_token_url="$(sed -n 's/^SMARTTHINGS_TOKEN_URL=//p' "$environment_file")"
+case "$smartthings_token_url" in
+  https://api.smartthings.com/oauth/token | https://api.smartthings.com/v1/oauth/token) ;;
+  *)
+    printf 'SMARTTHINGS_TOKEN_URL must use a supported production SmartThings endpoint\n' >&2
+    exit 1
+    ;;
+esac
 
 redirect_uri="$(sed -n 's/^OAUTH_REDIRECT_URI=//p' "$environment_file")"
 if [[ "$redirect_uri" != 'https://smartthings.growful.click/oauth/callback' ]]; then

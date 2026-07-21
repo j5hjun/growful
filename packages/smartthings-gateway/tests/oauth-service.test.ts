@@ -5,6 +5,7 @@ import {
   type StoredTokens,
 } from "../src/oauth/contracts.js"
 import {
+  InvalidOAuthStateError,
   OAuthConnectionRequiredError,
   OAuthScopeMismatchError,
   OAuthService,
@@ -12,6 +13,7 @@ import {
 import { GrowfulTokenSchema, hashGrowfulToken } from "../src/security/growful-token.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
+import { oauthAuthorization } from "./fixtures/oauth-access.js"
 
 const now = new Date("2026-07-19T00:00:00.000Z")
 
@@ -57,10 +59,9 @@ describe("OAuthService", () => {
     const fixture = createFixture()
 
     // When
-    const authorizationUrl = await fixture.service.startAuthorization([
-      "r:devices:$",
-      "x:devices:$",
-    ])
+    const authorizationUrl = await fixture.service.startAuthorization(
+      oauthAuthorization(["r:devices:$", "x:devices:$"]),
+    )
 
     // Then
     expect(authorizationUrl.searchParams.get("scope")).toBe("r:devices:$ x:devices:$")
@@ -73,11 +74,17 @@ describe("OAuthService", () => {
     const expiredState = OAuthStateHashSchema.parse("a".repeat(64))
     const activeState = OAuthStateHashSchema.parse("b".repeat(64))
     fixture.store.states.set(expiredState, {
+      consentedAt: now,
       expiresAt: new Date(now.getTime() - 1),
+      policyVersion: "test-policy",
+      privateBetaUsername: null,
       requestedScopes: ["r:devices:$"],
     })
     fixture.store.states.set(activeState, {
+      consentedAt: now,
       expiresAt: new Date(now.getTime() + 1),
+      policyVersion: "test-policy",
+      privateBetaUsername: null,
       requestedScopes: ["r:devices:$"],
     })
 
@@ -92,7 +99,9 @@ describe("OAuthService", () => {
   it("issues one Growful token for an authorized SmartThings connection", async () => {
     // Given
     const fixture = createFixture()
-    const authorizationUrl = await fixture.service.startAuthorization(["r:devices:*"])
+    const authorizationUrl = await fixture.service.startAuthorization(
+      oauthAuthorization(["r:devices:*"]),
+    )
     const state = authorizationUrl.searchParams.get("state") ?? ""
     fixture.client.exchangeGrant = {
       ...fixture.client.exchangeGrant,
@@ -110,16 +119,82 @@ describe("OAuthService", () => {
     expect(completion.connection.grantedScopes).toEqual(["r:devices:*"])
   })
 
+  it("revokes a private beta connection after its invitation is removed", async () => {
+    // Given
+    const client = new FakeSmartThingsClient()
+    client.exchangeGrant = { ...client.exchangeGrant, scopes: ["r:devices:*"] }
+    const store = new MemoryOAuthStore()
+    const createPrivateService = (privateBetaUsernames: readonly string[]) =>
+      new OAuthService({
+        accessPolicy: { policyVersion: "test-policy", privateBetaUsernames },
+        client,
+        growfulTokenGenerator: () => testGrowfulToken(1),
+        now: () => now,
+        refreshBeforeExpiryMs: 60 * 60 * 1_000,
+        refreshLeaseMs: 60_000,
+        stateGenerator: () => "private-beta-revocation-state",
+        store,
+      })
+    const activeService = createPrivateService(["private-user"])
+    const authorizationUrl = await activeService.startAuthorization(
+      oauthAuthorization(["r:devices:*"], "private-user"),
+    )
+    await activeService.completeAuthorization(
+      "authorization-code",
+      authorizationUrl.searchParams.get("state") ?? "",
+    )
+    const restartedService = createPrivateService(["second-user"])
+
+    // When
+    const revokedCount = await restartedService.revokeUnauthorizedConnections()
+
+    // Then
+    expect(revokedCount).toBe(1)
+    await expect(restartedService.authenticate(testGrowfulToken(1))).resolves.toBeNull()
+    await expect(store.getTokens(client.exchangeGrant.installedAppId)).resolves.toBeNull()
+  })
+
+  it("rejects an unfinished authorization after its invitation is removed", async () => {
+    // Given
+    const client = new FakeSmartThingsClient()
+    client.exchangeGrant = { ...client.exchangeGrant, scopes: ["r:devices:*"] }
+    const store = new MemoryOAuthStore()
+    const createPrivateService = (privateBetaUsernames: readonly string[]) =>
+      new OAuthService({
+        accessPolicy: { policyVersion: "test-policy", privateBetaUsernames },
+        client,
+        now: () => now,
+        refreshBeforeExpiryMs: 60 * 60 * 1_000,
+        refreshLeaseMs: 60_000,
+        stateGenerator: () => "removed-invite-pending-state",
+        store,
+      })
+    const authorizationUrl = await createPrivateService(["private-user"]).startAuthorization(
+      oauthAuthorization(["r:devices:*"], "private-user"),
+    )
+
+    // When
+    const completion = createPrivateService(["second-user"]).completeAuthorization(
+      "authorization-code",
+      authorizationUrl.searchParams.get("state") ?? "",
+    )
+
+    // Then
+    await expect(completion).rejects.toBeInstanceOf(InvalidOAuthStateError)
+    expect(client.exchangedCodes).toEqual([])
+    await expect(store.getTokens(client.exchangeGrant.installedAppId)).resolves.toBeNull()
+  })
+
   it("reauthorizes the same connection and invalidates its previous Growful token", async () => {
     // Given
     const fixture = createFixture()
     fixture.client.exchangeGrant = { ...fixture.client.exchangeGrant, scopes: ["r:devices:*"] }
-    const firstUrl = await fixture.service.startAuthorization(["r:devices:*"])
+    const firstUrl = await fixture.service.startAuthorization(oauthAuthorization(["r:devices:*"]))
     await fixture.service.completeAuthorization(
       "first-code",
       firstUrl.searchParams.get("state") ?? "",
     )
-    const secondUrl = await fixture.service.startAuthorization(["r:devices:*"])
+    const secondUrl = await fixture.service.startAuthorization(oauthAuthorization(["r:devices:*"]))
 
     // When
     const completion = await fixture.service.completeAuthorization(
@@ -209,7 +284,9 @@ describe("OAuthService", () => {
       installedAppId: existing.installedAppId,
       scopes: ["r:devices:*"],
     }
-    const authorizationUrl = await fixture.service.startAuthorization(["r:devices:$"])
+    const authorizationUrl = await fixture.service.startAuthorization(
+      oauthAuthorization(["r:devices:$"]),
+    )
 
     // When
     const completion = fixture.service.completeAuthorization(

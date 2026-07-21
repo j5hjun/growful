@@ -6,6 +6,7 @@ import { OAuthService } from "../../src/oauth/oauth-service.js"
 import type { FakeSmartThingsApi } from "./fake-smartthings-api.js"
 import { FakeSmartThingsClient } from "./fake-smartthings-client.js"
 import { MemoryOAuthStore, memoryStoreGrowfulToken } from "./memory-oauth-store.js"
+import { publicOAuthAccess } from "./oauth-access.js"
 
 export const gatewayAuthorization = `Bearer ${memoryStoreGrowfulToken}`
 export const now = new Date("2026-07-19T00:00:00.000Z")
@@ -49,7 +50,7 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
   )
   const app = createApp({
     authorizationOrigin: "https://api.smartthings.test",
-    oauthAccess: { mode: "public" },
+    oauthAccess: publicOAuthAccess,
     redirectOrigin: "https://smartthings.growful.click",
     service,
     smartThingsAppId: "growful-app",

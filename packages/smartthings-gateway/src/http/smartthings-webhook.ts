@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import type { FastifyInstance } from "fastify"
 import ky from "ky"
 import { z } from "zod"
@@ -39,6 +40,9 @@ const messageTypeSchema = z.object({
   messageType: z.enum(["CONFIRMATION", "EVENT"]),
 })
 const rawBodySchema = z.instanceof(Buffer)
+const confirmationRetryIntervalMs = 60_000
+const confirmationCacheLifetimeMs = 10 * 60_000
+const maximumCachedConfirmations = 32
 
 export type SmartThingsConfirmationRequester = (url: URL) => Promise<void>
 
@@ -63,6 +67,57 @@ export class SmartThingsConfirmationRequestError extends Error {
 
   constructor() {
     super("SmartThings confirmation request failed")
+  }
+}
+
+export class SmartThingsConfirmationRateLimitError extends Error {
+  override readonly name = "SmartThingsConfirmationRateLimitError"
+
+  constructor(readonly retryAfterSeconds: number) {
+    super("SmartThings confirmation request is rate limited")
+  }
+}
+
+class SmartThingsConfirmationGate {
+  private readonly completed = new Map<string, number>()
+  private inFlight = false
+  private nextAttemptAtMs = 0
+
+  async confirm(
+    confirmationUrl: URL,
+    now: Date,
+    requester: SmartThingsConfirmationRequester,
+  ): Promise<void> {
+    const nowMs = now.getTime()
+    this.prune(nowMs)
+    const confirmationHash = createHash("sha256").update(confirmationUrl.toString()).digest("hex")
+    if (this.completed.has(confirmationHash)) return
+    if (this.inFlight || nowMs < this.nextAttemptAtMs) {
+      const retryAfterMs = Math.max(1_000, this.nextAttemptAtMs - nowMs)
+      throw new SmartThingsConfirmationRateLimitError(Math.ceil(retryAfterMs / 1_000))
+    }
+    this.inFlight = true
+    this.nextAttemptAtMs = nowMs + confirmationRetryIntervalMs
+    try {
+      await requester(confirmationUrl)
+      while (this.completed.size >= maximumCachedConfirmations) {
+        const oldestHash = this.completed.keys().next().value
+        if (oldestHash === undefined) break
+        this.completed.delete(oldestHash)
+      }
+      this.completed.set(confirmationHash, nowMs + confirmationCacheLifetimeMs)
+    } catch {
+      // no-excuse-ok: catch — external client errors are intentionally sanitized at this boundary.
+      throw new SmartThingsConfirmationRequestError()
+    } finally {
+      this.inFlight = false
+    }
+  }
+
+  private prune(nowMs: number): void {
+    for (const [confirmationHash, expiresAtMs] of this.completed) {
+      if (expiresAtMs <= nowMs) this.completed.delete(confirmationHash)
+    }
   }
 }
 
@@ -141,6 +196,7 @@ export function registerSmartThingsWebhookRoute(
   const publicKeyProvider =
     options.publicKeyProvider ?? new SmartThingsWebhookPublicKeyClient(now).getPublicKey
   const confirmationRequester = options.confirmationRequester ?? requestSmartThingsConfirmation
+  const confirmationGate = new SmartThingsConfirmationGate()
 
   app.post("/smartthings/webhook", async (request, reply) => {
     const body = rawBodySchema.parse(request.body)
@@ -154,11 +210,7 @@ export function registerSmartThingsWebhookRoute(
           message.confirmationData.appId,
           message.confirmationData.confirmationUrl,
         )
-        try {
-          await confirmationRequester(confirmationUrl)
-        } catch {
-          throw new SmartThingsConfirmationRequestError()
-        }
+        await confirmationGate.confirm(confirmationUrl, now(), confirmationRequester)
         return reply.header("Cache-Control", "no-store").send({})
       }
       case "EVENT": {

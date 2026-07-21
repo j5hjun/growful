@@ -4,6 +4,7 @@ import { OAuthService } from "../src/oauth/oauth-service.js"
 import type { SmartThingsScope } from "../src/oauth/smartthings-scope.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
+import { publicOAuthAccess } from "./fixtures/oauth-access.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const authorizationOrigin = "https://api.smartthings.test"
@@ -134,7 +135,7 @@ function createFixture() {
   })
   const app = createApp({
     authorizationOrigin,
-    oauthAccess: { mode: "public" },
+    oauthAccess: publicOAuthAccess,
     redirectOrigin,
     service,
     smartThingsAppId: "growful-app",
@@ -161,7 +162,7 @@ describe("SmartThings OAuth scope combinations", () => {
           origin: redirectOrigin,
         },
         method: "POST",
-        payload,
+        payload: `${payload}&policyConsent=accepted`,
         url: "/oauth/start",
       })
 
@@ -187,7 +188,7 @@ describe("SmartThings OAuth scope combinations", () => {
         origin: redirectOrigin,
       },
       method: "POST",
-      payload: `deviceRange=${deviceRange}`,
+      payload: `deviceRange=${deviceRange}&policyConsent=accepted`,
       url: "/oauth/start",
     })
 

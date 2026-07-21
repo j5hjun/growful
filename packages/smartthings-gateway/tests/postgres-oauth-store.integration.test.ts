@@ -10,6 +10,7 @@ import {
 import { GrowfulTokenSchema, hashGrowfulToken } from "../src/security/growful-token.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
+import { oauthAuthorization } from "./fixtures/oauth-access.js"
 
 const testEnvironmentSchema = z.object({ TEST_DATABASE_URL: z.url() })
 const { TEST_DATABASE_URL } = testEnvironmentSchema.parse(process.env)
@@ -38,6 +39,7 @@ function growfulToken(index: number) {
 async function saveAuthorization(index: number) {
   const tokenGrant = grant(index)
   await store.saveTokens({
+    authorization: oauthAuthorization(["r:devices:*"]),
     grant: tokenGrant,
     growfulTokenCreatedAt: now,
     growfulTokenHash: hashGrowfulToken(growfulToken(index)),
@@ -74,14 +76,15 @@ describe("PostgresOAuthStore", () => {
       "r:rules:*",
       "w:rules:*",
     ] as const
-    await store.saveState(stateHash, new Date(now.getTime() + 60_000), requestedScopes)
+    const authorization = oauthAuthorization(requestedScopes)
+    await store.saveState(stateHash, new Date(now.getTime() + 60_000), authorization)
 
     // When
     const first = await store.consumeState(stateHash, now)
     const replay = await store.consumeState(stateHash, now)
 
     // Then
-    expect(first).toEqual(requestedScopes)
+    expect(first).toEqual(authorization)
     expect(replay).toBeNull()
   })
 
@@ -123,9 +126,9 @@ describe("PostgresOAuthStore", () => {
     expect(rows).toHaveLength(2)
     expect(rows[0]?.accessTokenCiphertext).not.toContain(first.accessToken)
     expect(rows[1]?.refreshTokenCiphertext).not.toContain(second.refreshToken)
-    await expect(store.authenticate(hashGrowfulToken(growfulToken(1)))).resolves.toBe(
-      first.installedAppId,
-    )
+    await expect(store.authenticate(hashGrowfulToken(growfulToken(1)))).resolves.toMatchObject({
+      installedAppId: first.installedAppId,
+    })
     await expect(store.getTokens(second.installedAppId)).resolves.toMatchObject({
       accessToken: second.accessToken,
       refreshToken: second.refreshToken,
@@ -139,6 +142,7 @@ describe("PostgresOAuthStore", () => {
 
     // When
     await store.saveTokens({
+      authorization: oauthAuthorization(["r:devices:*"]),
       grant: { ...first, accessToken: "reauthorized-access", refreshToken: "reauthorized-refresh" },
       growfulTokenCreatedAt: now,
       growfulTokenHash: hashGrowfulToken(growfulToken(3)),
@@ -148,9 +152,9 @@ describe("PostgresOAuthStore", () => {
 
     // Then
     await expect(store.authenticate(hashGrowfulToken(growfulToken(1)))).resolves.toBeNull()
-    await expect(store.authenticate(hashGrowfulToken(growfulToken(3)))).resolves.toBe(
-      first.installedAppId,
-    )
+    await expect(store.authenticate(hashGrowfulToken(growfulToken(3)))).resolves.toMatchObject({
+      installedAppId: first.installedAppId,
+    })
     await expect(store.getTokens(second.installedAppId)).resolves.toMatchObject({
       accessToken: second.accessToken,
       refreshToken: second.refreshToken,

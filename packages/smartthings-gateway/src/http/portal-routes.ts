@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify"
+import type { OAuthAccessPolicy } from "./oauth-routes.js"
 import { portalClientScript } from "./portal-client.js"
 import { renderPortalHome } from "./portal-home.js"
 import { renderPortalManagement } from "./portal-manage.js"
@@ -20,7 +21,7 @@ function sendPortalPage(reply: FastifyReply, html: string, contentSecurityPolicy
     .send(html)
 }
 
-export function registerPortalRoutes(app: FastifyInstance): void {
+export function registerPortalRoutes(app: FastifyInstance, access: OAuthAccessPolicy): void {
   app.get("/robots.txt", async (_request, reply) =>
     reply
       .header("Cache-Control", "public, max-age=3600")
@@ -29,7 +30,7 @@ export function registerPortalRoutes(app: FastifyInstance): void {
       .send("User-agent: *\nAllow: /\n"),
   )
   app.get("/", async (_request, reply) =>
-    sendPortalPage(reply, renderPortalHome(), sharedContentSecurityPolicy),
+    sendPortalPage(reply, renderPortalHome(access), sharedContentSecurityPolicy),
   )
   app.get("/manage", async (_request, reply) =>
     sendPortalPage(

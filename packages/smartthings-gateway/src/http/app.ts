@@ -31,6 +31,7 @@ import { ProxyRequestBodyTooLargeError } from "./smartthings-proxy-route.js"
 import {
   InvalidSmartThingsWebhookRequestError,
   registerSmartThingsWebhookRoute,
+  SmartThingsConfirmationRateLimitError,
   SmartThingsConfirmationRequestError,
   type SmartThingsConfirmationRequester,
 } from "./smartthings-webhook.js"
@@ -87,7 +88,7 @@ export function createApp(options: AppOptions): FastifyInstance {
   )
   registerGrowfulAuthentication(app)
   app.get("/healthz", async () => ({ status: "ok" as const }))
-  registerPortalRoutes(app)
+  registerPortalRoutes(app, options.oauthAccess)
   registerOAuthRoutes(app, {
     authorizationOrigin: options.authorizationOrigin,
     oauthAccess: options.oauthAccess,
@@ -156,6 +157,12 @@ export function createApp(options: AppOptions): FastifyInstance {
     }
     if (error instanceof InvalidSmartThingsWebhookRequestError) {
       return reply.status(400).send({ error: "invalid_webhook_request" as const })
+    }
+    if (error instanceof SmartThingsConfirmationRateLimitError) {
+      return reply
+        .header("Retry-After", String(error.retryAfterSeconds))
+        .status(429)
+        .send({ error: "smartthings_confirmation_rate_limited" as const })
     }
     if (error instanceof SmartThingsConfirmationRequestError) {
       return reply.status(502).send({ error: "smartthings_confirmation_failed" as const })

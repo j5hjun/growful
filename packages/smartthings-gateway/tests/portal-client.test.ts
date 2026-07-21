@@ -80,6 +80,7 @@ function response(status: number, body?: unknown) {
 
 function createElements() {
   const selectors = new Map([
+    ["#growful-token", "input"],
     ["[data-portal-token-form]", "form"],
     ["[data-token-submit]", "submit"],
     ["[data-token-visibility]", "visibility"],

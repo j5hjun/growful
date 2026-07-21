@@ -12,6 +12,10 @@ const requiredEnvironment = {
       username: "beta-user",
     },
   ]),
+  PUBLIC_OPERATOR_NAME: "Growful",
+  PUBLIC_PRIVACY_POLICY_URL: "https://smartthings.growful.click/privacy",
+  PUBLIC_SUPPORT_EMAIL: "support@growful.click",
+  PUBLIC_TERMS_URL: "https://smartthings.growful.click/terms",
   SMARTTHINGS_APP_ID: "smartthings-app-id",
   TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
 }
@@ -42,6 +46,11 @@ describe("loadConfig", () => {
           },
         ],
         mode: "private_beta",
+        operatorName: "Growful",
+        policyVersion: expect.any(String),
+        privacyPolicyUrl: new URL("https://smartthings.growful.click/privacy"),
+        supportEmail: "support@growful.click",
+        termsUrl: new URL("https://smartthings.growful.click/terms"),
       },
       smartThingsAppId: environment.SMARTTHINGS_APP_ID,
     })
@@ -62,6 +71,13 @@ describe("loadConfig", () => {
   it("rejects private beta mode without an invitation list", () => {
     expect(() =>
       loadConfig({ ...requiredEnvironment, PRIVATE_BETA_INVITES_JSON: undefined }),
+    ).toThrow()
+  })
+
+  it("rejects private beta mode without operator and policy disclosures", () => {
+    expect(() => loadConfig({ ...requiredEnvironment, PUBLIC_OPERATOR_NAME: undefined })).toThrow()
+    expect(() =>
+      loadConfig({ ...requiredEnvironment, PUBLIC_PRIVACY_POLICY_URL: undefined }),
     ).toThrow()
   })
 
@@ -104,6 +120,7 @@ describe("loadConfig", () => {
     expect(config.serviceAccess).toEqual({
       mode: "public",
       operatorName: "Growful",
+      policyVersion: expect.any(String),
       privacyPolicyUrl: new URL("https://smartthings.growful.click/privacy"),
       smartThingsApprovalReference: "smartthings-case-123",
       smartThingsApprovedAt: "2026-07-22",

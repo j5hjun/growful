@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { createApp } from "../src/http/app.js"
 import { renderOAuthCompletion } from "../src/http/oauth-completion.js"
+import { portalClientScript } from "../src/http/portal-client.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import { GrowfulTokenSchema } from "../src/security/growful-token.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
+import { publicOAuthAccess } from "./fixtures/oauth-access.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const redirectOrigin = "https://smartthings.growful.click"
@@ -12,7 +14,7 @@ const redirectOrigin = "https://smartthings.growful.click"
 function createFixture() {
   const app = createApp({
     authorizationOrigin: "https://api.smartthings.test",
-    oauthAccess: { mode: "public" },
+    oauthAccess: publicOAuthAccess,
     redirectOrigin,
     service: new OAuthService({
       client: new FakeSmartThingsClient(),
@@ -49,6 +51,12 @@ describe("Growful portal HTTP surface", () => {
     expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
     expect(response.headers["content-security-policy"]).toContain("connect-src 'self'")
     expect(response.body).toContain("data-portal-home")
+    expect(response.body).toContain("공개 서비스")
+    expect(response.body).not.toContain("비공개 베타 Gateway")
+    expect(response.body).toContain(publicOAuthAccess.operatorName)
+    expect(response.body).toContain(publicOAuthAccess.privacyPolicyUrl.toString())
+    expect(response.body).toContain(publicOAuthAccess.termsUrl.toString())
+    expect(response.body).toContain(publicOAuthAccess.supportEmail)
     expect(response.body).toContain('href="/oauth/start" data-action="connect"')
     expect(response.body).toContain('href="/manage" data-action="manage"')
   })
@@ -90,7 +98,7 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body).toBe("User-agent: *\nAllow: /\n")
   })
 
-  it("serves a browser client that keeps the token out of persistent browser storage", async () => {
+  it("serves the compiled browser client without caching it", async () => {
     // Given
     const app = createFixture()
 
@@ -101,12 +109,7 @@ describe("Growful portal HTTP surface", () => {
     expect(response.statusCode).toBe(200)
     expect(response.headers["content-type"]).toContain("javascript")
     expect(response.headers["cache-control"]).toBe("no-store")
-    expect(response.body).toContain('"/connection"')
-    expect(response.body).toContain('"/token/rotate"')
-    expect(response.body).not.toContain("localStorage")
-    expect(response.body).not.toContain("sessionStorage")
-    expect(response.body).not.toContain("document.cookie")
-    expect(response.body).not.toContain("innerHTML")
+    expect(response.body).toBe(portalClientScript)
   })
 
   it("links the one-time credential output to the management page", () => {

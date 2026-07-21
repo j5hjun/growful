@@ -96,6 +96,16 @@ offset은 `--focus-ring` (`3px`)을 사용한다.
 - Responsive: 375px부터 한 열을 유지하며 문서 세로 스크롤만 사용
 - Motion: 없음
 
+### Policy consent block
+
+- Structure: `section[aria-labelledby] > h2 + p + p[links] + label > input[required]`
+- Content: 운영자명, 개인정보처리방침, 이용약관, 지원 연락처와 토큰 처리 동의를 함께 제공
+- States: 미동의, 동의, 서버 검증 오류, 키보드 focus
+- Accessibility: 네이티브 required checkbox와 명시적 label을 사용하고 정책 링크의 접근 가능한
+  이름으로 새 탭 동작을 알림
+- Responsive: 375px에서 링크와 동의 문구가 패널 안에서 의미 단위로 줄바꿈
+- Motion: 없음
+
 ### Primary action
 
 - Structure: `button[type=submit]`
@@ -121,9 +131,17 @@ offset은 `--focus-ring` (`3px`)을 사용한다.
 
 ### Landing decision path
 
-- Structure: 소개 문구와 두 행동 링크, `ol` 기반 3단계 흐름, 보안 경계 설명
-- Order: 서비스 역할 → 연결 시작 → 기존 연결 관리 → 처리 흐름 → 저장하지 않는 정보
+- Structure: 소개 문구와 두 행동 링크, `ol` 기반 3단계 흐름, 보안 경계 설명, 운영 정보 `dl`
+- Order: 서비스 역할 → 연결 시작 → 기존 연결 관리 → 처리 흐름 → 저장하지 않는 정보 → 운영자·정책·지원
 - Accessibility: 카드 나열 대신 문서 순서가 곧 의사결정 순서가 되며 제목 수준을 건너뛰지 않음
+- Motion: 없음
+
+### Service disclosure block
+
+- Structure: `section[aria-labelledby] > div[heading] + dl`
+- Content: 운영자, `mailto:` 지원 링크, 개인정보처리방침과 이용약관 링크
+- Accessibility: `dt`와 `dd`로 값의 의미를 연결하고 외부 정책 링크 이름을 구체적으로 유지
+- Responsive: 48rem 이하에서 제목과 정보 목록을 한 열로 전환
 - Motion: 없음
 
 ### Token access form

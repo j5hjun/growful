@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { z } from "zod"
 import { type PrivateBetaInvite, parsePrivateBetaInvites } from "./private-beta/invite.js"
 
@@ -39,29 +40,38 @@ const privateBetaAccessSchema = z.object({
   PRIVATE_BETA_INVITES_JSON: z.string().min(1),
 })
 
-const publicAccessSchema = z.object({
+const disclosureSchema = z.object({
   PUBLIC_OPERATOR_NAME: z.string().trim().min(1).max(200),
   PUBLIC_PRIVACY_POLICY_URL: httpsUrl,
   PUBLIC_SUPPORT_EMAIL: z.email(),
   PUBLIC_TERMS_URL: httpsUrl,
+})
+
+const publicAccessSchema = z.object({
   SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: z.string().trim().min(1).max(500),
   SMARTTHINGS_PUBLIC_USE_APPROVED_AT: z.iso.date(),
 })
 
-export type ServiceAccess =
-  | {
-      readonly mode: "private_beta"
-      readonly invites: readonly PrivateBetaInvite[]
-    }
-  | {
-      readonly mode: "public"
-      readonly operatorName: string
-      readonly privacyPolicyUrl: URL
-      readonly smartThingsApprovalReference: string
-      readonly smartThingsApprovedAt: string
-      readonly supportEmail: string
-      readonly termsUrl: URL
-    }
+export type ServiceDisclosures = {
+  readonly operatorName: string
+  readonly policyVersion: string
+  readonly privacyPolicyUrl: URL
+  readonly supportEmail: string
+  readonly termsUrl: URL
+}
+
+export type ServiceAccess = ServiceDisclosures &
+  (
+    | {
+        readonly mode: "private_beta"
+        readonly invites: readonly PrivateBetaInvite[]
+      }
+    | {
+        readonly mode: "public"
+        readonly smartThingsApprovalReference: string
+        readonly smartThingsApprovedAt: string
+      }
+  )
 
 export type AppConfig = {
   readonly apiBaseUrl: URL
@@ -85,11 +95,30 @@ export type AppConfig = {
 
 export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
   const parsed = environmentSchema.parse(environment)
+  const disclosure = disclosureSchema.parse(parsed)
+  const disclosures: ServiceDisclosures = {
+    operatorName: disclosure.PUBLIC_OPERATOR_NAME,
+    policyVersion: createHash("sha256")
+      .update(
+        JSON.stringify({
+          operatorName: disclosure.PUBLIC_OPERATOR_NAME,
+          privacyPolicyUrl: disclosure.PUBLIC_PRIVACY_POLICY_URL,
+          supportEmail: disclosure.PUBLIC_SUPPORT_EMAIL,
+          termsUrl: disclosure.PUBLIC_TERMS_URL,
+        }),
+        "utf8",
+      )
+      .digest("hex"),
+    privacyPolicyUrl: new URL(disclosure.PUBLIC_PRIVACY_POLICY_URL),
+    supportEmail: disclosure.PUBLIC_SUPPORT_EMAIL,
+    termsUrl: new URL(disclosure.PUBLIC_TERMS_URL),
+  }
   const serviceAccess: ServiceAccess =
     parsed.SERVICE_ACCESS_MODE === "private_beta"
       ? (() => {
           const access = privateBetaAccessSchema.parse(parsed)
           return {
+            ...disclosures,
             invites: parsePrivateBetaInvites(access.PRIVATE_BETA_INVITES_JSON),
             mode: "private_beta",
           }
@@ -97,13 +126,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
       : (() => {
           const access = publicAccessSchema.parse(parsed)
           return {
+            ...disclosures,
             mode: "public",
-            operatorName: access.PUBLIC_OPERATOR_NAME,
-            privacyPolicyUrl: new URL(access.PUBLIC_PRIVACY_POLICY_URL),
             smartThingsApprovalReference: access.SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE,
             smartThingsApprovedAt: access.SMARTTHINGS_PUBLIC_USE_APPROVED_AT,
-            supportEmail: access.PUBLIC_SUPPORT_EMAIL,
-            termsUrl: new URL(access.PUBLIC_TERMS_URL),
           }
         })()
   return {

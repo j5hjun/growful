@@ -5,6 +5,7 @@ import { InstalledAppIdSchema, type StoredTokens } from "../src/oauth/contracts.
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
+import { publicOAuthAccess } from "./fixtures/oauth-access.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const now = new Date("2026-07-22T00:00:00.000Z")
@@ -61,7 +62,7 @@ function signedHeaders(body: string, date = requestDate, keyId = "/pl/useast2/gr
   }
 }
 
-function createFixture() {
+function createFixture(confirmationRequester = vi.fn(async (_url: URL) => {})) {
   const store = new MemoryOAuthStore()
   const service = new OAuthService({
     client: new FakeSmartThingsClient(),
@@ -70,11 +71,10 @@ function createFixture() {
     refreshLeaseMs: 120_000,
     store,
   })
-  const confirmationRequester = vi.fn(async (_url: URL) => {})
   const keyProvider = vi.fn(async (_keyId: string) => publicKeyPem)
   const appOptions = {
     authorizationOrigin: "https://api.smartthings.test",
-    oauthAccess: { mode: "public" as const },
+    oauthAccess: publicOAuthAccess,
     redirectOrigin: "https://smartthings.growful.click",
     service,
     smartThingsConfirmationRequester: confirmationRequester,
@@ -268,6 +268,76 @@ describe("SmartThings webhook", () => {
     expect(fixture.confirmationRequester).toHaveBeenCalledWith(new URL(confirmationUrl))
   })
 
+  it("acknowledges a repeated completed confirmation without another outbound request", async () => {
+    // Given
+    const fixture = createFixture()
+    const payload = {
+      confirmationData: {
+        appId: "growful-app",
+        confirmationUrl:
+          "https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=repeated-token",
+      },
+      messageType: "CONFIRMATION",
+    }
+
+    // When
+    const first = await fixture.app.inject({ method: "POST", payload, url: webhookPath })
+    const second = await fixture.app.inject({ method: "POST", payload, url: webhookPath })
+
+    // Then
+    expect(first.statusCode).toBe(200)
+    expect(second.statusCode).toBe(200)
+    expect(fixture.confirmationRequester).toHaveBeenCalledTimes(1)
+  })
+
+  it("allows only one outbound confirmation request at a time", async () => {
+    // Given
+    const pending = Promise.withResolvers<void>()
+    const firstOutboundStarted = Promise.withResolvers<void>()
+    const secondOutboundStarted = Promise.withResolvers<void>()
+    let outboundRequestCount = 0
+    const confirmationRequester = vi.fn(async (_url: URL) => {
+      outboundRequestCount += 1
+      if (outboundRequestCount === 1) {
+        firstOutboundStarted.resolve()
+      } else {
+        secondOutboundStarted.resolve()
+      }
+      return pending.promise
+    })
+    const fixture = createFixture(confirmationRequester)
+    const request = (token: string) =>
+      fixture.app.inject({
+        method: "POST",
+        payload: {
+          confirmationData: {
+            appId: "growful-app",
+            confirmationUrl: `https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=${token}`,
+          },
+          messageType: "CONFIRMATION",
+        },
+        url: webhookPath,
+      })
+
+    // When
+    const firstResponse = request("first-token")
+    await firstOutboundStarted.promise
+    const secondResponse = request("second-token")
+    const secondOutcome = await Promise.race([
+      secondResponse.then(
+        (response) => ({ kind: "response", statusCode: response.statusCode }) as const,
+      ),
+      secondOutboundStarted.promise.then(() => ({ kind: "outbound" }) as const),
+    ])
+    pending.resolve()
+    const responses = await Promise.all([firstResponse, secondResponse])
+
+    // Then
+    expect(outboundRequestCount).toBe(1)
+    expect(secondOutcome).toEqual({ kind: "response", statusCode: 429 })
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 429])
+  })
+
   it("rejects a confirmation URL outside the SmartThings API origin", async () => {
     // Given
     const fixture = createFixture()
@@ -335,10 +405,25 @@ describe("SmartThings webhook", () => {
       },
       url: webhookPath,
     })
+    const immediateRetry = await fixture.app.inject({
+      method: "POST",
+      payload: {
+        confirmationData: {
+          appId: "growful-app",
+          confirmationUrl:
+            "https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=confirmation-token",
+        },
+        messageType: "CONFIRMATION",
+      },
+      url: webhookPath,
+    })
 
     // Then
     expect(response.statusCode).toBe(502)
     expect(response.json()).toEqual({ error: "smartthings_confirmation_failed" })
     expect(response.body).not.toContain("confirmation-token")
+    expect(immediateRetry.statusCode).toBe(429)
+    expect(immediateRetry.headers["retry-after"]).toBe("60")
+    expect(fixture.confirmationRequester).toHaveBeenCalledTimes(1)
   })
 })

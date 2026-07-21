@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto"
 import { z } from "zod"
 
 const basicAuthorizationSchema = z.string().regex(/^Basic [A-Za-z0-9+/]+={0,2}$/)
+const unavailableInvitePasswordHash = Buffer.alloc(32)
 
 const privateBetaInviteSchema = z.object({
   passwordHash: z.string().regex(/^[0-9a-f]{64}$/),
@@ -32,30 +33,38 @@ export function matchesPrivateBetaInvite(
   authorization: string | undefined,
   invites: readonly PrivateBetaInvite[],
 ): boolean {
+  return getPrivateBetaInviteUsername(authorization, invites) !== null
+}
+
+export function getPrivateBetaInviteUsername(
+  authorization: string | undefined,
+  invites: readonly PrivateBetaInvite[],
+): string | null {
   const parsedAuthorization = basicAuthorizationSchema.safeParse(authorization)
   if (!parsedAuthorization.success) {
-    return false
+    return null
   }
   const encodedCredentials = parsedAuthorization.data.slice("Basic ".length)
   const decodedCredentials = Buffer.from(encodedCredentials, "base64")
   const canonicalEncoding = decodedCredentials.toString("base64").replace(/=+$/, "")
   if (canonicalEncoding !== encodedCredentials.replace(/=+$/, "")) {
-    return false
+    return null
   }
   const credentials = decodedCredentials.toString("utf8")
   const separatorIndex = credentials.indexOf(":")
   if (separatorIndex < 1) {
-    return false
+    return null
   }
   const username = credentials.slice(0, separatorIndex)
   const passwordHash = createHash("sha256")
     .update(credentials.slice(separatorIndex + 1), "utf8")
     .digest()
   const invite = invites.find((candidate) => candidate.username === username)
-  if (invite === undefined) {
-    return false
-  }
-  return timingSafeEqual(passwordHash, Buffer.from(invite.passwordHash, "hex"))
+  const expectedPasswordHash =
+    invite === undefined ? unavailableInvitePasswordHash : Buffer.from(invite.passwordHash, "hex")
+  return timingSafeEqual(passwordHash, expectedPasswordHash) && invite !== undefined
+    ? invite.username
+    : null
 }
 
 export function parsePrivateBetaInvites(serializedInvites: string): readonly PrivateBetaInvite[] {

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { ServiceDisclosures } from "../config.js"
 import type { SmartThingsScope } from "../oauth/smartthings-scope.js"
 import { renderGatewayPage } from "./oauth-page.js"
 
@@ -18,6 +19,7 @@ const formFieldSchema = z.enum([
   "devicePermissions",
   "hubPermissions",
   "locationPermissions",
+  "policyConsent",
   "scenePermissions",
   "rulePermissions",
 ])
@@ -29,6 +31,7 @@ const selectionSchema = z
     devicePermissions: z.array(devicePermissionSchema).refine(uniqueSelection),
     hubPermissions: z.array(hubPermissionSchema).refine(uniqueSelection),
     locationPermissions: z.array(locationPermissionSchema).refine(uniqueSelection),
+    policyConsent: z.tuple([z.literal("accepted")]),
     rulePermissions: z.array(rulePermissionSchema).refine(uniqueSelection),
     scenePermissions: z.array(scenePermissionSchema).refine(uniqueSelection),
   })
@@ -103,6 +106,7 @@ export function parseOAuthScopeSelection(body: unknown): readonly SmartThingsSco
     devicePermissions: parameters.getAll("devicePermissions"),
     hubPermissions: parameters.getAll("hubPermissions"),
     locationPermissions: parameters.getAll("locationPermissions"),
+    policyConsent: parameters.getAll("policyConsent"),
     rulePermissions: parameters.getAll("rulePermissions"),
     scenePermissions: parameters.getAll("scenePermissions"),
   })
@@ -129,9 +133,20 @@ export function parseOAuthScopeSelection(body: unknown): readonly SmartThingsSco
   ]
 }
 
-export function renderOAuthScopeSelection(
-  options: { readonly deviceRange?: OAuthDeviceRange; readonly showSelectionError?: boolean } = {},
-): string {
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+}
+
+export function renderOAuthScopeSelection(options: {
+  readonly deviceRange?: OAuthDeviceRange
+  readonly disclosures: ServiceDisclosures
+  readonly showSelectionError?: boolean
+}): string {
   const deviceRange = options.deviceRange ?? "selected"
   const showSelectionError = options.showSelectionError ?? false
   const defaultReadPermissionSelection = showSelectionError ? "" : " checked"
@@ -143,6 +158,10 @@ export function renderOAuthScopeSelection(
   const permissionError = showSelectionError
     ? '<p class="error" id="permission-error" role="alert"><span class="phrase">선택값을 확인하세요.</span> <span class="phrase">권한을 하나 이상 선택하세요.</span></p>'
     : ""
+  const operatorName = escapeHtml(options.disclosures.operatorName)
+  const privacyPolicyUrl = escapeHtml(options.disclosures.privacyPolicyUrl.toString())
+  const supportEmail = escapeHtml(options.disclosures.supportEmail)
+  const termsUrl = escapeHtml(options.disclosures.termsUrl.toString())
   return renderGatewayPage({
     body: `
     <h1>SmartThings 권한 연결</h1>
@@ -187,6 +206,12 @@ export function renderOAuthScopeSelection(
         <label><input type="checkbox" name="rulePermissions" value="write"><span>규칙 만들기·수정·삭제 <small>w:rules:*</small></span></label>
       </fieldset>
       </div>
+      <section class="policy" aria-labelledby="policy-title">
+        <h2 id="policy-title">연결 전 확인</h2>
+        <p><strong>${operatorName}</strong>에서 SmartThings 연결 정보와 암호화된 OAuth 토큰을 관리합니다.</p>
+        <p><a href="${privacyPolicyUrl}" aria-label="개인정보처리방침(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">개인정보처리방침</a> · <a href="${termsUrl}" aria-label="이용약관(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">이용약관</a> · <a href="mailto:${supportEmail}">지원 문의</a></p>
+        <label><input type="checkbox" name="policyConsent" value="accepted" required><span>개인정보처리방침과 이용약관을 확인했으며, 선택한 SmartThings 권한과 연결 토큰 처리에 동의합니다.</span></label>
+      </section>
       <button type="submit">SmartThings에서 계속</button>
     </form>`,
     description: "SmartThings Gateway에 허용할 권한과 디바이스 범위를 선택합니다.",
@@ -196,6 +221,10 @@ export function renderOAuthScopeSelection(
     legend { padding: 0 var(--space-2); font-weight: var(--weight-bold); }
     .hint { margin: var(--space-2) 0 var(--space-3); font-size: var(--font-small); }
     .error { margin: 0 0 var(--space-4); color: var(--error); font-weight: var(--weight-bold); }
+    .policy { margin: var(--space-6) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .policy h2 { margin: 0 0 var(--space-3); font-size: var(--font-h2); }
+    .policy p { margin: var(--space-2) 0; }
+    .policy a { color: var(--focus); }
     label { display: flex; gap: var(--space-3); align-items: flex-start; margin: var(--space-3) 0; line-height: var(--line-body); cursor: pointer; }
     small { display: block; color: var(--text-muted); font-size: var(--font-small); line-height: var(--line-body); }
     input { width: var(--control-size); height: var(--control-size); margin: var(--control-offset) 0 0; flex: 0 0 auto; accent-color: var(--focus); }

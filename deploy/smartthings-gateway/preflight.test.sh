@@ -53,12 +53,18 @@ write_environment() {
     'OAUTH_CLIENT_SECRET=test-secret' \
     'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
     'PRIVATE_BETA_INVITES_JSON=[{"username":"test-beta-user","passwordHash":"dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42"}]' \
+    'PUBLIC_OPERATOR_NAME=Growful' \
+    'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
+    'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
+    'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
     'REFRESH_CHECK_INTERVAL_SECONDS=300' \
     'REFRESH_LEASE_SECONDS=120' \
     'SERVICE_ACCESS_MODE=private_beta' \
     'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
     'SMARTTHINGS_API_URL=https://api.smartthings.com' \
     'SMARTTHINGS_APP_ID=test-smartthings-app' \
+    'SMARTTHINGS_AUTHORIZE_URL=https://api.smartthings.com/oauth/authorize' \
+    'SMARTTHINGS_TOKEN_URL=https://api.smartthings.com/oauth/token' \
     "TOKEN_ENCRYPTION_KEY=$encryption_key" >"$deployment_root/.env"
   chmod 600 "$deployment_root/.env"
 }
@@ -66,6 +72,14 @@ write_environment() {
 valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
 write_environment "$valid_key" 8100
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
+
+write_environment "$valid_key" 8100
+sed -i.bak '/^PUBLIC_PRIVACY_POLICY_URL=/d' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'private beta without policy disclosures unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
 
 write_environment "$valid_key" 8100
 sed -i.bak '/^PRIVATE_BETA_INVITES_JSON=/d' "$deployment_root/.env"
@@ -89,10 +103,6 @@ sed -i.bak \
   -e '/^PRIVATE_BETA_/d' \
   "$deployment_root/.env"
 printf '%s\n' \
-  'PUBLIC_OPERATOR_NAME=Growful' \
-  'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
-  'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
-  'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
   'SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE=smartthings-case-123' \
   'SMARTTHINGS_PUBLIC_USE_APPROVED_AT=2026-07-22' >>"$deployment_root/.env"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
@@ -109,6 +119,22 @@ write_environment "$valid_key" 8100
 sed -i.bak 's#^SMARTTHINGS_API_URL=.*#SMARTTHINGS_API_URL=https://example.com#' "$deployment_root/.env"
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'arbitrary SmartThings API host unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's#^SMARTTHINGS_AUTHORIZE_URL=.*#SMARTTHINGS_AUTHORIZE_URL=https://example.com/oauth/authorize#' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'arbitrary SmartThings authorization host unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's#^SMARTTHINGS_TOKEN_URL=.*#SMARTTHINGS_TOKEN_URL=https://example.com/oauth/token#' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'arbitrary SmartThings token host unexpectedly passed preflight\n' >&2
   exit 1
 fi
 rm -f "$deployment_root/.env.bak"

@@ -1,6 +1,9 @@
 import type { Kysely, Selectable } from "kysely"
 import {
+  type ConnectionAccessPolicy,
+  type ConnectionAuthentication,
   InstalledAppIdSchema,
+  type OAuthAuthorization,
   type OAuthStateHash,
   type OAuthStore,
   type RefreshClaim,
@@ -11,7 +14,6 @@ import {
 } from "../oauth/contracts.js"
 import {
   SmartThingsGrantedScopeStringSchema,
-  type SmartThingsScope,
   SmartThingsScopeStringSchema,
   serializeSmartThingsScopes,
 } from "../oauth/smartthings-scope.js"
@@ -44,10 +46,17 @@ export class PostgresOAuthStore implements OAuthStore {
   async authenticate(growfulTokenHash: GrowfulTokenHash) {
     const row = await this.database
       .selectFrom("smartThingsConnections")
-      .select("installedAppId")
+      .select(["installedAppId", "policyVersion", "privateBetaUsername"])
       .where("growfulTokenHash", "=", growfulTokenHash)
       .executeTakeFirst()
-    return row === undefined ? null : InstalledAppIdSchema.parse(row.installedAppId)
+    if (row === undefined || row.policyVersion === null) {
+      return null
+    }
+    return {
+      installedAppId: InstalledAppIdSchema.parse(row.installedAppId),
+      policyVersion: row.policyVersion,
+      privateBetaUsername: row.privateBetaUsername,
+    } satisfies ConnectionAuthentication
   }
 
   async claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null> {
@@ -96,23 +105,33 @@ export class PostgresOAuthStore implements OAuthStore {
     })
   }
 
-  async consumeState(
-    stateHash: OAuthStateHash,
-    now: Date,
-  ): Promise<readonly SmartThingsScope[] | null> {
+  async consumeState(stateHash: OAuthStateHash, now: Date): Promise<OAuthAuthorization | null> {
     const state = await this.database
       .deleteFrom("oauthStates")
       .where("stateHash", "=", stateHash)
-      .returning(["expiresAt", "requestedScopes"])
+      .returning([
+        "consentedAt",
+        "expiresAt",
+        "policyVersion",
+        "privateBetaUsername",
+        "requestedScopes",
+      ])
       .executeTakeFirst()
     if (
       state === undefined ||
       state.expiresAt.getTime() <= now.getTime() ||
+      state.consentedAt === null ||
+      state.policyVersion === null ||
       state.requestedScopes.length === 0
     ) {
       return null
     }
-    return SmartThingsScopeStringSchema.parse(state.requestedScopes)
+    return {
+      consentedAt: state.consentedAt,
+      policyVersion: state.policyVersion,
+      privateBetaUsername: state.privateBetaUsername,
+      requestedScopes: SmartThingsScopeStringSchema.parse(state.requestedScopes),
+    }
   }
 
   async deleteConnection(installedAppId: ReturnType<typeof InstalledAppIdSchema.parse>) {
@@ -152,6 +171,32 @@ export class PostgresOAuthStore implements OAuthStore {
       .execute()
   }
 
+  async revokeUnauthorizedConnections(accessPolicy: ConnectionAccessPolicy): Promise<number> {
+    const invalidConsent = await this.database
+      .deleteFrom("smartThingsConnections")
+      .where((expression) =>
+        expression.or([
+          expression("consentedAt", "is", null),
+          expression("policyVersion", "is", null),
+          expression("policyVersion", "!=", accessPolicy.policyVersion),
+        ]),
+      )
+      .executeTakeFirst()
+    if (accessPolicy.privateBetaUsernames === null) {
+      return Number(invalidConsent.numDeletedRows)
+    }
+    const inactiveInvite = await this.database
+      .deleteFrom("smartThingsConnections")
+      .where((expression) =>
+        expression.or([
+          expression("privateBetaUsername", "is", null),
+          expression("privateBetaUsername", "not in", accessPolicy.privateBetaUsernames),
+        ]),
+      )
+      .executeTakeFirst()
+    return Number(invalidConsent.numDeletedRows + inactiveInvite.numDeletedRows)
+  }
+
   async replaceGrowfulToken(
     installedAppId: ReturnType<typeof InstalledAppIdSchema.parse>,
     growfulTokenHash: GrowfulTokenHash,
@@ -169,14 +214,27 @@ export class PostgresOAuthStore implements OAuthStore {
   async saveState(
     stateHash: OAuthStateHash,
     expiresAt: Date,
-    requestedScopes: readonly SmartThingsScope[],
+    authorization: OAuthAuthorization,
   ): Promise<void> {
-    const serializedScopes = serializeSmartThingsScopes(requestedScopes)
+    const serializedScopes = serializeSmartThingsScopes(authorization.requestedScopes)
     await this.database
       .insertInto("oauthStates")
-      .values({ expiresAt, requestedScopes: serializedScopes, stateHash })
+      .values({
+        consentedAt: authorization.consentedAt,
+        expiresAt,
+        policyVersion: authorization.policyVersion,
+        privateBetaUsername: authorization.privateBetaUsername,
+        requestedScopes: serializedScopes,
+        stateHash,
+      })
       .onConflict((conflict) =>
-        conflict.column("stateHash").doUpdateSet({ expiresAt, requestedScopes: serializedScopes }),
+        conflict.column("stateHash").doUpdateSet({
+          consentedAt: authorization.consentedAt,
+          expiresAt,
+          policyVersion: authorization.policyVersion,
+          privateBetaUsername: authorization.privateBetaUsername,
+          requestedScopes: serializedScopes,
+        }),
       )
       .execute()
   }
@@ -197,8 +255,11 @@ export class PostgresOAuthStore implements OAuthStore {
   ): Promise<StoredTokens> {
     const row = {
       ...this.createTokenRow(input, null),
+      consentedAt: input.authorization.consentedAt,
       growfulTokenCreatedAt: input.growfulTokenCreatedAt,
       growfulTokenHash: input.growfulTokenHash,
+      policyVersion: input.authorization.policyVersion,
+      privateBetaUsername: input.authorization.privateBetaUsername,
     }
     const saved = await this.database
       .insertInto("smartThingsConnections")

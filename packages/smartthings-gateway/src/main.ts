@@ -27,19 +27,26 @@ async function main(): Promise<void> {
       tokenUrl: config.tokenUrl,
     })
     const service = new OAuthService({
+      accessPolicy: {
+        policyVersion: config.serviceAccess.policyVersion,
+        privateBetaUsernames:
+          config.serviceAccess.mode === "private_beta"
+            ? config.serviceAccess.invites.map((invite) => invite.username)
+            : null,
+      },
       client,
       refreshBeforeExpiryMs: config.refreshBeforeExpiryMs,
       refreshLeaseMs: config.refreshLeaseMs,
       store,
     })
+    await service.revokeUnauthorizedConnections()
     const app = createApp({
       authorizationOrigin: config.authorizationUrl.origin,
       logger: {
         level: config.logLevel,
         redact: ["req.headers.authorization", "req.headers.cookie"],
       },
-      oauthAccess:
-        config.serviceAccess.mode === "private_beta" ? config.serviceAccess : { mode: "public" },
+      oauthAccess: config.serviceAccess,
       redirectOrigin: config.redirectUri.origin,
       service,
       smartThingsAppId: config.smartThingsAppId,

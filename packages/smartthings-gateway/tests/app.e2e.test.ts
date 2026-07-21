@@ -5,6 +5,7 @@ import { OAuthService } from "../src/oauth/oauth-service.js"
 import { GrowfulTokenSchema } from "../src/security/growful-token.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
+import { publicOAuthAccess } from "./fixtures/oauth-access.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const authorizationOrigin = "https://api.smartthings.test"
@@ -38,7 +39,7 @@ function createFixture(logger?: AppOptions["logger"]) {
   const app = createApp({
     authorizationOrigin,
     logger,
-    oauthAccess: { mode: "public" },
+    oauthAccess: publicOAuthAccess,
     redirectOrigin,
     service,
     smartThingsAppId: "growful-app",
@@ -55,7 +56,7 @@ async function authorize(app: ReturnType<typeof createApp>) {
     },
     method: "POST",
     payload:
-      "deviceRange=selected&devicePermissions=read&devicePermissions=control&locationPermissions=read",
+      "deviceRange=selected&devicePermissions=read&devicePermissions=control&locationPermissions=read&policyConsent=accepted",
     url: "/oauth/start",
   })
   const state =
@@ -218,7 +219,7 @@ describe("SmartThings Gateway HTTP API", () => {
         origin: "https://attacker.example",
       },
       method: "POST",
-      payload: "deviceRange=all&devicePermissions=read",
+      payload: "deviceRange=all&devicePermissions=read&policyConsent=accepted",
       url: "/oauth/start",
     })
 
@@ -249,7 +250,7 @@ describe("SmartThings Gateway HTTP API", () => {
     const start = await fixture.app.inject({
       headers: { "content-type": "application/x-www-form-urlencoded", origin: redirectOrigin },
       method: "POST",
-      payload: "deviceRange=all&devicePermissions=read",
+      payload: "deviceRange=all&devicePermissions=read&policyConsent=accepted",
       url: "/oauth/start",
     })
     const state = new URL(start.headers.location ?? "").searchParams.get("state") ?? ""

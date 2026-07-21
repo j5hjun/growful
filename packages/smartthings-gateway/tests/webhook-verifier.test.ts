@@ -68,6 +68,24 @@ describe("SmartThings webhook public key client", () => {
     expect(requestPublicKey).toHaveBeenCalledTimes(1)
   })
 
+  it("rejects a parseable non-RSA public key", async () => {
+    // Given
+    const ecPublicKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" })
+      .publicKey.export({ format: "pem", type: "spki" })
+      .toString()
+    const requestPublicKey = vi.fn(async () => ecPublicKey)
+    const client = new SmartThingsWebhookPublicKeyClient(() => now, requestPublicKey)
+
+    // When / Then
+    await expect(client.getPublicKey("/pl/useast2/ec-key")).rejects.toBeInstanceOf(
+      InvalidSmartThingsWebhookSignatureError,
+    )
+    await expect(client.getPublicKey("/pl/useast2/ec-key")).rejects.toBeInstanceOf(
+      InvalidSmartThingsWebhookSignatureError,
+    )
+    expect(requestPublicKey).toHaveBeenCalledTimes(1)
+  })
+
   it("retries a failed key lookup after the negative cache expires", async () => {
     // Given
     let currentTime = now

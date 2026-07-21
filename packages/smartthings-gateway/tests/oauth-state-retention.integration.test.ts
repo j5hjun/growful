@@ -3,6 +3,7 @@ import { z } from "zod"
 import { OAuthStateHashSchema } from "../src/oauth/contracts.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
+import { oauthAuthorization } from "./fixtures/oauth-access.js"
 
 const testEnvironmentSchema = z.object({ TEST_DATABASE_URL: z.url() })
 const { TEST_DATABASE_URL } = testEnvironmentSchema.parse(process.env)
@@ -31,9 +32,17 @@ describe("OAuth state retention", () => {
     const expiredState = OAuthStateHashSchema.parse("a".repeat(64))
     const deadlineState = OAuthStateHashSchema.parse("b".repeat(64))
     const activeState = OAuthStateHashSchema.parse("c".repeat(64))
-    await store.saveState(expiredState, new Date(now.getTime() - 1), ["r:devices:$"])
-    await store.saveState(deadlineState, now, ["r:devices:$"])
-    await store.saveState(activeState, new Date(now.getTime() + 1), ["r:devices:$"])
+    await store.saveState(
+      expiredState,
+      new Date(now.getTime() - 1),
+      oauthAuthorization(["r:devices:$"]),
+    )
+    await store.saveState(deadlineState, now, oauthAuthorization(["r:devices:$"]))
+    await store.saveState(
+      activeState,
+      new Date(now.getTime() + 1),
+      oauthAuthorization(["r:devices:$"]),
+    )
 
     // When
     const purgedCount = await store.deleteExpiredStates(now)

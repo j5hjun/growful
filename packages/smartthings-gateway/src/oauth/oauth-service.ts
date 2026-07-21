@@ -5,14 +5,16 @@ import {
   hashGrowfulToken,
 } from "../security/growful-token.js"
 import type {
+  ConnectionAccessPolicy,
   ConnectionStatus,
   InstalledAppId,
+  OAuthAuthorization,
   OAuthStore,
   SmartThingsClient,
   StoredTokens,
 } from "./contracts.js"
 import { OAuthStateHashSchema, RefreshClaimIdSchema } from "./contracts.js"
-import { areScopesWithin, type SmartThingsScope } from "./smartthings-scope.js"
+import { areScopesWithin } from "./smartthings-scope.js"
 
 const oauthStateLifetimeMs = 10 * 60 * 1_000
 
@@ -51,6 +53,7 @@ export type RefreshBatchResult = {
 }
 
 export type OAuthServiceOptions = {
+  readonly accessPolicy?: ConnectionAccessPolicy
   readonly client: SmartThingsClient
   readonly growfulTokenGenerator?: () => GrowfulToken
   readonly now?: () => Date
@@ -61,35 +64,57 @@ export type OAuthServiceOptions = {
 }
 
 export class OAuthService {
+  private readonly accessPolicy: ConnectionAccessPolicy
   private readonly growfulTokenGenerator: () => GrowfulToken
   private readonly now: () => Date
   private readonly stateGenerator: () => string
 
   constructor(private readonly options: OAuthServiceOptions) {
+    this.accessPolicy = options.accessPolicy ?? {
+      policyVersion: "test-policy",
+      privateBetaUsernames: null,
+    }
     this.growfulTokenGenerator = options.growfulTokenGenerator ?? generateGrowfulToken
     this.now = options.now ?? (() => new Date())
     this.stateGenerator = options.stateGenerator ?? (() => randomBytes(32).toString("base64url"))
   }
 
   async authenticate(growfulToken: GrowfulToken): Promise<InstalledAppId | null> {
-    return this.options.store.authenticate(hashGrowfulToken(growfulToken))
+    const authentication = await this.options.store.authenticate(hashGrowfulToken(growfulToken))
+    if (
+      authentication === null ||
+      authentication.policyVersion !== this.accessPolicy.policyVersion ||
+      (this.accessPolicy.privateBetaUsernames !== null &&
+        (authentication.privateBetaUsername === null ||
+          !this.accessPolicy.privateBetaUsernames.includes(authentication.privateBetaUsername)))
+    ) {
+      return null
+    }
+    return authentication.installedAppId
   }
 
-  async startAuthorization(scopes: readonly SmartThingsScope[]): Promise<URL> {
+  async startAuthorization(authorization: Omit<OAuthAuthorization, "consentedAt">): Promise<URL> {
+    if (!this.isAuthorizationActive(authorization)) {
+      throw new InvalidOAuthStateError()
+    }
     const state = this.stateGenerator()
     const now = this.now()
+    const storedAuthorization: OAuthAuthorization = { ...authorization, consentedAt: now }
     await this.options.store.saveState(
       this.hashState(state),
       new Date(now.getTime() + oauthStateLifetimeMs),
-      scopes,
+      storedAuthorization,
     )
-    return this.options.client.buildAuthorizationUrl(state, scopes)
+    return this.options.client.buildAuthorizationUrl(state, authorization.requestedScopes)
   }
 
   async completeAuthorization(code: string, state: string): Promise<AuthorizationCompletion> {
-    const requestedScopes = await this.consumeState(state)
+    const authorization = await this.consumeState(state)
+    if (!this.isAuthorizationActive(authorization)) {
+      throw new InvalidOAuthStateError()
+    }
     const grant = await this.options.client.exchangeCode(code)
-    this.ensureScopesWithin(grant.scopes, requestedScopes)
+    this.ensureScopesWithin(grant.scopes, authorization.requestedScopes)
     const issuedAt = this.now()
     const growfulToken = this.growfulTokenGenerator()
     const tokens = await this.options.store.saveTokens({
@@ -97,6 +122,7 @@ export class OAuthService {
       growfulTokenCreatedAt: issuedAt,
       growfulTokenHash: hashGrowfulToken(growfulToken),
       issuedAt,
+      authorization,
       source: "authorization",
     })
     return { connection: this.toConnectionStatus(tokens), growfulToken }
@@ -112,6 +138,10 @@ export class OAuthService {
 
   async purgeExpiredAuthorizationStates(): Promise<number> {
     return this.options.store.deleteExpiredStates(this.now())
+  }
+
+  async revokeUnauthorizedConnections(): Promise<number> {
+    return this.options.store.revokeUnauthorizedConnections(this.accessPolicy)
   }
 
   async rotateGrowfulToken(installedAppId: InstalledAppId): Promise<GrowfulToken> {
@@ -216,12 +246,27 @@ export class OAuthService {
     return tokens
   }
 
-  private async consumeState(state: string): Promise<readonly SmartThingsScope[]> {
+  private async consumeState(state: string): Promise<OAuthAuthorization> {
     const consumed = await this.options.store.consumeState(this.hashState(state), this.now())
     if (consumed === null) {
       throw new InvalidOAuthStateError()
     }
     return consumed
+  }
+
+  private isAuthorizationActive(
+    authorization: Pick<OAuthAuthorization, "policyVersion" | "privateBetaUsername">,
+  ): boolean {
+    if (authorization.policyVersion !== this.accessPolicy.policyVersion) {
+      return false
+    }
+    if (this.accessPolicy.privateBetaUsernames === null) {
+      return authorization.privateBetaUsername === null
+    }
+    return (
+      authorization.privateBetaUsername !== null &&
+      this.accessPolicy.privateBetaUsernames.includes(authorization.privateBetaUsername)
+    )
   }
 
   private ensureScopesWithin(scopes: readonly string[], allowedScopes: readonly string[]): void {

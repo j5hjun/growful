@@ -5,7 +5,10 @@ import { Pool } from "pg"
 type Timestamp = ColumnType<Date, Date, Date>
 
 export type OAuthStateTable = {
+  readonly consentedAt: Timestamp | null
   readonly expiresAt: Timestamp
+  readonly policyVersion: string | null
+  readonly privateBetaUsername: string | null
   readonly requestedScopes: string
   readonly stateHash: string
 }
@@ -25,8 +28,11 @@ export type OAuthTokenTable = {
 }
 
 export type SmartThingsConnectionTable = OAuthTokenTable & {
+  readonly consentedAt: Timestamp | null
   readonly growfulTokenCreatedAt: Timestamp
   readonly growfulTokenHash: string
+  readonly policyVersion: string | null
+  readonly privateBetaUsername: string | null
 }
 
 export type GatewayDatabase = {
@@ -102,6 +108,15 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   await sql`alter table oauth_states add column if not exists requested_scopes text not null default ''`.execute(
     database,
   )
+  await sql`alter table oauth_states add column if not exists consented_at timestamptz`.execute(
+    database,
+  )
+  await sql`alter table oauth_states add column if not exists policy_version varchar(64)`.execute(
+    database,
+  )
+  await sql`alter table oauth_states add column if not exists private_beta_username text`.execute(
+    database,
+  )
   await sql`create index if not exists oauth_states_expires_at_index on oauth_states (expires_at)`.execute(
     database,
   )
@@ -112,6 +127,9 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
       installed_app_id text primary key,
       growful_token_hash varchar(64) not null unique,
       growful_token_created_at timestamptz not null,
+      consented_at timestamptz,
+      policy_version varchar(64),
+      private_beta_username text,
       access_token_ciphertext text not null,
       refresh_token_ciphertext text not null,
       expires_at timestamptz not null,
@@ -124,5 +142,14 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
       refresh_claim_id text
     )
   `.execute(database)
+  await sql`alter table smart_things_connections add column if not exists consented_at timestamptz`.execute(
+    database,
+  )
+  await sql`alter table smart_things_connections add column if not exists policy_version varchar(64)`.execute(
+    database,
+  )
+  await sql`alter table smart_things_connections add column if not exists private_beta_username text`.execute(
+    database,
+  )
   await database.deleteFrom("oauthTokens").execute()
 }
