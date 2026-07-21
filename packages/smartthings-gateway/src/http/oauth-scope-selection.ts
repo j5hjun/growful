@@ -164,21 +164,25 @@ export function renderOAuthScopeSelection(
       </fieldset>
       <fieldset>
         <legend>허브</legend>
+        <p class="hint">이 연결에 허용된 모든 허브에 적용됩니다.</p>
         <label><input type="checkbox" name="hubPermissions" value="read"><span>허브 정보 읽기 <small>r:hubs:*</small></span></label>
       </fieldset>
       <fieldset>
         <legend>위치</legend>
+        <p class="hint">이 연결에 허용된 모든 위치에 적용됩니다.</p>
         <label><input type="checkbox" name="locationPermissions" value="read"><span>위치 정보 읽기 <small>r:locations:*</small></span></label>
         <label><input type="checkbox" name="locationPermissions" value="write"><span>위치 정보 쓰기 <small>w:locations:*</small></span></label>
         <label><input type="checkbox" name="locationPermissions" value="execute"><span>위치 모드 변경 실행 <small>x:locations:*</small></span></label>
       </fieldset>
       <fieldset>
         <legend>장면</legend>
+        <p class="hint">이 연결에 허용된 모든 장면에 적용됩니다.</p>
         <label><input type="checkbox" name="scenePermissions" value="read"><span>장면 읽기 <small>r:scenes:*</small></span></label>
         <label><input type="checkbox" name="scenePermissions" value="execute"><span>장면 실행 <small>x:scenes:*</small></span></label>
       </fieldset>
       <fieldset>
         <legend>규칙</legend>
+        <p class="hint">이 연결에 허용된 모든 규칙에 적용됩니다.</p>
         <label><input type="checkbox" name="rulePermissions" value="read"><span>규칙 읽기 <small>r:rules:*</small></span></label>
         <label><input type="checkbox" name="rulePermissions" value="write"><span>규칙 만들기·수정·삭제 <small>w:rules:*</small></span></label>
       </fieldset>

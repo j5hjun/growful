@@ -151,7 +151,7 @@ fetch(`http://127.0.0.1:8100/oauth/callback?error=access_denied&state=${encodeUR
     if (response.status !== 400 || body !== "{\"error\":\"authorization_denied\"}") process.exit(1)
   })
   .catch(() => process.exit(1))
-' "$rollback_state"
+' -- "$rollback_state"
 test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
   --tuples-only --no-align \
   --command "select count(*) from oauth_states where requested_scopes = 'r:scenes:*'")" = "0"

@@ -62,6 +62,8 @@ Gateway가 제공하는 다음 상한 scope를 모두 허용해야 합니다.
 - `r:scenes:*`, `x:scenes:*`
 - `r:rules:*`, `w:rules:*`
 
+이 목록은 SmartThings의 [API Access App 공식 scope 목록](https://developer.smartthings.com/docs/service-integrations/app-setup#available-scopes)을 기준으로 합니다.
+
 권한 화면의 기본값은 선택한 디바이스의 상태 읽기(`r:devices:$`)뿐입니다. 제어·쓰기와
 다른 리소스 권한은 사용자가 명시적으로 선택해야 하며, `DELETE /connection`은 Growful에
 저장한 데이터만 삭제하고 SmartThings Linked Service 설치를 제거하지 않습니다.

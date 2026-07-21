@@ -145,8 +145,10 @@ describe("SmartThings OAuth scope combinations", () => {
   it.each(validSelectionCases)(
     "redirects the valid $label selection",
     async ({ expectedScopes, payload }) => {
+      // Given
       const app = createFixture()
 
+      // When
       const response = await app.inject({
         headers: {
           "content-type": "application/x-www-form-urlencoded",
@@ -157,6 +159,7 @@ describe("SmartThings OAuth scope combinations", () => {
         url: "/oauth/start",
       })
 
+      // Then
       expect(response.statusCode).toBe(302)
       const authorizationUrl = new URL(response.headers.location ?? "")
       expect(`${authorizationUrl.origin}${authorizationUrl.pathname}`).toBe(
@@ -168,8 +171,10 @@ describe("SmartThings OAuth scope combinations", () => {
   )
 
   it.each(deviceRanges)("returns guidance for an empty %s selection", async (deviceRange) => {
+    // Given
     const app = createFixture()
 
+    // When
     const response = await app.inject({
       headers: {
         "content-type": "application/x-www-form-urlencoded",
@@ -180,6 +185,7 @@ describe("SmartThings OAuth scope combinations", () => {
       url: "/oauth/start",
     })
 
+    // Then
     expect(response.statusCode).toBe(400)
     expect(response.headers["content-type"]).toContain("text/html")
     expect(response.body).toContain('role="alert"')

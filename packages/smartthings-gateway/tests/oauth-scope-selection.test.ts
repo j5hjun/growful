@@ -124,14 +124,20 @@ describe("parseOAuthScopeSelection", () => {
   it("renders controls for all supported resource permissions", () => {
     const html = renderOAuthScopeSelection()
 
-    for (const field of [
-      'name="devicePermissions"',
-      'name="hubPermissions"',
-      'name="locationPermissions"',
-      'name="scenePermissions"',
-      'name="rulePermissions"',
+    for (const control of [
+      'name="devicePermissions" value="read"',
+      'name="devicePermissions" value="control"',
+      'name="devicePermissions" value="write"',
+      'name="hubPermissions" value="read"',
+      'name="locationPermissions" value="read"',
+      'name="locationPermissions" value="write"',
+      'name="locationPermissions" value="execute"',
+      'name="scenePermissions" value="read"',
+      'name="scenePermissions" value="execute"',
+      'name="rulePermissions" value="read"',
+      'name="rulePermissions" value="write"',
     ]) {
-      expect(html).toContain(field)
+      expect(html).toContain(control)
     }
     for (const resource of ["디바이스", "허브", "위치", "장면", "규칙"]) {
       expect(html).toContain(resource)
@@ -145,6 +151,21 @@ describe("parseOAuthScopeSelection", () => {
     expect(html).toContain('name="devicePermissions" value="read" checked')
     expect(html).toContain('name="devicePermissions" value="control"><span>')
     expect(html).toContain('name="devicePermissions" value="write"><span>')
+    expect(html.match(/ checked/g)).toHaveLength(2)
+  })
+
+  it("explains which resources each permission group affects", () => {
+    const html = renderOAuthScopeSelection()
+
+    for (const hint of [
+      "위에서 고른 디바이스 범위에 적용됩니다.",
+      "이 연결에 허용된 모든 허브에 적용됩니다.",
+      "이 연결에 허용된 모든 위치에 적용됩니다.",
+      "이 연결에 허용된 모든 장면에 적용됩니다.",
+      "이 연결에 허용된 모든 규칙에 적용됩니다.",
+    ]) {
+      expect(html).toContain(`<p class="hint">${hint}</p>`)
+    }
   })
 
   it("preserves the submitted all-device range on the global validation error", () => {
