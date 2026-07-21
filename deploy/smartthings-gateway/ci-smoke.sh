@@ -4,8 +4,13 @@ set -euo pipefail
 deployment_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 image_reference="${1:?image reference is required}"
 release_id="${2:?release id is required}"
+gateway_host_port="${CI_GATEWAY_HOST_PORT:-8100}"
 if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
   printf 'gateway image reference must use an immutable sha256 digest\n' >&2
+  exit 1
+fi
+if [[ ! "$gateway_host_port" =~ ^[0-9]+$ ]] || ((gateway_host_port < 1 || gateway_host_port > 65535)); then
+  printf 'CI_GATEWAY_HOST_PORT must be an integer from 1 to 65535\n' >&2
   exit 1
 fi
 image_name="${image_reference%@sha256:*}"
@@ -18,8 +23,10 @@ export COMPOSE_PROJECT_NAME="$project_name"
 export GATEWAY_ENV_FILE="$environment_file"
 export SMARTTHINGS_GATEWAY_IMAGE_DIGEST="$image_digest"
 export SMARTTHINGS_GATEWAY_IMAGE_NAME="$image_name"
+export SMARTTHINGS_GATEWAY_HOST_PORT="$gateway_host_port"
 
 compose=(docker compose --env-file "$environment_file" -f "$deployment_dir/compose.yaml")
+gateway_origin="http://127.0.0.1:$gateway_host_port"
 
 cleanup() {
   local status=$?
@@ -76,14 +83,14 @@ for attempt in {1..30}; do
   sleep 2
 done
 
-test "$(curl --fail --silent --show-error http://127.0.0.1:8100/healthz)" = '{"status":"ok"}'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/)" = '200'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/manage)" = '200'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/robots.txt)" = '200'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/connection)" = '401'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '401'
-test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '200'
-test "$(curl --silent --show-error --header 'Content-Type: application/json' --data '{"messageType":"EVENT"}' --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/smartthings/webhook)" = '401'
+test "$(curl --fail --silent --show-error "$gateway_origin/healthz")" = '{"status":"ok"}'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/")" = '200'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/manage")" = '200'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/robots.txt")" = '200'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/connection")" = '401'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '401'
+test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '200'
+test "$(curl --silent --show-error --header 'Content-Type: application/json' --data '{"messageType":"EVENT"}' --output /dev/null --write-out '%{http_code}' "$gateway_origin/smartthings/webhook")" = '401'
 
 permission_selections=(
   'read'
@@ -101,7 +108,7 @@ for device_range in selected all; do
     for permission in $permission_selection; do
       payload+="&devicePermissions=$permission"
     done
-    test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "$payload&policyConsent=accepted" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+    test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "$payload&policyConsent=accepted" --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '302'
     ((valid_selection_count += 1))
   done
 done
@@ -123,25 +130,25 @@ resource_selections=(
   'rulePermissions=read&rulePermissions=write'
 )
 for resource_selection in "${resource_selections[@]}"; do
-  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=selected&$resource_selection&policyConsent=accepted" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=selected&$resource_selection&policyConsent=accepted" --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '302'
   ((valid_selection_count += 1))
 done
 
 every_resource_permissions='devicePermissions=read&devicePermissions=control&devicePermissions=write&hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write'
 for device_range in selected all; do
-  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range&$every_resource_permissions&policyConsent=accepted" --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '302'
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range&$every_resource_permissions&policyConsent=accepted" --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '302'
   ((valid_selection_count += 1))
 done
 test "$valid_selection_count" = '30'
 
 invalid_selection_count=0
 for device_range in selected all; do
-  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range" --output "$invalid_selection_response" --write-out '%{http_code}' http://127.0.0.1:8100/oauth/start)" = '400'
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range" --output "$invalid_selection_response" --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '400'
   grep --quiet 'role="alert"' "$invalid_selection_response"
   ((invalid_selection_count += 1))
 done
 test "$invalid_selection_count" = '2'
-test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8100/v1/devices)" = '401'
+test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/v1/devices")" = '401'
 
 restart_count="$(docker inspect --format='{{.RestartCount}}' "$container_id")"
 test "$restart_count" = '0'
