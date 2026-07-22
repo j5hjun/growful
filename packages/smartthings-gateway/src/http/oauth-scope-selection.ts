@@ -167,71 +167,124 @@ export function renderOAuthScopeSelection(options: {
     <h1>SmartThings 권한 연결</h1>
     <p class="intro"><span>Gateway에 허용할 리소스와 기능을 선택하세요.</span><span><span class="phrase">선택한 디바이스만 범위의 실제 대상은</span> <span class="phrase">SmartThings 화면에서 지정합니다.</span></span></p>
     <form action="/oauth/start" method="post">
-      <fieldset>
-        <legend>디바이스 범위</legend>
+      <fieldset class="step-section" data-permission-step="range">
+        <legend><span class="step-index">1</span> 디바이스 범위</legend>
         <label><input type="radio" name="deviceRange" value="selected"${selectedDeviceRange}> 선택한 디바이스만</label>
         <label><input type="radio" name="deviceRange" value="all"${allDeviceRange}> 연결된 모든 디바이스</label>
       </fieldset>
       ${permissionError}
       <div class="permission-groups" role="group" aria-label="리소스 권한"${permissionGroupValidation}>
-      <fieldset>
-        <legend>디바이스</legend>
+      <fieldset class="step-section" data-permission-step="basic-read">
+        <legend><span class="step-index">2</span> 기본 읽기</legend>
         <p class="hint">위에서 고른 디바이스 범위에 적용됩니다.</p>
         <label><input type="checkbox" name="devicePermissions" value="read"${defaultReadPermissionSelection}><span>상태 읽기 <small>r:devices:$ 또는 r:devices:*</small></span></label>
-        <label><input type="checkbox" name="devicePermissions" value="control"><span>명령 실행 <small>x:devices:$ 또는 x:devices:*</small></span></label>
-        <label><input type="checkbox" name="devicePermissions" value="write"><span>이름 변경·삭제 <small>w:devices:$ 또는 w:devices:*</small></span></label>
       </fieldset>
-      <fieldset>
-        <legend>허브</legend>
+      <section class="additional-permissions" data-permission-step="additional" aria-labelledby="additional-title">
+        <h2 id="additional-title"><span class="step-index">3</span> 추가 권한</h2>
+        <p class="hint">필요한 리소스만 펼쳐 선택하세요. 접힌 상태에서도 선택 여부와 실제 영향 범위를 확인할 수 있습니다.</p>
+      <details class="permission-resource" data-permission-resource="device">
+        <summary><span class="summary-title">디바이스</span><span class="summary-meta"><span class="summary-state" data-selection-summary><span class="summary-label">선택:</span><span class="selection-empty">없음</span><span class="summary-choice" data-summary-permission="control">명령 실행</span><span class="summary-choice" data-summary-permission="write">이름 변경·삭제</span></span><span class="summary-state" data-risk-summary><span class="summary-label">영향:</span><span class="risk-empty">선택 시 제어·삭제 가능</span><span class="summary-choice" data-summary-permission="control">기기 상태 변경</span><span class="summary-choice" data-summary-permission="write">이름 변경·삭제</span></span></span></summary>
+        <fieldset>
+        <legend>디바이스 추가 권한</legend>
+        <p class="hint">위에서 고른 디바이스 범위에 적용됩니다.</p>
+        <label><input type="checkbox" name="devicePermissions" value="control"><span>명령 실행 <small>x:devices:$ 또는 x:devices:*</small></span></label>
+        <p class="impact">전원·밝기·온도처럼 디바이스가 지원하는 명령을 즉시 <span class="phrase">실행할 수 있습니다.</span></p>
+        <label><input type="checkbox" name="devicePermissions" value="write"><span>이름 변경·삭제 <small>w:devices:$ 또는 w:devices:*</small></span></label>
+        <p class="impact">디바이스 이름을 바꾸거나 SmartThings에서 디바이스를 <span class="phrase">삭제할 수 있습니다.</span></p>
+        </fieldset>
+      </details>
+      <details class="permission-resource" data-permission-resource="hub">
+        <summary><span class="summary-title">허브</span><span class="summary-meta"><span class="summary-state" data-selection-summary><span class="summary-label">선택:</span><span class="selection-empty">없음</span><span class="summary-choice" data-summary-permission="read">허브 정보 읽기</span></span><span class="summary-state" data-risk-summary><span class="summary-label">영향:</span><span class="risk-empty">선택 시 읽기만</span><span class="summary-choice" data-summary-permission="read">허브 정보 열람</span></span></span></summary>
+        <fieldset>
+        <legend>허브 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 허브에 적용됩니다.</p>
         <label><input type="checkbox" name="hubPermissions" value="read"><span>허브 정보 읽기 <small>r:hubs:*</small></span></label>
-      </fieldset>
-      <fieldset>
-        <legend>위치</legend>
+        </fieldset>
+      </details>
+      <details class="permission-resource" data-permission-resource="location">
+        <summary><span class="summary-title">위치</span><span class="summary-meta"><span class="summary-state" data-selection-summary><span class="summary-label">선택:</span><span class="selection-empty">없음</span><span class="summary-choice" data-summary-permission="read">위치 정보 읽기</span><span class="summary-choice" data-summary-permission="write">위치 설정 쓰기</span><span class="summary-choice" data-summary-permission="execute">위치 모드 변경</span></span><span class="summary-state" data-risk-summary><span class="summary-label">영향:</span><span class="risk-empty">선택 시 쓰기·실행 가능</span><span class="summary-choice" data-summary-permission="read">위치 정보 열람</span><span class="summary-choice" data-summary-permission="write">이름·좌표·온도 단위 변경</span><span class="summary-choice" data-summary-permission="execute">모드 조건 자동화 실행 가능</span></span></span></summary>
+        <fieldset>
+        <legend>위치 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 위치에 적용됩니다.</p>
         <label><input type="checkbox" name="locationPermissions" value="read"><span>위치 정보 읽기 <small>r:locations:*</small></span></label>
         <label><input type="checkbox" name="locationPermissions" value="write"><span>위치 정보 쓰기 <small>w:locations:*</small></span></label>
+        <p class="impact">위치 이름·좌표·온도 단위 같은 설정을 변경할 수 있습니다.</p>
         <label><input type="checkbox" name="locationPermissions" value="execute"><span>위치 모드 변경 실행 <small>x:locations:*</small></span></label>
-      </fieldset>
-      <fieldset>
-        <legend>장면</legend>
+        <p class="impact">위치 모드를 변경해 해당 모드를 조건으로 쓰는 자동화가 동작할 수 있습니다.</p>
+        </fieldset>
+      </details>
+      <details class="permission-resource" data-permission-resource="scene">
+        <summary><span class="summary-title">장면</span><span class="summary-meta"><span class="summary-state" data-selection-summary><span class="summary-label">선택:</span><span class="selection-empty">없음</span><span class="summary-choice" data-summary-permission="read">장면 읽기</span><span class="summary-choice" data-summary-permission="execute">장면 실행</span></span><span class="summary-state" data-risk-summary><span class="summary-label">영향:</span><span class="risk-empty">선택 시 여러 디바이스 실행 가능</span><span class="summary-choice" data-summary-permission="read">장면 정보 열람</span><span class="summary-choice" data-summary-permission="execute">여러 디바이스 상태 변경</span></span></span></summary>
+        <fieldset>
+        <legend>장면 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 장면에 적용됩니다.</p>
         <label><input type="checkbox" name="scenePermissions" value="read"><span>장면 읽기 <small>r:scenes:*</small></span></label>
         <label><input type="checkbox" name="scenePermissions" value="execute"><span>장면 실행 <small>x:scenes:*</small></span></label>
-      </fieldset>
-      <fieldset>
-        <legend>규칙</legend>
+        <p class="impact">장면을 실행해 여러 디바이스 상태를 한 번에 바꿀 수 있습니다.</p>
+        </fieldset>
+      </details>
+      <details class="permission-resource" data-permission-resource="rule">
+        <summary><span class="summary-title">규칙</span><span class="summary-meta"><span class="summary-state" data-selection-summary><span class="summary-label">선택:</span><span class="selection-empty">없음</span><span class="summary-choice" data-summary-permission="read">규칙 읽기</span><span class="summary-choice" data-summary-permission="write">규칙 만들기·수정·삭제</span></span><span class="summary-state" data-risk-summary><span class="summary-label">영향:</span><span class="risk-empty">선택 시 자동화 쓰기·삭제 가능</span><span class="summary-choice" data-summary-permission="read">규칙 정보 열람</span><span class="summary-choice" data-summary-permission="write">자동화 동작 변경</span></span></span></summary>
+        <fieldset>
+        <legend>규칙 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 규칙에 적용됩니다.</p>
         <label><input type="checkbox" name="rulePermissions" value="read"><span>규칙 읽기 <small>r:rules:*</small></span></label>
         <label><input type="checkbox" name="rulePermissions" value="write"><span>규칙 만들기·수정·삭제 <small>w:rules:*</small></span></label>
-      </fieldset>
+        <p class="impact">규칙을 만들고 수정하거나 삭제해 자동화 동작을 바꿀 수 있습니다.</p>
+        </fieldset>
+      </details>
+      </section>
       </div>
-      <section class="policy" aria-labelledby="policy-title">
-        <h2 id="policy-title">연결 전 확인</h2>
+      <section class="policy" data-permission-step="policy" aria-labelledby="policy-title">
+        <h2 id="policy-title"><span class="step-index">4</span> 정책 동의</h2>
         <p><strong>${operatorName}</strong>에서 SmartThings 연결 정보와 암호화된 OAuth 토큰을 관리합니다.</p>
         <p><a href="${privacyPolicyUrl}" aria-label="개인정보처리방침(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">개인정보처리방침</a> · <a href="${termsUrl}" aria-label="이용약관(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">이용약관</a> · <a href="mailto:${supportEmail}">지원 문의</a></p>
         <label><input type="checkbox" name="policyConsent" value="accepted" required><span>${smartThingsPolicyConsentStatement}</span></label>
       </section>
-      <button type="submit">SmartThings에서 계속</button>
+      <div class="form-actions" data-permission-step="actions">
+        <p><span class="step-index">5</span> 연결 계속</p>
+        <button type="submit">SmartThings에서 계속</button>
+        <a href="/" data-action="cancel-oauth">서비스 안내로 돌아가기</a>
+      </div>
     </form>`,
     description: "SmartThings Gateway에 허용할 권한과 디바이스 범위를 선택합니다.",
     styles: `
     .intro > span { display: block; }
-    fieldset { margin: 0 0 var(--space-4); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); }
+    form { margin-top: var(--space-8); }
+    fieldset { margin: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); }
+    .step-section { margin-bottom: var(--space-6); }
     legend { padding: 0 var(--space-2); font-weight: var(--weight-bold); }
+    .step-index { display: inline-flex; width: var(--space-6); height: var(--space-6); align-items: center; justify-content: center; margin-right: var(--space-2); border-radius: 50%; background: var(--surface-subtle); color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .hint { margin: var(--space-2) 0 var(--space-3); font-size: var(--font-small); }
     .error { margin: 0 0 var(--space-4); color: var(--error); font-weight: var(--weight-bold); }
-    .policy { margin: var(--space-6) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .additional-permissions { margin-bottom: var(--space-6); }
+    .additional-permissions h2 { margin: 0 0 var(--space-2); }
+    .permission-resource { margin-top: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface); }
+    .permission-resource summary { padding: var(--space-4); cursor: pointer; }
+    .permission-resource summary:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    .summary-title { margin-left: var(--space-2); font-weight: var(--weight-bold); }
+    .summary-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0 var(--space-6); color: var(--text-muted); font-size: var(--font-small); }
+    .summary-state { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
+    .summary-label { font-weight: var(--weight-bold); }
+    .summary-choice { display: none; color: var(--text); font-weight: var(--weight-bold); }
+    .permission-resource:has(input:checked) .selection-empty, .permission-resource:has(input:checked) .risk-empty { display: none; }
+    .permission-resource:has(input[value="read"]:checked) [data-summary-permission="read"], .permission-resource:has(input[value="control"]:checked) [data-summary-permission="control"], .permission-resource:has(input[value="write"]:checked) [data-summary-permission="write"], .permission-resource:has(input[value="execute"]:checked) [data-summary-permission="execute"] { display: inline; }
+    .permission-resource fieldset { margin: 0 var(--space-4) var(--space-4); }
+    .impact { margin: calc(-1 * var(--space-2)) 0 var(--space-4) calc(var(--control-size) + var(--space-3)); font-size: var(--font-small); }
+    .policy { margin: 0 0 var(--space-8); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .policy h2 { margin: 0 0 var(--space-3); font-size: var(--font-h2); }
     .policy p { margin: var(--space-2) 0; }
     .policy a { color: var(--focus); }
     label { display: flex; gap: var(--space-3); align-items: flex-start; margin: var(--space-3) 0; line-height: var(--line-body); cursor: pointer; }
     small { display: block; color: var(--text-muted); font-size: var(--font-small); line-height: var(--line-body); }
     input { width: var(--control-size); height: var(--control-size); margin: var(--control-offset) 0 0; flex: 0 0 auto; accent-color: var(--focus); }
+    .form-actions { position: static; padding: var(--space-4) 0 var(--safe-area-bottom); border-top: 1px solid var(--border); background: var(--surface); text-align: center; }
+    .form-actions p { margin: 0 0 var(--space-3); color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); text-align: left; }
+    .form-actions a { display: inline-block; min-height: var(--action-height); padding: var(--space-3); color: var(--text-muted); font-weight: var(--weight-bold); line-height: var(--line-action); }
     button { width: 100%; min-height: var(--action-height); padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-action); background: var(--action); color: var(--action-text); font: inherit; font-weight: var(--weight-bold); line-height: var(--line-action); cursor: pointer; transition: background-color 100ms ease-out, transform 100ms ease-out; }
     button:hover { background: var(--action-hover); }
     button:active { transform: scale(var(--pressed-scale)); }
-    button:focus-visible, input:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    button:focus-visible, input:focus-visible, .form-actions a:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     @media (prefers-reduced-motion: reduce) { button { transition: none; } }`,
     title: "SmartThings 권한 연결",
   })

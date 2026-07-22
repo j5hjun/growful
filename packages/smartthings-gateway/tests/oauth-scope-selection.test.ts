@@ -175,6 +175,80 @@ describe("parseOAuthScopeSelection", () => {
     }
   })
 
+  it("renders the permission decision path in the required order", () => {
+    // Given
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
+
+    // When
+    const stepPositions = ["range", "basic-read", "additional", "policy", "actions"].map((step) =>
+      html.indexOf(`data-permission-step="${step}"`),
+    )
+
+    // Then
+    expect(stepPositions.every((position) => position >= 0)).toBe(true)
+    expect(stepPositions).toEqual([...stepPositions].sort((left, right) => left - right))
+  })
+
+  it("keeps additional permissions grouped in collapsed resource disclosures", () => {
+    // Given
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
+
+    // When
+    const resources = ["device", "hub", "location", "scene", "rule"] as const
+
+    // Then
+    for (const resource of resources) {
+      expect(html).toContain(
+        `<details class="permission-resource" data-permission-resource="${resource}">`,
+      )
+    }
+    expect(html).not.toContain('<details class="permission-resource" open')
+    expect(html.match(/data-selection-summary/g)).toHaveLength(resources.length)
+    expect(html.match(/<span class="summary-state" data-risk-summary/g)).toHaveLength(
+      resources.length,
+    )
+    expect(html.match(/<span class="summary-label">선택:<\/span>/g)).toHaveLength(resources.length)
+    expect(html.match(/<span class="summary-label">영향:<\/span>/g)).toHaveLength(resources.length)
+  })
+
+  it("keeps collapsed summaries specific to the selected permissions", () => {
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
+
+    for (const summary of [
+      'data-summary-permission="control">명령 실행</span>',
+      'data-summary-permission="write">이름 변경·삭제</span>',
+      'data-summary-permission="execute">위치 모드 변경</span>',
+      'data-summary-permission="execute">여러 디바이스 상태 변경</span>',
+      'data-summary-permission="write">자동화 동작 변경</span>',
+    ]) {
+      expect(html).toContain(summary)
+    }
+    expect(html).not.toContain('<span class="selection-selected">선택됨</span>')
+  })
+
+  it("describes the concrete impact of elevated permissions", () => {
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
+
+    for (const impact of [
+      "전원·밝기·온도처럼 디바이스가 지원하는 명령을 즉시",
+      "디바이스 이름을 바꾸거나 SmartThings에서 디바이스를",
+      "위치 이름·좌표·온도 단위 같은 설정을 변경할 수 있습니다.",
+      "위치 모드를 변경해 해당 모드를 조건으로 쓰는 자동화가 동작할 수 있습니다.",
+      "장면을 실행해 여러 디바이스 상태를 한 번에 바꿀 수 있습니다.",
+      "규칙을 만들고 수정하거나 삭제해 자동화 동작을 바꿀 수 있습니다.",
+    ]) {
+      expect(html).toContain(impact)
+    }
+    expect(html).toContain('<span class="phrase">실행할 수 있습니다.</span>')
+    expect(html).toContain('<span class="phrase">삭제할 수 있습니다.</span>')
+  })
+
+  it("offers a return path to the service guide beside the final action", () => {
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
+
+    expect(html).toContain('href="/" data-action="cancel-oauth">서비스 안내로 돌아가기</a>')
+  })
+
   it("preserves the submitted all-device range on the global validation error", () => {
     const html = renderOAuthScopeSelection({
       deviceRange: "all",
