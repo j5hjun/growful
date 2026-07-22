@@ -22,7 +22,7 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     section { margin-top: var(--space-6); }
     h2 { margin: 0 0 var(--space-3); font-size: var(--font-body); line-height: var(--line-body); }
     output { display: block; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
-    output:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    output:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .copy-feedback, .copy-error { margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .copy-feedback { color: var(--success); }
     .copy-error { color: var(--error); }

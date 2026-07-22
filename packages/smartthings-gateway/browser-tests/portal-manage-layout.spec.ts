@@ -252,6 +252,7 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   // Then
   await expect(page.locator("[data-token-copy-error]")).toBeVisible()
   await expect(page.locator("[data-token-value]")).toBeFocused()
+  await expect(page.locator("[data-token-value]")).toHaveCSS("outline-style", "solid")
   await manageAction.click()
   await expect(page).toHaveURL("https://growful.test/manage")
 })

@@ -145,7 +145,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .connection-action-slot { align-self: end; padding-top: var(--space-4); }
     .connection-action-slot > * { width: 100%; }
     .credential-output output { display: block; margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
-    .credential-output output:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    .credential-output output:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .copy-feedback, .copy-error { margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .copy-feedback { color: var(--success); }
     .copy-error { color: var(--error); }
