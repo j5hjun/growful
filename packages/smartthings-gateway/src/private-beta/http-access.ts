@@ -76,13 +76,7 @@ function mediaPreference(
 
 function acceptsHtml(accept: string | undefined): boolean {
   if (accept === undefined) return false
-  const textHtml = mediaPreference(accept, "text", "html")
-  const xhtml = mediaPreference(accept, "application", "xhtml+xml")
-  const html =
-    xhtml.quality > textHtml.quality ||
-    (xhtml.quality === textHtml.quality && xhtml.specificity > textHtml.specificity)
-      ? xhtml
-      : textHtml
+  const html = mediaPreference(accept, "text", "html")
   const json = mediaPreference(accept, "application", "json")
   if (html.quality !== json.quality) return html.quality > json.quality
   return html.quality > 0 && html.specificity > json.specificity

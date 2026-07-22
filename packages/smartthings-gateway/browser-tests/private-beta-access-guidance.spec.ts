@@ -78,6 +78,18 @@ for (const variant of pageVariants) {
               .evaluate((element) => element.getClientRects().length),
           ).toBe(1)
         }
+        if (variant.guidance.kind === "rate_limited") {
+          for (const phraseWithParticle of [
+            "초대 사용자 이름과",
+            "원본 invite secret을",
+          ] as const) {
+            expect(
+              await page
+                .getByText(phraseWithParticle, { exact: true })
+                .evaluate((element) => element.getClientRects().length),
+            ).toBe(1)
+          }
+        }
         await expect(primaryAction).toBeFocused()
         expect((await primaryAction.boundingBox())?.height).toBeGreaterThanOrEqual(44)
         expect(

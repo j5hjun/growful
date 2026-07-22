@@ -245,7 +245,7 @@ describe("Private-beta OAuth access HTTP surface", () => {
     expect(response.json()).toEqual({ error: "private_beta_access_required" })
   })
 
-  it("renders browser guidance when XHTML is the accepted document type", async () => {
+  it("keeps JSON when XHTML is accepted without HTML", async () => {
     // Given
     const fixture = createFixture(
       privateBetaOAuthAccess([
@@ -265,12 +265,45 @@ describe("Private-beta OAuth access HTTP surface", () => {
 
     // Then
     expect(response.statusCode).toBe(401)
-    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.headers["content-type"]).toContain("application/json")
     expect(response.headers.vary).toBe("Accept")
-    expect(response.body).toContain("초대 사용자 이름")
+    expect(response.json()).toEqual({ error: "private_beta_access_required" })
     expect(response.headers["www-authenticate"]).toBe(
       'Basic realm="Growful private beta", charset="UTF-8"',
     )
+  })
+
+  it.each([
+    { accept: "*/*", contentType: "application/json" },
+    { accept: "application/json, text/html", contentType: "application/json" },
+    { accept: "text/*;q=1, application/json;q=0.8", contentType: "text/html" },
+    {
+      accept: "text/html;q=0.2, text/*;q=1, application/json;q=0.5",
+      contentType: "application/json",
+    },
+    { accept: "application/json;q=0, text/html;q=1", contentType: "text/html" },
+  ])("honors Accept specificity and quality for $accept", async ({ accept, contentType }) => {
+    // Given
+    const fixture = createFixture(
+      privateBetaOAuthAccess([
+        {
+          passwordHash: "dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42",
+          username: "private-user",
+        },
+      ]),
+    )
+
+    // When
+    const response = await fixture.app.inject({
+      headers: { accept },
+      method: "GET",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.statusCode).toBe(401)
+    expect(response.headers["content-type"]).toContain(contentType)
+    expect(response.headers.vary).toBe("Accept")
   })
 
   it.each(["text/html/invalid", "text/html;q=0x1"])(
