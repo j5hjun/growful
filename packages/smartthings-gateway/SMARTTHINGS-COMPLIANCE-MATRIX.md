@@ -48,8 +48,8 @@
 | 수집 항목·목적·보유기간 공개 | 부분 | `/privacy`와 `PUBLIC-LAUNCH.md`에 확인된 데이터 흐름과 미확정 보존 경계 기록 | 처리위탁자·국가·백업·로그 보존 확정 후 법률 검토·게시 |
 | 제3자 제공·위탁과 공유 데이터 공개 | 차단 | SmartThings API 통신 경계는 코드로 확인 | Samsung/SmartThings 전달 항목과 Licensee subprocessors 확정·제출 |
 | 데이터 판매·광고·분석·모델링 금지 | 통과 | 해당 저장·분석·광고·학습 기능 없음 | 기능 추가 시 회귀 검토와 명시적 SmartThings 합의 없이 유지 |
-| 사용자 삭제 수단 | 부분 | `DELETE /connection`, signed uninstall lifecycle | Growful token 분실 시 권리행사·신원 확인 절차와 백업 파기 구현 |
-| Samsung/User 요청 시 영구 삭제 | 부분 | primary connection row 즉시 삭제 | WAL·backup·snapshot·외부 log의 파기 시한과 증빙 확정 |
+| 사용자 삭제 수단 | 부분 | `DELETE /connection`, signed uninstall lifecycle, token 분실 시 외부 본인 확인·승인 뒤 `supportReference`를 쓰는 PostgreSQL 운영 CLI와 성공/대상 없음 감사 | 본인 확인·외부 ticket 승인 검증·완료 통지와 backup 파기 운영 |
+| Samsung/User 요청 시 영구 삭제 | 부분 | 운영 CLI가 primary 연결 삭제와 성공 operator audit를 원자적으로 실행하고 대상 없음 실패도 기록 | SmartThings 설치·credential 회수와 WAL·backup·snapshot·외부 log의 파기 시한·증빙 확정 |
 | OAuth 임시 데이터 최소 보존 | 통과 | state 원문 미저장, 10분 만료, 정상 실행 중 최대 5분 내 정리 | 서비스 중단 시 재기동 정리와 운영 모니터링 유지 |
 | privacy policy가 Samsung으로의 공개·사용을 허용 | 차단 | `/privacy`가 OAuth 승인과 SmartThings API 요청의 정보 전달 경계를 설명 | 적용법과 SmartThings 요구사항에 맞는 문구인지 법률 검토 후 확정 |
 | subprocessors 목록 사전 제공 | 차단 | 저장소에는 확정 사업자·국가 목록 없음 | Cloudflare·hosting·DB·backup·monitoring 계약 주체와 국가 확정 |
@@ -62,7 +62,7 @@
 | 권한 변경 기록 3년 이상 | 차단 | 관리자 권한 audit store 없음 | 변조 방지 권한 이력과 보존 정책 구현 |
 | 안전한 원격 관리자 접근 | 부분 | Tailscale SSH와 tag policy 문서화 | MFA/OTP, session timeout, 실제 ACL 증빙과 정기 검토 |
 | 전송 중·저장 시 암호화 | 부분 | HTTPS 경계, AES-256-GCM token 암호화 | DB volume·backup 암호화와 key lifecycle 문서화·검증 |
-| 관리자·운영자 활동 로그 | 차단 | 연결 수명주기·인증·token 읽기와 수동 차단·해제를 가명 append-only hash-chain에 기록; 차단 작업은 해시된 운영자 ID·승인 ticket 포함, 전체 체인 검증 CLI 구현 | CLI self-asserted ID를 개별 관리자 계정에 귀속, 외부 불변 sink, 보존·검색·정기 review 구현 |
+| 관리자·운영자 활동 로그 | 차단 | 연결 수명주기·인증·token 읽기, 수동 차단·해제와 개인정보 삭제 성공/대상 없음을 가명 append-only hash-chain에 기록; 운영 작업은 해시된 운영자 ID·승인 ticket 포함, 전체 체인 검증 CLI 구현 | CLI self-asserted ID를 개별 관리자 계정과 외부 ticket 승인에 귀속, 외부 불변 sink, 보존·검색·정기 review 구현 |
 | malware·patch 관리 | 차단 | digest-pinned container와 Dependabot만 확인 | host·관리 단말 patch/EDR 정책과 긴급 업데이트 절차 |
 | 관리 단말·물리 접근 통제 | 차단 | 저장소에서 증명 불가 | 운영자 단말 전용성, 화면 잠금, 디스크 암호화, 물리 통제 기록 |
 | 운영 데이터의 테스트 사용 방지 | 부분 | 테스트 fixture는 합성 token·ID 사용 | 운영 데이터 export 금지와 예외 승인·비식별 절차 문서화 |
@@ -75,7 +75,7 @@
 | incident response program | 부분 | [사고 대응 Runbook 초안](./INCIDENT-RESPONSE.md)에 탐지·분류·격리·증거보존·복구·통지·사후검토 정의 | 연락망 확정, 반기 훈련과 시정조치 증빙 |
 | SmartThings에 24시간 내 사고 통지 | 부분 | 15분/1시간/24시간 timeline과 초기 통지 template 작성 | 승인 요청에서 실제 채널·필수 형식 확인 후 전송 훈련 |
 | 사용자·규제기관 통지 | 차단 | `/support`와 운영자 공지·해결 이력용 `/status`는 있으나 법정 통지 결정·개별 전달 기능은 없음 | 적용법별 의사결정표, 통지 템플릿, 전달·접수 증빙과 법률 연락망 |
-| 삭제 요청 처리와 증빙 | 부분 | primary DB 삭제와 unlink E2E, [보존·파기 대장 초안](./DATA-RETENTION.md) | token 분실 요청, backup aging, 완료 통지, 표본 훈련 |
+| 삭제 요청 처리와 증빙 | 부분 | token 분실 요청을 `supportReference`+운영자+외부 승인 ticket으로 처리하는 primary PostgreSQL CLI, 원자적 성공 audit·대상 없음 실패 audit, unlink E2E, [보존·파기 대장 초안](./DATA-RETENTION.md) | 외부 본인 확인·ticket 검증, SmartThings 회수, backup aging, 완료 통지, 표본 훈련 |
 | 서비스 중단·보안 문제의 SmartThings 통지 | 차단 | 자동 통지 없음 | 담당자, 접수 채널, emergency change notice 절차 확정 |
 
 ## 제출·출시 게이트

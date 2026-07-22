@@ -70,6 +70,28 @@ Gateway도 시작 시 전체 체인을 한 번 검증하고, 이후 `REFRESH_CHE
 연결 식별자, token, 데이터베이스 URL을 넣지 않고 실패 종류와 오류 클래스만 기록합니다. 이
 자동 검증은 탐지 통제이며 외부 불변 보존이나 독립 alert 전송을 대신하지 않습니다.
 
+## Growful token 분실 개인정보 삭제
+
+지원 채널에서 별도로 본인 확인을 마치고 외부 ticket 시스템에서 삭제 승인을 받은 뒤, 운영자는
+사용자가 보관한 `supportReference`로 primary PostgreSQL 연결을 삭제합니다.
+
+```sh
+DATABASE_URL=postgresql://... node dist/manage-privacy-deletion.js delete SUPPORT_REFERENCE OPERATOR_ID EXTERNAL_APPROVAL_TICKET
+```
+
+대상이 있으면 연결 행, 암호화된 SmartThings token과 Growful token hash를 삭제하고
+`privacy.delete/succeeded/affectedCount=1` 운영자 이벤트를 같은 트랜잭션의 append-only 감사
+체인에 기록합니다. 대상이 없으면 데이터를 바꾸지 않고
+`privacy.delete/failed/affectedCount=0` 이벤트를 기록하며 종료코드 2를 반환합니다. 삭제 또는
+감사 append가 실패하면 전체 트랜잭션을 rollback하고 원문 없이 오류 클래스만 출력합니다.
+`supportReference`만 CLI 결과에 포함하며 원시 `installedAppId`, token, 운영자 ID와 ticket은
+출력하거나 DB에 저장하지 않습니다. 운영자 ID와 ticket은 입력 경계에서 SHA-256 hash로만 감사
+이벤트에 남습니다.
+
+이 CLI는 본인 확인이나 외부 ticket의 승인 상태를 검증하지 않습니다. 또한 SmartThings Linked
+Service 설치·SmartThings 측 credential 회수, backup·WAL·snapshot·외부 log의 파기를 수행하지
+않습니다. 운영자는 각 외부 절차와 완료 증빙을 같은 case에서 별도로 추적해야 합니다.
+
 ## 보안 경계
 
 - OAuth `state`는 SHA-256 해시만 저장하고 콜백에서 한 번 소비합니다. 생성 10분 뒤 만료되며,
