@@ -10,6 +10,13 @@ export function bindTokenSafetyActions(): void {
     if (copyButton === null || error === null || feedback === null || output === null) continue
     let copyGeneration = 0
 
+    region.addEventListener("token-safety-reset", () => {
+      copyGeneration += 1
+      copyButton.disabled = false
+      error.hidden = true
+      feedback.hidden = true
+    })
+
     copyButton.addEventListener("click", async () => {
       const requestGeneration = ++copyGeneration
       copyButton.disabled = true

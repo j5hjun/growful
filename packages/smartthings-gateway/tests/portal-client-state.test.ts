@@ -210,6 +210,7 @@ describe("Growful portal connection states", () => {
   })
 
   it("clears the one-time token when the visible status action restores status", async () => {
+    const refreshedConnection = deferred<ReturnType<typeof response>>()
     const fixture = createPortalBrowserFixture()
     const form = getPortalElement(fixture.elements, "form")
     const input = getPortalElement(fixture.elements, "input")
@@ -219,11 +220,14 @@ describe("Growful portal connection states", () => {
     const rotatedOutput = getPortalElement(fixture.elements, "rotatedOutput")
     const rotatedSection = getPortalElement(fixture.elements, "rotatedSection")
     const status = getPortalElement(fixture.elements, "status")
-    runPortalClient(fixture, async (path) =>
-      path === "/token/rotate"
-        ? response(200, { growfulToken: `grw_st_${"B".repeat(43)}` })
-        : response(200, activeConnection()),
-    )
+    let statusRequests = 0
+    runPortalClient(fixture, async (path) => {
+      if (path === "/token/rotate") {
+        return response(200, { growfulToken: `grw_st_${"B".repeat(43)}` })
+      }
+      statusRequests += 1
+      return statusRequests === 1 ? response(200, activeConnection()) : refreshedConnection.promise
+    })
     input.value = validToken
     await form.dispatch("submit", { preventDefault() {} })
     await new Promise<void>((resolve) => setImmediate(resolve))
@@ -231,11 +235,13 @@ describe("Growful portal connection states", () => {
     await rotateForm.dispatch("submit", { preventDefault() {}, submitter: rotateConfirm })
     expect(rotatedSection.hidden).toBe(false)
 
-    await form.dispatch("submit", { preventDefault() {} })
-    await new Promise<void>((resolve) => setImmediate(resolve))
+    const statusRefresh = form.dispatch("submit", { preventDefault() {} })
 
     expect(rotatedSection.hidden).toBe(true)
     expect(rotatedOutput.textContent).toBe("")
+    refreshedConnection.resolve(response(200, activeConnection()))
+    await statusRefresh
+    await new Promise<void>((resolve) => setImmediate(resolve))
     expect(status.hidden).toBe(false)
   })
 

@@ -4,6 +4,7 @@ import { portalClientScript } from "../../src/http/portal-client.js"
 export type PortalEvent = {
   preventDefault?: () => void
   submitter?: PortalElement
+  type?: string
 }
 
 export type PortalFetch = (
@@ -34,6 +35,11 @@ export class PortalElement {
   async dispatch(name: string, event: PortalEvent = {}): Promise<void> {
     if (name === "click" && this.disabled) return
     await this.listeners.get(name)?.(event)
+  }
+
+  dispatchEvent(event: PortalEvent): boolean {
+    if (event.type !== undefined) void this.dispatch(event.type, event)
+    return true
   }
 
   setAttribute(name: string, value: string): void {
@@ -172,6 +178,9 @@ export function runPortalClient(
           : [],
     },
     fetch,
+    Event: class {
+      constructor(readonly type: string) {}
+    },
     Intl,
     navigator: { clipboard: { writeText: async () => {} } },
   })

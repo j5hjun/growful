@@ -19,7 +19,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     <header class="manage-header">
       <p class="eyebrow">연결 관리</p>
       <h1><span class="phrase">Growful 토큰으로</span> <span class="phrase">연결 확인</span></h1>
-      <p>토큰은 이 탭을 닫거나 새로고침하면 사라집니다. 브라우저 저장소에는 보관하지 않습니다.</p>
+      <p>토큰은 이 탭을 닫거나 새로고침하면 사라집니다. <span class="phrase">브라우저에 저장하지 않습니다.</span></p>
     </header>
     <form class="token-form" action="/manage" method="post" data-portal-token-form novalidate>
       <div class="token-entry-region">
@@ -71,7 +71,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       <p><span class="phrase">이 토큰은 다시 확인할 수 없습니다.</span> <span class="phrase">지금 복사해 안전한 곳에 보관하세요.</span></p>
       <output id="rotated-growful-token" data-token-value data-rotated-token tabindex="-1"></output>
       <p class="copy-feedback" data-token-copy-feedback role="status" aria-live="polite" hidden>새 Growful 토큰을 클립보드에 복사했습니다.</p>
-      <p class="copy-error" data-token-copy-error role="alert" hidden>자동 복사를 사용할 수 없습니다. 위 토큰을 직접 선택해 복사하세요.</p>
+      <p class="copy-error" data-token-copy-error role="alert" hidden><span class="phrase">자동 복사를 사용할 수 없습니다.</span> <span class="phrase">위 토큰을 직접 복사하세요.</span></p>
       <div class="credential-actions">
         <button class="primary" type="button" data-copy-token aria-controls="rotated-growful-token">새 토큰 복사</button>
         <button class="secondary" type="button" data-return-status>상태로 돌아가기</button>

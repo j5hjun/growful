@@ -119,6 +119,11 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   const tokenA = `grw_st_${"A".repeat(43)}`
   const tokenB = `grw_st_${"B".repeat(43)}`
   let rotationRequests = 0
+  let holdStatusRefresh = false
+  let releaseStatusRefresh: (() => void) | undefined
+  const statusRefreshGate = new Promise<void>((resolve) => {
+    releaseStatusRefresh = resolve
+  })
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -156,6 +161,7 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
       return
     }
     if (pathname === "/connection") {
+      if (holdStatusRefresh) await statusRefreshGate
       await route.fulfill({
         json: {
           connected: true,
@@ -214,11 +220,13 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   await page.locator("[data-rotate-token]").click()
   await page.locator("[data-rotate-token-confirm]").click()
   await expect(result).toBeVisible()
+  holdStatusRefresh = true
   await page.locator("[data-token-submit]").click()
 
   // Then
   await expect(result).toBeHidden()
   await expect(page.locator("[data-rotated-token]")).toHaveText("")
+  releaseStatusRefresh?.()
   await expect(page.locator("[data-portal-status]")).toBeVisible()
   expect(rotationRequests).toBe(2)
 

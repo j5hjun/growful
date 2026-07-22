@@ -14,6 +14,7 @@ export function bindPortalInteractions(
   let tokenGeneration = 0
 
   function clearRotatedToken(): void {
+    elements.rotatedTokenSection.dispatchEvent(new Event("token-safety-reset"))
     elements.rotatedTokenOutput.textContent = ""
     elements.rotatedTokenFeedback.hidden = true
     elements.rotatedTokenError.hidden = true
@@ -100,6 +101,7 @@ export function bindPortalInteractions(
     const requestGeneration = ++tokenGeneration
     elements.tokenInput.removeAttribute("aria-invalid")
     elements.statusSection.hidden = true
+    clearRotatedToken()
     view.clearMessages()
     view.setActionState("loading")
     elements.tokenForm.setAttribute("aria-busy", "true")
@@ -110,7 +112,6 @@ export function bindPortalInteractions(
       }
       if (requestGeneration !== tokenGeneration) return
       elements.tokenInput.value = ""
-      clearRotatedToken()
       view.renderStatus(connection)
       view.showFeedback("연결 상태를 확인했습니다.")
     } catch (error) {
