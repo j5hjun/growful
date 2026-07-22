@@ -10,15 +10,17 @@ export function bindTokenSafetyActions(): void {
     if (copyButton === null || error === null || feedback === null || output === null) continue
     let copyGeneration = 0
     let copyPending = false
+    let pageHidden = false
 
     region.addEventListener("token-safety-reset", () => {
       copyGeneration += 1
-      copyButton.disabled = copyPending
+      copyButton.disabled = pageHidden || copyPending
       error.hidden = true
       feedback.hidden = true
     })
 
     window.addEventListener("pagehide", () => {
+      pageHidden = true
       copyGeneration += 1
       output.textContent = ""
       copyButton.disabled = true
@@ -44,7 +46,7 @@ export function bindTokenSafetyActions(): void {
         output.focus()
       } finally {
         copyPending = false
-        copyButton.disabled = false
+        copyButton.disabled = pageHidden
       }
     })
   }

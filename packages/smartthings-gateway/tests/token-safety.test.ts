@@ -203,4 +203,30 @@ describe("one-time token copy safety", () => {
     expect(fixture.feedback.hidden).toBe(true)
     expect(fixture.error.hidden).toBe(true)
   })
+
+  it.each(["resolve", "reject"] as const)(
+    "keeps the copy action disabled when a pending attempt %ss after pagehide",
+    async (settlement) => {
+      // Given
+      const fixture = createFixture()
+      const pendingAttempt = deferred()
+      const dispatchPagehide = runTokenSafety(fixture, async () => {
+        await pendingAttempt.promise
+      })
+      const pendingClick = fixture.copy.click()
+
+      // When
+      await dispatchPagehide()
+      if (settlement === "resolve") pendingAttempt.resolve()
+      else pendingAttempt.reject(new Error("clipboard unavailable"))
+      await pendingClick
+
+      // Then
+      expect(fixture.output.textContent).toBe("")
+      expect(fixture.copy.disabled).toBe(true)
+      expect(fixture.feedback.hidden).toBe(true)
+      expect(fixture.error.hidden).toBe(true)
+      expect(fixture.output.focusCount).toBe(0)
+    },
+  )
 })
