@@ -21,6 +21,7 @@ export const auditActions = [
   "connection.unblock",
   "invite.issue",
   "invite.revoke",
+  "privacy.delete",
   "status.incident_open",
   "status.incident_resolve",
   "status.incident_update",

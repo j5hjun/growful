@@ -57,8 +57,8 @@
 | `DELETE /connection` | 유효한 Growful token | 연결 행과 암호화 token/hash 삭제 | SmartThings 설치·credential 회수, backup aging |
 | SmartThings signed `DELETE` lifecycle | signature, date, app ID 검증 | `installedAppId` 연결 멱등 삭제 | backup/WAL/log 소멸 |
 | Growful token rotate | 현재 유효 token | 이전 hash 폐기, 새 token 원문 1회 표시 | 과거 audit/log 사본 정책 |
-| token 분실 사용자의 권리행사 | `[IDENTITY_VERIFICATION]` | 절차 미구현 | 신원 확인·검색·완료 통지 전체 |
-| 운영자 강제 삭제 | 승인 ticket + 고유 관리자 | 관리자 기능·audit 미구현 | 변조 방지 증빙·SmartThings 회수 |
+| token 분실 사용자의 권리행사 | 외부 `[IDENTITY_VERIFICATION]` 완료 + `supportReference` + 외부 승인 ticket | 운영 CLI가 일치하는 연결 행을 삭제하고 성공/대상 없음 결과를 감사 | 본인 확인 절차·완료 통지, backup/WAL/log 파기 |
+| 운영자 강제 삭제 | `supportReference` + 외부 승인 ticket + 운영자 ID | primary 삭제와 성공 audit를 같은 트랜잭션으로 실행; 대상 없음도 실패 audit | 중앙 운영자 신원 귀속·외부 ticket 검증·SmartThings 회수 |
 
 `DELETE /connection`은 Growful 저장 데이터만 삭제합니다. SmartThings Linked Service 설치 및
 SmartThings 측 credential의 확실한 회수가 필요한 경우 공식 설치 해제/회수 결과를 별도
@@ -73,7 +73,7 @@ SmartThings 측 credential의 확실한 회수가 필요한 경우 공식 설치
 | host/system | service·security event | 환경변수·secret dump | `[HOST_LOG_RETENTION]` | `[HOST_PROVIDER]` | 미확정 |
 | PostgreSQL | 접속·관리·오류 metadata | query parameter의 token/본문 | `[DB_LOG_RETENTION]` | `[DB_OWNER]` | 미확정 |
 | 연결 수명주기·접근 audit | 가명 연결 hash, 작업, 결과, UTC 시각, 이전 이벤트 hash | token, secret, 사용자명, `installedAppId` 원문 | `[AUDIT_RETENTION]` | `[DB_OWNER]` | append-only·단일 정규화 hash chain·CLI/런타임 자동 검증 구현, 외부 불변 보존 미확정 |
-| 관리자 audit | 해시된 주체·승인 ticket, 고정 목적 사유, 가명 대상, 차단·해제, 결과, UTC 시각 | token/secret/원시 운영자 ID·원시 ticket·`installedAppId` | 1/2년 법적 검토, 권한 변경 3년 목표 | `[AUDIT_PROVIDER]` | 차단·해제 append-only 기록 구현; 중앙 신원 귀속·외부 불변 보존 미구현 |
+| 관리자 audit | 해시된 주체·승인 ticket, 고정 목적 사유, 가명 대상, 차단·해제·개인정보 삭제, 결과, UTC 시각 | token/secret/원시 운영자 ID·원시 ticket·`installedAppId` | 1/2년 법적 검토, 권한 변경 3년 목표 | `[AUDIT_PROVIDER]` | 차단·해제와 개인정보 삭제 성공·대상 없음 append-only 기록 구현; 중앙 신원 귀속·외부 불변 보존 미구현 |
 | CI/registry | actor, workflow, commit, digest, 결과 | secret 출력 | `[CI_LOG_RETENTION]` | GitHub/`[OWNER]` | 실제 설정 미검증 |
 | incident evidence | 최소 forensic 자료, hash, chain of custody | 불필요한 원문 확산 | `[LEGAL_RETENTION]` | `[SECURITY_OWNER]` | 미확정 |
 | 공개 서비스 공지 | 사건 제목·영향·공개 메시지·시작/갱신/해결 시각 | token, secret, 사용자 식별자, 내부 인프라 상세 | `[STATUS_HISTORY_RETENTION]` | `[COMMS_OWNER/DB_OWNER]` | PostgreSQL 공지·해결 이력과 공개 페이지 구현, 보존기간 미확정 |
@@ -85,9 +85,9 @@ SmartThings 측 credential의 확실한 회수가 필요한 경우 공식 설치
 해시와 이벤트 해시를 재계산합니다. CLI 정상 결과는 종료코드 0, 손상 결과는 종료코드 1입니다.
 Gateway는 시작 시와 기존 유지보수 주기마다 재검증하고 손상 또는 읽기 실패 동안 `/readyz`를
 `503`으로 전환합니다. 출력과 로그에는 원문 연결 식별자나 token을 포함하지 않습니다.
-`manage-abuse` CLI의 운영자 ID와 ticket은 입력 직후
-SHA-256 값으로만 기록되지만 입력 주체를 중앙 인증하지는 않으므로 개별 SSH 계정/session
-기록과의 귀속 절차가 필요합니다. 자동 검증 결과의 외부 보존 위치, 독립 alert 연결, 검토
+`manage-abuse`와 `manage-privacy-deletion` CLI의 운영자 ID와 ticket은 입력 직후 SHA-256 값으로만
+기록되지만 입력 주체나 외부 ticket 승인 상태를 중앙 검증하지는 않으므로 개별 관리자 계정과
+승인 시스템의 귀속 절차가 필요합니다. 자동 검증 결과의 외부 보존 위치, 독립 alert 연결, 검토
 담당자와 검토 증빙은 `[AUDIT_REVIEW_PROCEDURE]`로 확정해야 합니다.
 
 ## 5. Backup·WAL·snapshot 대장
@@ -109,7 +109,10 @@ restore 직후 외부 연결 전에 재삭제합니다.
 1. 요청을 고유 case ID로 접수하고 요청자, 범위, 수신 시각과 법정 기한을 기록합니다.
 2. `[IDENTITY_VERIFICATION]`으로 본인을 확인하되 새 개인정보를 과도하게 수집하지 않습니다.
 3. legal hold, 계약상 의무와 SmartThings 측 회수 필요성을 확인합니다.
-4. primary DB에서 연결을 삭제하고 결과 건수, UTC 시각, 실행자와 승인 ticket을 audit에 남깁니다.
+4. 확인된 `supportReference`, 운영자 ID와 외부 승인 ticket으로
+   `node dist/manage-privacy-deletion.js delete SUPPORT_REFERENCE OPERATOR_ID EXTERNAL_APPROVAL_TICKET`을
+   실행합니다. 일치하는 연결 삭제와 성공 audit는 같은 트랜잭션이고, 대상 없음도 실패 audit로
+   남습니다. 원시 `installedAppId`, token, 운영자 ID와 ticket은 출력·저장하지 않습니다.
 5. SmartThings 설치·credential 회수가 요청 범위라면 공식 절차를 실행하고 결과를 기록합니다.
 6. log·ticket·support·incident 저장소에서 허용된 식별자로 검색해 삭제 또는 접근 제한합니다.
 7. backup/WAL/snapshot은 확정된 수명에 따라 만료시키고 restore 억제 목록에 case를 등록합니다.
@@ -118,6 +121,10 @@ restore 직후 외부 연결 전에 재삭제합니다.
 
 삭제 증빙은 삭제된 데이터 자체를 다시 복제하지 않고 case ID, 가명 식별자, 위치, 결과, 시각,
 실행·검토자와 backup 만료 확인으로 구성합니다.
+
+4단계 CLI는 primary PostgreSQL에만 효력이 있습니다. 2단계 본인 확인, 5단계 SmartThings 설치와
+credential 회수, 6~8단계 외부 저장소·backup/WAL 파기와 복구 억제는 독립된 외부 절차이며 CLI의
+성공 결과가 그 완료를 뜻하지 않습니다.
 
 ## 7. 복구 시 개인정보 보호
 
