@@ -110,7 +110,9 @@ describe("parseOAuthScopeSelection", () => {
 
   it("rejects unrecognized form fields", () => {
     // Given
-    const body = Buffer.from("deviceRange=all&devicePermissions=read&scope=x%3Adevices%3A%2A")
+    const body = Buffer.from(
+      "deviceRange=all&devicePermissions=read&policyConsent=accepted&scope=x%3Adevices%3A%2A",
+    )
 
     // When
     const scopes = parseOAuthScopeSelection(body)

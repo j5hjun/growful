@@ -200,7 +200,7 @@ export function parseOAuthScopeSelectionSubmission(body: unknown): OAuthScopeSel
     ...(permissionCount === 0 ? [oauthScopeSelectionIssueKinds.missingPermission] : []),
     ...(!draft.policyConsent ? [oauthScopeSelectionIssueKinds.missingPolicyConsent] : []),
   ] satisfies readonly OAuthScopeSelectionIssueKind[]
-  if (!selectionResult.success) {
+  if (!fieldsResult.success || !selectionResult.success) {
     return { draft, issues, kind: "invalid" }
   }
   const selection = selectionResult.data
