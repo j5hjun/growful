@@ -211,4 +211,55 @@ describe("private beta connection policy revocation", () => {
       await expect(store.getTokens(installedAppId)).resolves.toBeNull()
     },
   )
+
+  it.each([
+    {
+      id: "public-username-only",
+      name: "public policy with only a private username",
+      privateBetaInviteGeneration: null,
+      privateBetaUsername: "private-user",
+      privateBetaUsernames: null,
+    },
+    {
+      id: "public-generation-only",
+      name: "public policy with only an invite generation",
+      privateBetaInviteGeneration: "orphaned-generation",
+      privateBetaUsername: null,
+      privateBetaUsernames: null,
+    },
+    {
+      id: "active-private-username-only",
+      name: "active private policy with only a private username",
+      privateBetaInviteGeneration: null,
+      privateBetaUsername: "private-user",
+      privateBetaUsernames: ["private-user"],
+    },
+  ] satisfies readonly {
+    readonly id: string
+    readonly name: string
+    readonly privateBetaInviteGeneration: string | null
+    readonly privateBetaUsername: string | null
+    readonly privateBetaUsernames: readonly string[] | null
+  }[])("revokes an inconsistent private-beta tuple under $name", async (testCase) => {
+    // Given
+    const { installedAppId } = await seedConnection(`${testCase.id}-installed-app`)
+    await database
+      .updateTable("smartThingsConnections")
+      .set({
+        privateBetaInviteGeneration: testCase.privateBetaInviteGeneration,
+        privateBetaUsername: testCase.privateBetaUsername,
+      })
+      .where("installedAppId", "=", installedAppId)
+      .execute()
+
+    // When
+    const revokedCount = await store.revokeUnauthorizedConnections({
+      policyVersion: "test-policy",
+      privateBetaUsernames: testCase.privateBetaUsernames,
+    })
+
+    // Then
+    expect(revokedCount).toBe(1)
+    await expect(store.getTokens(installedAppId)).resolves.toBeNull()
+  })
 })
