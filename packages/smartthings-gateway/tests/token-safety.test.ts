@@ -72,12 +72,21 @@ function createFixture() {
 function runTokenSafety(
   fixture: ReturnType<typeof createFixture>,
   writeText: (value: string) => Promise<void>,
-): void {
+): () => Promise<void> {
+  const windowListeners = new Map<string, Listener>()
   runInNewContext(tokenSafetyClientScript, {
     document: { querySelectorAll: () => [fixture.region] },
     Error,
     navigator: { clipboard: { writeText } },
+    window: {
+      addEventListener(name: string, listener: Listener) {
+        windowListeners.set(name, listener)
+      },
+    },
   })
+  return async () => {
+    await windowListeners.get("pagehide")?.()
+  }
 }
 
 describe("one-time token copy safety", () => {
@@ -159,6 +168,16 @@ describe("one-time token copy safety", () => {
     const olderClick = fixture.copy.click()
     await fixture.region.dispatch("token-safety-reset")
     fixture.output.textContent = `grw_st_${"B".repeat(43)}`
+    await fixture.copy.click()
+
+    // Then
+    expect(fixture.copy.disabled).toBe(true)
+    expect(fixture.feedback.hidden).toBe(true)
+    expect(fixture.error.hidden).toBe(true)
+
+    // When
+    olderCopy.reject(new Error("stale clipboard failure"))
+    await olderClick
     const latestClick = fixture.copy.click()
     latestCopy.resolve()
     await latestClick
@@ -167,14 +186,21 @@ describe("one-time token copy safety", () => {
     expect(fixture.copy.disabled).toBe(false)
     expect(fixture.feedback.hidden).toBe(false)
     expect(fixture.error.hidden).toBe(true)
+    expect(fixture.output.focusCount).toBe(0)
+  })
+
+  it("clears the one-time token before a page can enter browser history cache", async () => {
+    // Given
+    const fixture = createFixture()
+    const dispatchPagehide = runTokenSafety(fixture, async () => {})
 
     // When
-    olderCopy.reject(new Error("stale clipboard failure"))
-    await olderClick
+    await dispatchPagehide()
 
     // Then
-    expect(fixture.feedback.hidden).toBe(false)
+    expect(fixture.output.textContent).toBe("")
+    expect(fixture.copy.disabled).toBe(true)
+    expect(fixture.feedback.hidden).toBe(true)
     expect(fixture.error.hidden).toBe(true)
-    expect(fixture.output.focusCount).toBe(0)
   })
 })

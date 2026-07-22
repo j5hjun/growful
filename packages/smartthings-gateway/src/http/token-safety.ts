@@ -9,16 +9,27 @@ export function bindTokenSafetyActions(): void {
     const output = region.querySelector<HTMLOutputElement>("[data-token-value]")
     if (copyButton === null || error === null || feedback === null || output === null) continue
     let copyGeneration = 0
+    let copyPending = false
 
     region.addEventListener("token-safety-reset", () => {
       copyGeneration += 1
-      copyButton.disabled = false
+      copyButton.disabled = copyPending
+      error.hidden = true
+      feedback.hidden = true
+    })
+
+    window.addEventListener("pagehide", () => {
+      copyGeneration += 1
+      output.textContent = ""
+      copyButton.disabled = true
       error.hidden = true
       feedback.hidden = true
     })
 
     copyButton.addEventListener("click", async () => {
+      if (copyPending) return
       const requestGeneration = ++copyGeneration
+      copyPending = true
       copyButton.disabled = true
       try {
         await navigator.clipboard.writeText(output.textContent)
@@ -32,7 +43,8 @@ export function bindTokenSafetyActions(): void {
         error.hidden = false
         output.focus()
       } finally {
-        if (requestGeneration === copyGeneration) copyButton.disabled = false
+        copyPending = false
+        copyButton.disabled = false
       }
     })
   }

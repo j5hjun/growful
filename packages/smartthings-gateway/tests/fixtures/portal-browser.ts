@@ -183,5 +183,6 @@ export function runPortalClient(
     },
     Intl,
     navigator: { clipboard: { writeText: async () => {} } },
+    window: { addEventListener() {} },
   })
 }
