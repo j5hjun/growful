@@ -134,7 +134,7 @@ describe("dynamic private beta invitation lifecycle", () => {
       method: "GET",
       url: `/oauth/callback?code=dynamic-code&state=${authorizationUrl.searchParams.get("state") ?? ""}`,
     })
-    const tokenMatch = /<output data-growful-token>([^<]+)<\/output>/.exec(callback.body)
+    const tokenMatch = /<output[^>]*data-growful-token[^>]*>([^<]+)<\/output>/.exec(callback.body)
     const growfulToken = GrowfulTokenSchema.parse(tokenMatch?.[1])
     const connected = await app.inject({
       headers: { authorization: `Bearer ${growfulToken}` },
