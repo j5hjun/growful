@@ -290,4 +290,35 @@ describe("OAuth callback browser results", () => {
     expectRecoveryPage(otherClientResponse, 400, "올바르지 않은 연결 요청입니다")
     expect(otherClientResponse.body).not.toContain("other-client-sensitive-code")
   })
+
+  it("falls back to the raw peer when the Cloudflare client address is missing or invalid", async () => {
+    // Given
+    const fixture = createGatewayAppFixture({ apps })
+    for (let requestIndex = 0; requestIndex < 60; requestIndex += 1) {
+      const response = await fixture.app.inject({
+        headers: {
+          ...(requestIndex % 2 === 0 ? { "cf-connecting-ip": "not-an-ip" } : {}),
+          "x-forwarded-for": `198.51.100.${requestIndex + 1}`,
+        },
+        method: "GET",
+        url: `/oauth/callback?code=fallback-code-${requestIndex}`,
+      })
+      expect(response.statusCode).toBe(400)
+    }
+
+    // When
+    const response = await fixture.app.inject({
+      headers: {
+        "cf-connecting-ip": "still-not-an-ip",
+        "x-forwarded-for": "203.0.113.200",
+      },
+      method: "GET",
+      url: "/oauth/callback?code=fallback-rate-limited-sensitive-code",
+    })
+
+    // Then
+    expectRecoveryPage(response, 429, "요청이 너무 많습니다")
+    expect(response.body).not.toContain("fallback-rate-limited-sensitive-code")
+    expect(response.headers["retry-after"]).toBeDefined()
+  })
 })
