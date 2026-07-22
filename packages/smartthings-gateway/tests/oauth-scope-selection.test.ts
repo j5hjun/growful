@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
+  oauthScopeSelectionIssueKinds,
   parseOAuthDeviceRangeSelection,
   parseOAuthScopeSelection,
+  parseOAuthScopeSelectionSubmission,
   renderOAuthScopeSelection,
 } from "../src/http/oauth-scope-selection.js"
 import { smartThingsScopes } from "../src/oauth/smartthings-scope.js"
@@ -128,6 +130,51 @@ describe("parseOAuthScopeSelection", () => {
     expect(parseOAuthScopeSelection(Buffer.from(body))).toBeNull()
   })
 
+  it("preserves only allowlisted draft values when the submission is invalid", () => {
+    // Given
+    const body = Buffer.from(
+      "deviceRange=all&devicePermissions=read&devicePermissions=control&devicePermissions=admin&hubPermissions=read&locationPermissions=execute&scenePermissions=read&rulePermissions=write&policyConsent=accepted&unexpectedField=private-user-value",
+    )
+
+    // When
+    const result = parseOAuthScopeSelectionSubmission(body)
+
+    // Then
+    expect(result).toEqual({
+      draft: {
+        devicePermissions: ["read", "control"],
+        deviceRange: "all",
+        hubPermissions: ["read"],
+        locationPermissions: ["execute"],
+        policyConsent: true,
+        rulePermissions: ["write"],
+        scenePermissions: ["read"],
+      },
+      issues: [oauthScopeSelectionIssueKinds.invalidSelection],
+      kind: "invalid",
+    })
+  })
+
+  it.each([
+    {
+      expectedIssues: [oauthScopeSelectionIssueKinds.missingPermission],
+      payload: "deviceRange=all&policyConsent=accepted",
+    },
+    {
+      expectedIssues: [oauthScopeSelectionIssueKinds.missingPolicyConsent],
+      payload: "deviceRange=all&devicePermissions=read",
+    },
+  ])("classifies the server validation issue for $payload", ({ expectedIssues, payload }) => {
+    // Given
+    const body = Buffer.from(payload)
+
+    // When
+    const result = parseOAuthScopeSelectionSubmission(body)
+
+    // Then
+    expect(result).toMatchObject({ issues: expectedIssues, kind: "invalid" })
+  })
+
   it("renders controls for all supported resource permissions", () => {
     const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
 
@@ -249,19 +296,39 @@ describe("parseOAuthScopeSelection", () => {
     expect(html).toContain('href="/" data-action="cancel-oauth">서비스 안내로 돌아가기</a>')
   })
 
-  it("preserves the submitted all-device range on the global validation error", () => {
+  it("preserves the full submitted draft in an accessible error summary", () => {
     const html = renderOAuthScopeSelection({
-      deviceRange: "all",
       disclosures: testDisclosures,
-      showSelectionError: true,
+      draft: {
+        devicePermissions: ["control", "write"],
+        deviceRange: "all",
+        hubPermissions: ["read"],
+        locationPermissions: ["write", "execute"],
+        policyConsent: true,
+        rulePermissions: ["write"],
+        scenePermissions: ["execute"],
+      },
+      issues: [oauthScopeSelectionIssueKinds.invalidSelection],
     })
 
     expect(html).toContain('name="deviceRange" value="selected">')
     expect(html).toContain('name="deviceRange" value="all" checked>')
+    for (const selection of [
+      'name="devicePermissions" value="control" checked',
+      'name="devicePermissions" value="write" checked',
+      'name="hubPermissions" value="read" checked',
+      'name="locationPermissions" value="write" checked',
+      'name="locationPermissions" value="execute" checked',
+      'name="scenePermissions" value="execute" checked',
+      'name="rulePermissions" value="write" checked',
+      'name="policyConsent" value="accepted" required checked',
+    ]) {
+      expect(html).toContain(selection)
+    }
     expect(html).toContain(
-      'role="group" aria-label="리소스 권한" aria-invalid="true" aria-describedby="permission-error"',
+      'id="selection-error-summary" class="error-summary" role="alert" aria-labelledby="selection-error-title" tabindex="-1" autofocus',
     )
-    expect(html).not.toContain('<fieldset aria-invalid="true">')
+    expect(html).toContain('<h2 id="selection-error-title">입력 내용을 확인하세요</h2>')
   })
 
   it.each([

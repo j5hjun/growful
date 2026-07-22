@@ -14,6 +14,7 @@ const hubPermissionSchema = z.enum(hubPermissions)
 const locationPermissionSchema = z.enum(locationPermissions)
 const scenePermissionSchema = z.enum(scenePermissions)
 const rulePermissionSchema = z.enum(rulePermissions)
+const optionalPolicyConsentSchema = z.union([z.tuple([]), z.tuple([z.literal("accepted")])])
 const formFieldSchema = z.enum([
   "deviceRange",
   "devicePermissions",
@@ -25,16 +26,17 @@ const formFieldSchema = z.enum([
 ])
 const uniqueSelection = <Value extends string>(values: readonly Value[]): boolean =>
   new Set(values).size === values.length
-const selectionSchema = z
-  .object({
-    deviceRange: z.tuple([deviceRangeSchema]),
-    devicePermissions: z.array(devicePermissionSchema).refine(uniqueSelection),
-    hubPermissions: z.array(hubPermissionSchema).refine(uniqueSelection),
-    locationPermissions: z.array(locationPermissionSchema).refine(uniqueSelection),
-    policyConsent: z.tuple([z.literal("accepted")]),
-    rulePermissions: z.array(rulePermissionSchema).refine(uniqueSelection),
-    scenePermissions: z.array(scenePermissionSchema).refine(uniqueSelection),
-  })
+const selectionValuesSchema = z.object({
+  deviceRange: z.tuple([deviceRangeSchema]),
+  devicePermissions: z.array(devicePermissionSchema).refine(uniqueSelection),
+  hubPermissions: z.array(hubPermissionSchema).refine(uniqueSelection),
+  locationPermissions: z.array(locationPermissionSchema).refine(uniqueSelection),
+  policyConsent: optionalPolicyConsentSchema,
+  rulePermissions: z.array(rulePermissionSchema).refine(uniqueSelection),
+  scenePermissions: z.array(scenePermissionSchema).refine(uniqueSelection),
+})
+const selectionSchema = selectionValuesSchema
+  .refine((selection) => selection.policyConsent.length === 1)
   .refine(
     (selection) =>
       selection.devicePermissions.length +
@@ -77,6 +79,55 @@ const ruleScopeByPermission = {
 } as const satisfies Record<z.infer<typeof rulePermissionSchema>, SmartThingsScope>
 
 export type OAuthDeviceRange = z.infer<typeof deviceRangeSchema>
+type OAuthDevicePermission = z.infer<typeof devicePermissionSchema>
+type OAuthHubPermission = z.infer<typeof hubPermissionSchema>
+type OAuthLocationPermission = z.infer<typeof locationPermissionSchema>
+type OAuthScenePermission = z.infer<typeof scenePermissionSchema>
+type OAuthRulePermission = z.infer<typeof rulePermissionSchema>
+
+export const oauthScopeSelectionIssueKinds = {
+  invalidSelection: "invalid_selection",
+  missingPermission: "missing_permission",
+  missingPolicyConsent: "missing_policy_consent",
+} as const
+
+export type OAuthScopeSelectionIssueKind =
+  (typeof oauthScopeSelectionIssueKinds)[keyof typeof oauthScopeSelectionIssueKinds]
+
+export type OAuthScopeSelectionDraft = {
+  readonly devicePermissions: readonly OAuthDevicePermission[]
+  readonly deviceRange: OAuthDeviceRange
+  readonly hubPermissions: readonly OAuthHubPermission[]
+  readonly locationPermissions: readonly OAuthLocationPermission[]
+  readonly policyConsent: boolean
+  readonly rulePermissions: readonly OAuthRulePermission[]
+  readonly scenePermissions: readonly OAuthScenePermission[]
+}
+
+export type OAuthScopeSelectionSubmission =
+  | {
+      readonly kind: "invalid"
+      readonly draft: OAuthScopeSelectionDraft
+      readonly issues: readonly OAuthScopeSelectionIssueKind[]
+    }
+  | { readonly kind: "valid"; readonly scopes: readonly SmartThingsScope[] }
+
+const initialScopeSelectionDraft = {
+  devicePermissions: ["read"],
+  deviceRange: "selected",
+  hubPermissions: [],
+  locationPermissions: [],
+  policyConsent: false,
+  rulePermissions: [],
+  scenePermissions: [],
+} as const satisfies OAuthScopeSelectionDraft
+
+const selectionIssueMessages = {
+  [oauthScopeSelectionIssueKinds.invalidSelection]:
+    "처리할 수 없는 선택값이 있습니다. 화면에 표시된 항목을 확인하세요.",
+  [oauthScopeSelectionIssueKinds.missingPermission]: "권한을 하나 이상 선택하세요.",
+  [oauthScopeSelectionIssueKinds.missingPolicyConsent]: "정책 동의에 체크하세요.",
+} as const satisfies Record<OAuthScopeSelectionIssueKind, string>
 
 function parseFormParameters(body: unknown): URLSearchParams | null {
   const bodyResult = z.instanceof(Buffer).safeParse(body)
@@ -92,16 +143,24 @@ export function parseOAuthDeviceRangeSelection(body: unknown): OAuthDeviceRange 
   return rangeResult.success ? rangeResult.data[0] : null
 }
 
-export function parseOAuthScopeSelection(body: unknown): readonly SmartThingsScope[] | null {
+function selectAllowlistedValues<Value extends string>(
+  allowlist: readonly Value[],
+  submitted: readonly string[],
+): readonly Value[] {
+  return allowlist.filter((value) => submitted.includes(value))
+}
+
+export function parseOAuthScopeSelectionSubmission(body: unknown): OAuthScopeSelectionSubmission {
   const parameters = parseFormParameters(body)
   if (parameters === null) {
-    return null
+    return {
+      draft: initialScopeSelectionDraft,
+      issues: [oauthScopeSelectionIssueKinds.invalidSelection],
+      kind: "invalid",
+    }
   }
   const fieldsResult = z.array(formFieldSchema).safeParse(Array.from(parameters.keys()))
-  if (!fieldsResult.success) {
-    return null
-  }
-  const selectionResult = selectionSchema.safeParse({
+  const submittedValues = {
     deviceRange: parameters.getAll("deviceRange"),
     devicePermissions: parameters.getAll("devicePermissions"),
     hubPermissions: parameters.getAll("hubPermissions"),
@@ -109,12 +168,43 @@ export function parseOAuthScopeSelection(body: unknown): readonly SmartThingsSco
     policyConsent: parameters.getAll("policyConsent"),
     rulePermissions: parameters.getAll("rulePermissions"),
     scenePermissions: parameters.getAll("scenePermissions"),
-  })
+  }
+  const selectionValuesResult = selectionValuesSchema.safeParse(submittedValues)
+  const selectionResult = selectionSchema.safeParse(submittedValues)
+  const deviceRangeResult = z.tuple([deviceRangeSchema]).safeParse(submittedValues.deviceRange)
+  const draft = {
+    devicePermissions: selectAllowlistedValues(
+      devicePermissions,
+      submittedValues.devicePermissions,
+    ),
+    deviceRange: deviceRangeResult.success ? deviceRangeResult.data[0] : "selected",
+    hubPermissions: selectAllowlistedValues(hubPermissions, submittedValues.hubPermissions),
+    locationPermissions: selectAllowlistedValues(
+      locationPermissions,
+      submittedValues.locationPermissions,
+    ),
+    policyConsent: submittedValues.policyConsent.includes("accepted"),
+    rulePermissions: selectAllowlistedValues(rulePermissions, submittedValues.rulePermissions),
+    scenePermissions: selectAllowlistedValues(scenePermissions, submittedValues.scenePermissions),
+  } satisfies OAuthScopeSelectionDraft
+  const permissionCount =
+    draft.devicePermissions.length +
+    draft.hubPermissions.length +
+    draft.locationPermissions.length +
+    draft.scenePermissions.length +
+    draft.rulePermissions.length
+  const issues = [
+    ...(!fieldsResult.success || !selectionValuesResult.success
+      ? [oauthScopeSelectionIssueKinds.invalidSelection]
+      : []),
+    ...(permissionCount === 0 ? [oauthScopeSelectionIssueKinds.missingPermission] : []),
+    ...(!draft.policyConsent ? [oauthScopeSelectionIssueKinds.missingPolicyConsent] : []),
+  ] satisfies readonly OAuthScopeSelectionIssueKind[]
   if (!selectionResult.success) {
-    return null
+    return { draft, issues, kind: "invalid" }
   }
   const selection = selectionResult.data
-  return [
+  const scopes = [
     ...devicePermissions
       .filter((permission) => selection.devicePermissions.includes(permission))
       .map((permission) => deviceScopeByRangeAndPermission[selection.deviceRange[0]][permission]),
@@ -131,6 +221,12 @@ export function parseOAuthScopeSelection(body: unknown): readonly SmartThingsSco
       .filter((permission) => selection.rulePermissions.includes(permission))
       .map((permission) => ruleScopeByPermission[permission]),
   ]
+  return { kind: "valid", scopes }
+}
+
+export function parseOAuthScopeSelection(body: unknown): readonly SmartThingsScope[] | null {
+  const submission = parseOAuthScopeSelectionSubmission(body)
+  return submission.kind === "valid" ? submission.scopes : null
 }
 
 function escapeHtml(value: string): string {
@@ -143,21 +239,28 @@ function escapeHtml(value: string): string {
 }
 
 export function renderOAuthScopeSelection(options: {
-  readonly deviceRange?: OAuthDeviceRange
   readonly disclosures: ServiceDisclosures
-  readonly showSelectionError?: boolean
+  readonly draft?: OAuthScopeSelectionDraft
+  readonly issues?: readonly OAuthScopeSelectionIssueKind[]
 }): string {
-  const deviceRange = options.deviceRange ?? "selected"
-  const showSelectionError = options.showSelectionError ?? false
-  const defaultReadPermissionSelection = showSelectionError ? "" : " checked"
-  const selectedDeviceRange = deviceRange === "selected" ? " checked" : ""
-  const allDeviceRange = deviceRange === "all" ? " checked" : ""
-  const permissionGroupValidation = showSelectionError
-    ? ' aria-invalid="true" aria-describedby="permission-error"'
+  const draft = options.draft ?? initialScopeSelectionDraft
+  const issues = options.issues ?? []
+  const checked = (selected: boolean): string => (selected ? " checked" : "")
+  const selectedDeviceRange = checked(draft.deviceRange === "selected")
+  const allDeviceRange = checked(draft.deviceRange === "all")
+  const permissionGroupValidation = issues.includes(oauthScopeSelectionIssueKinds.missingPermission)
+    ? ' aria-invalid="true" aria-describedby="selection-error-summary"'
     : ""
-  const permissionError = showSelectionError
-    ? '<p class="error" id="permission-error" role="alert"><span class="phrase">선택값을 확인하세요.</span> <span class="phrase">권한을 하나 이상 선택하세요.</span> <span class="phrase">정책 동의에도 체크하세요.</span></p>'
+  const policyValidation = issues.includes(oauthScopeSelectionIssueKinds.missingPolicyConsent)
+    ? ' aria-invalid="true" aria-describedby="selection-error-summary"'
     : ""
+  const selectionError =
+    issues.length === 0
+      ? ""
+      : `<section id="selection-error-summary" class="error-summary" role="alert" aria-labelledby="selection-error-title" tabindex="-1" autofocus>
+        <h2 id="selection-error-title">입력 내용을 확인하세요</h2>
+        <ul>${issues.map((issue) => `<li>${selectionIssueMessages[issue]}</li>`).join("")}</ul>
+      </section>`
   const operatorName = escapeHtml(options.disclosures.operatorName)
   const privacyPolicyUrl = escapeHtml(options.disclosures.privacyPolicyUrl.toString())
   const supportEmail = escapeHtml(options.disclosures.supportEmail)
@@ -167,17 +270,17 @@ export function renderOAuthScopeSelection(options: {
     <h1>SmartThings 권한 연결</h1>
     <p class="intro"><span>Gateway에 허용할 리소스와 기능을 선택하세요.</span><span><span class="phrase">선택한 디바이스만 범위의 실제 대상은</span> <span class="phrase">SmartThings 화면에서 지정합니다.</span></span></p>
     <form action="/oauth/start" method="post">
+      ${selectionError}
       <fieldset class="step-section" data-permission-step="range">
         <legend><span class="step-index">1</span> 디바이스 범위</legend>
         <label><input type="radio" name="deviceRange" value="selected"${selectedDeviceRange}> 선택한 디바이스만</label>
         <label><input type="radio" name="deviceRange" value="all"${allDeviceRange}> 연결된 모든 디바이스</label>
       </fieldset>
-      ${permissionError}
       <div class="permission-groups" role="group" aria-label="리소스 권한"${permissionGroupValidation}>
       <fieldset class="step-section" data-permission-step="basic-read">
         <legend><span class="step-index">2</span> 기본 읽기</legend>
         <p class="hint">위에서 고른 디바이스 범위에 적용됩니다.</p>
-        <label><input type="checkbox" name="devicePermissions" value="read"${defaultReadPermissionSelection}><span>상태 읽기 <small>r:devices:$ 또는 r:devices:*</small></span></label>
+        <label><input type="checkbox" name="devicePermissions" value="read"${checked(draft.devicePermissions.includes("read"))}><span>상태 읽기 <small>r:devices:$ 또는 r:devices:*</small></span></label>
       </fieldset>
       <section class="additional-permissions" data-permission-step="additional" aria-labelledby="additional-title">
         <h2 id="additional-title"><span class="step-index">3</span> 추가 권한</h2>
@@ -187,9 +290,9 @@ export function renderOAuthScopeSelection(options: {
         <fieldset>
         <legend>디바이스 추가 권한</legend>
         <p class="hint">위에서 고른 디바이스 범위에 적용됩니다.</p>
-        <label><input type="checkbox" name="devicePermissions" value="control"><span>명령 실행 <small>x:devices:$ 또는 x:devices:*</small></span></label>
+        <label><input type="checkbox" name="devicePermissions" value="control"${checked(draft.devicePermissions.includes("control"))}><span>명령 실행 <small>x:devices:$ 또는 x:devices:*</small></span></label>
         <p class="impact">전원·밝기·온도처럼 디바이스가 지원하는 명령을 즉시 <span class="phrase">실행할 수 있습니다.</span></p>
-        <label><input type="checkbox" name="devicePermissions" value="write"><span>이름 변경·삭제 <small>w:devices:$ 또는 w:devices:*</small></span></label>
+        <label><input type="checkbox" name="devicePermissions" value="write"${checked(draft.devicePermissions.includes("write"))}><span>이름 변경·삭제 <small>w:devices:$ 또는 w:devices:*</small></span></label>
         <p class="impact">디바이스 이름을 바꾸거나 SmartThings에서 디바이스를 <span class="phrase">삭제할 수 있습니다.</span></p>
         </fieldset>
       </details>
@@ -198,7 +301,7 @@ export function renderOAuthScopeSelection(options: {
         <fieldset>
         <legend>허브 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 허브에 적용됩니다.</p>
-        <label><input type="checkbox" name="hubPermissions" value="read"><span>허브 정보 읽기 <small>r:hubs:*</small></span></label>
+        <label><input type="checkbox" name="hubPermissions" value="read"${checked(draft.hubPermissions.includes("read"))}><span>허브 정보 읽기 <small>r:hubs:*</small></span></label>
         </fieldset>
       </details>
       <details class="permission-resource" data-permission-resource="location">
@@ -206,10 +309,10 @@ export function renderOAuthScopeSelection(options: {
         <fieldset>
         <legend>위치 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 위치에 적용됩니다.</p>
-        <label><input type="checkbox" name="locationPermissions" value="read"><span>위치 정보 읽기 <small>r:locations:*</small></span></label>
-        <label><input type="checkbox" name="locationPermissions" value="write"><span>위치 정보 쓰기 <small>w:locations:*</small></span></label>
+        <label><input type="checkbox" name="locationPermissions" value="read"${checked(draft.locationPermissions.includes("read"))}><span>위치 정보 읽기 <small>r:locations:*</small></span></label>
+        <label><input type="checkbox" name="locationPermissions" value="write"${checked(draft.locationPermissions.includes("write"))}><span>위치 정보 쓰기 <small>w:locations:*</small></span></label>
         <p class="impact">위치 이름·좌표·온도 단위 같은 설정을 변경할 수 있습니다.</p>
-        <label><input type="checkbox" name="locationPermissions" value="execute"><span>위치 모드 변경 실행 <small>x:locations:*</small></span></label>
+        <label><input type="checkbox" name="locationPermissions" value="execute"${checked(draft.locationPermissions.includes("execute"))}><span>위치 모드 변경 실행 <small>x:locations:*</small></span></label>
         <p class="impact">위치 모드를 변경해 해당 모드를 조건으로 쓰는 자동화가 동작할 수 있습니다.</p>
         </fieldset>
       </details>
@@ -218,8 +321,8 @@ export function renderOAuthScopeSelection(options: {
         <fieldset>
         <legend>장면 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 장면에 적용됩니다.</p>
-        <label><input type="checkbox" name="scenePermissions" value="read"><span>장면 읽기 <small>r:scenes:*</small></span></label>
-        <label><input type="checkbox" name="scenePermissions" value="execute"><span>장면 실행 <small>x:scenes:*</small></span></label>
+        <label><input type="checkbox" name="scenePermissions" value="read"${checked(draft.scenePermissions.includes("read"))}><span>장면 읽기 <small>r:scenes:*</small></span></label>
+        <label><input type="checkbox" name="scenePermissions" value="execute"${checked(draft.scenePermissions.includes("execute"))}><span>장면 실행 <small>x:scenes:*</small></span></label>
         <p class="impact">장면을 실행해 여러 디바이스 상태를 한 번에 바꿀 수 있습니다.</p>
         </fieldset>
       </details>
@@ -228,8 +331,8 @@ export function renderOAuthScopeSelection(options: {
         <fieldset>
         <legend>규칙 추가 권한</legend>
         <p class="hint">이 연결에 허용된 모든 규칙에 적용됩니다.</p>
-        <label><input type="checkbox" name="rulePermissions" value="read"><span>규칙 읽기 <small>r:rules:*</small></span></label>
-        <label><input type="checkbox" name="rulePermissions" value="write"><span>규칙 만들기·수정·삭제 <small>w:rules:*</small></span></label>
+        <label><input type="checkbox" name="rulePermissions" value="read"${checked(draft.rulePermissions.includes("read"))}><span>규칙 읽기 <small>r:rules:*</small></span></label>
+        <label><input type="checkbox" name="rulePermissions" value="write"${checked(draft.rulePermissions.includes("write"))}><span>규칙 만들기·수정·삭제 <small>w:rules:*</small></span></label>
         <p class="impact">규칙을 만들고 수정하거나 삭제해 자동화 동작을 바꿀 수 있습니다.</p>
         </fieldset>
       </details>
@@ -239,7 +342,7 @@ export function renderOAuthScopeSelection(options: {
         <h2 id="policy-title"><span class="step-index">4</span> 정책 동의</h2>
         <p><strong>${operatorName}</strong>에서 SmartThings 연결 정보와 암호화된 OAuth 토큰을 관리합니다.</p>
         <p><a href="${privacyPolicyUrl}" aria-label="개인정보처리방침(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">개인정보처리방침</a> · <a href="${termsUrl}" aria-label="이용약관(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">이용약관</a> · <a href="mailto:${supportEmail}">지원 문의</a></p>
-        <label><input type="checkbox" name="policyConsent" value="accepted" required><span>${smartThingsPolicyConsentStatement}</span></label>
+        <label><input type="checkbox" name="policyConsent" value="accepted" required${checked(draft.policyConsent)}${policyValidation}><span>${smartThingsPolicyConsentStatement}</span></label>
       </section>
       <div class="form-actions" data-permission-step="actions">
         <p><span class="step-index">5</span> 연결 계속</p>
@@ -251,12 +354,16 @@ export function renderOAuthScopeSelection(options: {
     styles: `
     .intro > span { display: block; }
     form { margin-top: var(--space-8); }
-    fieldset { margin: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); }
+    fieldset { min-width: 0; margin: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); }
     .step-section { margin-bottom: var(--space-6); }
     legend { padding: 0 var(--space-2); font-weight: var(--weight-bold); }
     .step-index { display: inline-flex; width: var(--space-6); height: var(--space-6); align-items: center; justify-content: center; margin-right: var(--space-2); border-radius: 50%; background: var(--surface-subtle); color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .hint { margin: var(--space-2) 0 var(--space-3); font-size: var(--font-small); }
-    .error { margin: 0 0 var(--space-4); color: var(--error); font-weight: var(--weight-bold); }
+    .error-summary { margin: 0 0 var(--space-6); padding: var(--space-4); border: 1px solid var(--error); border-radius: var(--radius-field); }
+    .error-summary:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    .error-summary h2 { margin: 0 0 var(--space-2); color: var(--error); font-size: var(--font-h2); }
+    .error-summary ul { margin: 0; padding-left: var(--space-6); color: var(--text); line-height: var(--line-body); }
+    .error-summary li { word-break: keep-all; overflow-wrap: break-word; }
     .additional-permissions { margin-bottom: var(--space-6); }
     .additional-permissions h2 { margin: 0 0 var(--space-2); }
     .permission-resource { margin-top: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface); }
@@ -276,7 +383,8 @@ export function renderOAuthScopeSelection(options: {
     .policy p { margin: var(--space-2) 0; }
     .policy a { color: var(--focus); }
     label { display: flex; gap: var(--space-3); align-items: flex-start; margin: var(--space-3) 0; line-height: var(--line-body); cursor: pointer; }
-    small { display: block; color: var(--text-muted); font-size: var(--font-small); line-height: var(--line-body); }
+    label > span { min-width: 0; }
+    small { display: block; color: var(--text-muted); font-size: var(--font-small); line-height: var(--line-body); overflow-wrap: anywhere; }
     input { width: var(--control-size); height: var(--control-size); margin: var(--control-offset) 0 0; flex: 0 0 auto; accent-color: var(--focus); }
     .form-actions { position: static; padding: var(--space-4) 0 var(--safe-area-bottom); border-top: 1px solid var(--border); background: var(--surface); text-align: center; }
     .form-actions p { margin: 0 0 var(--space-3); color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); text-align: left; }
@@ -285,6 +393,16 @@ export function renderOAuthScopeSelection(options: {
     button:hover { background: var(--action-hover); }
     button:active { transform: scale(var(--pressed-scale)); }
     button:focus-visible, input:focus-visible, .form-actions a:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    @media (max-width: 20rem) {
+      body { padding: var(--space-2); }
+      main { padding: var(--space-3); }
+      fieldset, .error-summary, .permission-resource summary, .policy { padding: var(--space-3); }
+      .permission-resource fieldset { margin: 0 var(--space-2) var(--space-2); padding: var(--space-2); }
+      .summary-meta { margin-left: 0; }
+      .impact { margin-left: 0; }
+      label { gap: var(--space-2); }
+      .phrase { white-space: normal; }
+    }
     @media (prefers-reduced-motion: reduce) { button { transition: none; } }`,
     title: "SmartThings 권한 연결",
   })

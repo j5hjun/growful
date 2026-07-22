@@ -205,4 +205,41 @@ describe("SmartThings OAuth scope combinations", () => {
     expect(response.body).toContain(`name="deviceRange" value="${deviceRange}" checked`)
     expect(response.headers.location).toBeUndefined()
   })
+
+  it("preserves the allowlisted draft without reflecting rejected request values", async () => {
+    // Given
+    const app = createFixture()
+    const rejectedValue = "private-user-identifier"
+    const payload = `deviceRange=all&devicePermissions=read&devicePermissions=control&devicePermissions=admin&hubPermissions=read&locationPermissions=write&scenePermissions=execute&rulePermissions=write&policyConsent=accepted&unexpectedField=${rejectedValue}`
+
+    // When
+    const response = await app.inject({
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: redirectOrigin,
+      },
+      method: "POST",
+      payload,
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.statusCode).toBe(400)
+    for (const selection of [
+      'name="deviceRange" value="all" checked',
+      'name="devicePermissions" value="read" checked',
+      'name="devicePermissions" value="control" checked',
+      'name="hubPermissions" value="read" checked',
+      'name="locationPermissions" value="write" checked',
+      'name="scenePermissions" value="execute" checked',
+      'name="rulePermissions" value="write" checked',
+      'name="policyConsent" value="accepted" required checked',
+    ]) {
+      expect(response.body).toContain(selection)
+    }
+    expect(response.body).toContain('id="selection-error-summary"')
+    expect(response.body).not.toContain("admin")
+    expect(response.body).not.toContain(rejectedValue)
+    expect(response.headers.location).toBeUndefined()
+  })
 })
