@@ -136,9 +136,11 @@ OAUTH_ADMIN_TOKEN=...
 ```
 
 이전 이미지로 롤백할 때는 배포 스크립트가 예측 불가능한 임시 호환 토큰과 최소 scope를
-롤백 프로세스에만 주입합니다. 운영 `.env`는 변경하지 않습니다. 이전 이미지는
-`smart_things_connections`의 격리 행을 읽지 못하고, `oauth_tokens`도 migration에서 비웠으므로
-연결 해제 상태로만 기동합니다.
+롤백 프로세스에만 주입합니다. 운영 `.env`는 변경하지 않습니다. 롤백 준비 단계는 이전
+이미지에 현재 연결 자격 증명을 넘기지 않기 위해 `smart_things_connections`의 모든 행을
+삭제합니다. 이때 정책 증빙이 없는 격리 행도 복구 불가능하게 삭제됩니다. `oauth_tokens`도
+migration에서 비웠으므로 이전 이미지는 연결 해제 상태로만 기동하며, 롤백 뒤에는 OAuth를
+다시 완료해야 합니다.
 
 서버에는 GHCR private image를 pull할 수 있는 로그인이 한 번 필요합니다. 자동 배포는
 Tailscale SSH를 통해 `~/app/smartthings-gateway/releases/<commit-sha>`에 Compose
