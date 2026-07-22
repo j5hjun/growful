@@ -3,4 +3,5 @@ dist/
 data/
 .env
 *.log
+test-results/
 .deployed-image-tag

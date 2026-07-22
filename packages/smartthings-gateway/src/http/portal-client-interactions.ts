@@ -34,26 +34,67 @@ export function bindPortalInteractions(
     elements.tokenForm.hidden = false
     elements.statusSection.hidden = true
     elements.rotatedTokenSection.hidden = true
-    view.showError(message, true)
+    view.showError(message)
+    view.setActionState("error")
     elements.tokenInput.focus()
   }
 
+  function resetToDisconnected(message: string): void {
+    tokenGeneration += 1
+    growfulToken = ""
+    elements.tokenInput.value = ""
+    elements.statusSection.hidden = true
+    elements.rotatedTokenSection.hidden = true
+    view.showError(message)
+    view.setActionState("disconnected")
+    elements.reconnectAction.focus()
+  }
+
   function handleRequestError(error: unknown): void {
-    if (error instanceof contracts.PortalRequestError && error.status === 401) {
-      resetToTokenEntry("새 Growful 토큰을 붙여 넣으세요.")
+    if (!(error instanceof contracts.PortalRequestError)) {
+      view.showError("네트워크 연결을 확인한 뒤 다시 시도하세요.")
+      view.setActionState("error")
       return
     }
-    view.showError("요청을 완료하지 못했습니다. 네트워크 상태를 확인하고 다시 시도하세요.")
+    switch (error.status) {
+      case 401:
+        resetToTokenEntry("토큰이 교체되었거나 만료되었습니다. 새 Growful 토큰을 입력하세요.")
+        break
+      case 404:
+      case 503:
+        resetToDisconnected("연결된 SmartThings 설치를 찾을 수 없습니다.")
+        break
+      case 429:
+        view.showError("요청이 너무 많습니다. 잠시 후 다시 확인하세요.")
+        view.setActionState("error")
+        break
+      default:
+        view.showError("요청을 완료하지 못했습니다. 잠시 후 다시 시도하세요.")
+        view.setActionState("error")
+    }
   }
 
   async function loadConnection(): Promise<void> {
-    if (!elements.tokenInput.checkValidity()) {
-      elements.tokenInput.reportValidity()
+    if (elements.rotateTokenButton.disabled) return
+    const enteredToken = elements.tokenInput.value.trim()
+    const missingToken = enteredToken === "" && growfulToken === ""
+    const invalidToken = enteredToken !== "" && !elements.tokenInput.checkValidity()
+    if (missingToken || invalidToken) {
+      elements.tokenInput.setAttribute("aria-invalid", "true")
+      elements.statusSection.hidden = true
+      view.showError(
+        "Growful 토큰 형식을 확인하세요. grw_st_로 시작하는 50자 토큰을 입력해야 합니다.",
+      )
+      view.setActionState("error")
+      elements.tokenInput.focus()
       return
     }
-    growfulToken = elements.tokenInput.value.trim()
+    if (enteredToken !== "") growfulToken = enteredToken
     const requestGeneration = ++tokenGeneration
-    elements.tokenSubmit.disabled = true
+    elements.tokenInput.removeAttribute("aria-invalid")
+    elements.statusSection.hidden = true
+    view.clearMessages()
+    view.setActionState("loading")
     elements.tokenForm.setAttribute("aria-busy", "true")
     try {
       const connection = await request("/connection", "GET")
@@ -65,11 +106,11 @@ export function bindPortalInteractions(
       view.renderStatus(connection)
       view.showFeedback("연결 상태를 확인했습니다.")
     } catch (error) {
+      if (!(error instanceof Error) && (typeof error !== "object" || error === null)) throw error
       if (requestGeneration !== tokenGeneration) return
       handleRequestError(error)
-      if (growfulToken !== "") elements.tokenInput.value = growfulToken
+      if (enteredToken !== "" && growfulToken !== "") elements.tokenInput.value = enteredToken
     } finally {
-      elements.tokenSubmit.disabled = false
       elements.tokenForm.removeAttribute("aria-busy")
     }
   }
@@ -98,6 +139,7 @@ export function bindPortalInteractions(
     elements.statusSection.hidden = true
     elements.rotatedTokenSection.hidden = true
     view.showFeedback("이 탭에서 Growful 토큰을 지웠습니다.")
+    view.setActionState("initial")
     elements.tokenInput.focus()
   })
   elements.rotateTokenButton.addEventListener("click", async () => {
@@ -148,7 +190,11 @@ export function bindPortalInteractions(
   })
   elements.disconnectButton.addEventListener("click", () => elements.disconnectDialog.showModal())
   elements.disconnectDialog.addEventListener("close", () => {
-    ;(elements.statusSection.hidden ? elements.tokenInput : elements.disconnectButton).focus()
+    if (!elements.reconnectAction.hidden) {
+      elements.reconnectAction.focus()
+    } else {
+      ;(elements.statusSection.hidden ? elements.tokenInput : elements.disconnectButton).focus()
+    }
   })
   elements.disconnectForm.addEventListener("submit", async (event) => {
     if (event.submitter !== elements.disconnectConfirm) return
@@ -167,9 +213,11 @@ export function bindPortalInteractions(
       elements.statusSection.hidden = true
       elements.rotatedTokenSection.hidden = true
       elements.tokenForm.hidden = false
+      view.setActionState("disconnected")
       elements.disconnectDialog.close()
       view.showFeedback("Growful에 저장된 연결과 토큰을 삭제했습니다.")
     } catch (error) {
+      if (!(error instanceof Error) && (typeof error !== "object" || error === null)) throw error
       elements.disconnectDialog.close()
       handleRequestError(error)
     } finally {
