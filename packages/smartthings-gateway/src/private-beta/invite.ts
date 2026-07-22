@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import { z } from "zod"
 
 const basicAuthorizationSchema = z.string().regex(/^Basic [A-Za-z0-9+/]+={0,2}$/)
-const unavailableInvitePasswordHash = Buffer.alloc(32)
+const unavailableInviteCredentialDigest = Buffer.alloc(32)
 
 export const PrivateBetaPasswordHashSchema = z.string().regex(/^[0-9a-f]{64}$/)
 export const PrivateBetaUsernameSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
@@ -32,21 +32,21 @@ const privateBetaInviteListSchema = z
 
 export type PrivateBetaInvite = Readonly<z.infer<typeof privateBetaInviteSchema>>
 export type PrivateBetaCredentialAttempt = {
-  readonly passwordHash: string
+  readonly credentialDigest: string
   readonly username: string
 }
 export type GeneratedPrivateBetaInviteCredential = {
-  readonly password: string
+  readonly secret: string
   readonly passwordHash: string
 }
 
-export function hashPrivateBetaPassword(password: string): string {
-  return createHash("sha256").update(password, "utf8").digest("hex")
+export function hashPrivateBetaCredentialSecret(credentialSecret: string): string {
+  return createHash("sha256").update(credentialSecret, "utf8").digest("hex")
 }
 
 export function generatePrivateBetaInviteCredential(): GeneratedPrivateBetaInviteCredential {
-  const password = randomBytes(32).toString("base64url")
-  return { password, passwordHash: hashPrivateBetaPassword(password) }
+  const secret = randomBytes(32).toString("base64url")
+  return { passwordHash: hashPrivateBetaCredentialSecret(secret), secret }
 }
 
 export function matchesPrivateBetaInvite(
@@ -65,7 +65,7 @@ export function getPrivateBetaInviteUsername(
     return null
   }
   const invite = invites.find((candidate) => candidate.username === attempt.username)
-  return matchesPrivateBetaPasswordHash(attempt.passwordHash, invite?.passwordHash) &&
+  return matchesPrivateBetaCredentialDigest(attempt.credentialDigest, invite?.passwordHash) &&
     invite !== undefined
     ? invite.username
     : null
@@ -89,21 +89,22 @@ export function parsePrivateBetaCredentialAttempt(
   if (separatorIndex < 1) {
     return null
   }
+  const credentialSecret = credentials.slice(separatorIndex + 1)
   return {
-    passwordHash: hashPrivateBetaPassword(credentials.slice(separatorIndex + 1)),
+    credentialDigest: hashPrivateBetaCredentialSecret(credentialSecret),
     username: credentials.slice(0, separatorIndex),
   }
 }
 
-export function matchesPrivateBetaPasswordHash(
-  passwordHash: string,
+export function matchesPrivateBetaCredentialDigest(
+  credentialDigest: string,
   storedPasswordHash: string | undefined,
 ): boolean {
-  const expectedPasswordHash =
+  const expectedCredentialDigest =
     storedPasswordHash === undefined
-      ? unavailableInvitePasswordHash
+      ? unavailableInviteCredentialDigest
       : Buffer.from(storedPasswordHash, "hex")
-  return timingSafeEqual(Buffer.from(passwordHash, "hex"), expectedPasswordHash)
+  return timingSafeEqual(Buffer.from(credentialDigest, "hex"), expectedCredentialDigest)
 }
 
 export function parsePrivateBetaInvites(serializedInvites: string): readonly PrivateBetaInvite[] {

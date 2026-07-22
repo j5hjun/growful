@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify"
 import { z } from "zod"
 import type { OAuthService } from "../oauth/oauth-service.js"
 import { type OAuthAccessPolicy, PrivateBetaAccessGate } from "../private-beta/http-access.js"
+import { httpRateLimitPolicies } from "./http-rate-limit.js"
 import { renderOAuthCompletion } from "./oauth-completion.js"
 import {
   type OAuthDeviceRange,
@@ -69,6 +70,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
   app.get(
     "/oauth/start",
     {
+      config: { rateLimit: httpRateLimitPolicies.oauthStart },
       onRequest: async (request, reply) => privateBetaAccess.require(request, reply),
     },
     async (_request, reply) =>
@@ -79,6 +81,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
     "/oauth/start",
     {
       bodyLimit: 4_096,
+      config: { rateLimit: httpRateLimitPolicies.oauthStart },
       onRequest: async (request, reply) => {
         const accessDenied = privateBetaAccess.require(request, reply)
         if (accessDenied !== undefined) {

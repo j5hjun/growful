@@ -9,6 +9,7 @@ import {
   SmartThingsWebhookPublicKeyClient,
   verifySmartThingsWebhook,
 } from "../smartthings/webhook-verifier.js"
+import { httpRateLimitPolicies } from "./http-rate-limit.js"
 
 const confirmationSchema = z.object({
   confirmationData: z.object({
@@ -198,38 +199,42 @@ export function registerSmartThingsWebhookRoute(
   const confirmationRequester = options.confirmationRequester ?? requestSmartThingsConfirmation
   const confirmationGate = new SmartThingsConfirmationGate()
 
-  app.post("/smartthings/webhook", async (request, reply) => {
-    const body = rawBodySchema.parse(request.body)
-    const parsedJson = parseJson(body)
-    const messageType = messageTypeSchema.parse(parsedJson).messageType
-    switch (messageType) {
-      case "CONFIRMATION": {
-        const message = confirmationSchema.parse(parsedJson)
-        const confirmationUrl = parseConfirmationUrl(
-          options.smartThingsAppId,
-          message.confirmationData.appId,
-          message.confirmationData.confirmationUrl,
-        )
-        await confirmationGate.confirm(confirmationUrl, now(), confirmationRequester)
-        return reply.header("Cache-Control", "no-store").send({})
+  app.post(
+    "/smartthings/webhook",
+    { config: { rateLimit: httpRateLimitPolicies.smartThingsWebhook } },
+    async (request, reply) => {
+      const body = rawBodySchema.parse(request.body)
+      const parsedJson = parseJson(body)
+      const messageType = messageTypeSchema.parse(parsedJson).messageType
+      switch (messageType) {
+        case "CONFIRMATION": {
+          const message = confirmationSchema.parse(parsedJson)
+          const confirmationUrl = parseConfirmationUrl(
+            options.smartThingsAppId,
+            message.confirmationData.appId,
+            message.confirmationData.confirmationUrl,
+          )
+          await confirmationGate.confirm(confirmationUrl, now(), confirmationRequester)
+          return reply.header("Cache-Control", "no-store").send({})
+        }
+        case "EVENT": {
+          await verifySmartThingsWebhook({
+            body,
+            headers: request.headers,
+            method: request.method,
+            now: now(),
+            publicKeyProvider,
+            rawUrl: request.raw.url ?? "/smartthings/webhook",
+          })
+          const message = eventEnvelopeSchema.parse(parsedJson)
+          await Promise.all(
+            deleteLifecycleConnectionIds(message, options.smartThingsAppId).map((installedAppId) =>
+              options.service.forgetConnection(installedAppId),
+            ),
+          )
+          return reply.header("Cache-Control", "no-store").send({})
+        }
       }
-      case "EVENT": {
-        await verifySmartThingsWebhook({
-          body,
-          headers: request.headers,
-          method: request.method,
-          now: now(),
-          publicKeyProvider,
-          rawUrl: request.raw.url ?? "/smartthings/webhook",
-        })
-        const message = eventEnvelopeSchema.parse(parsedJson)
-        await Promise.all(
-          deleteLifecycleConnectionIds(message, options.smartThingsAppId).map((installedAppId) =>
-            options.service.forgetConnection(installedAppId),
-          ),
-        )
-        return reply.header("Cache-Control", "no-store").send({})
-      }
-    }
-  })
+    },
+  )
 }

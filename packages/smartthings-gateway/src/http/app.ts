@@ -19,6 +19,7 @@ import {
   registerGrowfulAuthentication,
   requireGrowfulAuthentication,
 } from "./growful-auth.js"
+import { HttpRequestRateLimitError, registerHttpRateLimiting } from "./http-rate-limit.js"
 import {
   InvalidOAuthOriginError,
   type OAuthAccessPolicy,
@@ -110,18 +111,21 @@ export function createApp(options: AppOptions): FastifyInstance {
     }
   })
   registerPortalRoutes(app, options.oauthAccess)
-  registerOAuthRoutes(app, {
-    authorizationOrigin: options.authorizationOrigin,
-    oauthAccess: options.oauthAccess,
-    redirectOrigin: options.redirectOrigin,
-    service: options.service,
-  })
-  registerSmartThingsWebhookRoute(app, {
-    confirmationRequester: options.smartThingsConfirmationRequester,
-    now: options.webhookNow,
-    publicKeyProvider: options.smartThingsWebhookKeyProvider,
-    service: options.service,
-    smartThingsAppId: options.smartThingsAppId,
+  app.register(async (rateLimitedApp) => {
+    await registerHttpRateLimiting(rateLimitedApp)
+    registerOAuthRoutes(rateLimitedApp, {
+      authorizationOrigin: options.authorizationOrigin,
+      oauthAccess: options.oauthAccess,
+      redirectOrigin: options.redirectOrigin,
+      service: options.service,
+    })
+    registerSmartThingsWebhookRoute(rateLimitedApp, {
+      confirmationRequester: options.smartThingsConfirmationRequester,
+      now: options.webhookNow,
+      publicKeyProvider: options.smartThingsWebhookKeyProvider,
+      service: options.service,
+      smartThingsAppId: options.smartThingsAppId,
+    })
   })
   app.get(
     "/connection",
@@ -199,6 +203,12 @@ export function createApp(options: AppOptions): FastifyInstance {
     }
     if (error instanceof SmartThingsConfirmationRequestError) {
       return reply.status(502).send({ error: "smartthings_confirmation_failed" as const })
+    }
+    if (error instanceof HttpRequestRateLimitError) {
+      return reply
+        .header("Cache-Control", "no-store")
+        .status(429)
+        .send({ error: "request_rate_limited" as const })
     }
     if (error instanceof OAuthConnectionRequiredError) {
       return reply.status(503).send({ error: "oauth_connection_required" as const })

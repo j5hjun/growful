@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto"
 import { describe, expect, it } from "vitest"
 import {
   generatePrivateBetaInviteCredential,
+  hashPrivateBetaCredentialSecret,
   matchesPrivateBetaInvite,
   type PrivateBetaInvite,
 } from "../src/private-beta/invite.js"
@@ -31,10 +31,20 @@ describe("matchesPrivateBetaInvite", () => {
     const second = generatePrivateBetaInviteCredential()
 
     // Then
-    expect(Buffer.from(first.password, "base64url")).toHaveLength(expectedByteLength)
-    expect(first.password).not.toBe(second.password)
-    expect(first.passwordHash).toBe(createHash("sha256").update(first.password).digest("hex"))
+    expect(Buffer.from(first.secret, "base64url")).toHaveLength(expectedByteLength)
+    expect(first.secret).not.toBe(second.secret)
     expect(first.passwordHash).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it("uses the documented SHA-256 storage digest for a capability secret", () => {
+    // Given
+    const capabilitySecret = "s4A9c-7mL2pQ8vN5xR1zT6uY3wK0jH4fD9bC2gE7"
+
+    // When
+    const digest = hashPrivateBetaCredentialSecret(capabilitySecret)
+
+    // Then
+    expect(digest).toBe("1c5a43136451b5a916331f57fa18add340ed534a26adb4f9f466c98781239899")
   })
 
   it("accepts each active invitation independently", () => {
