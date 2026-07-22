@@ -220,6 +220,31 @@ describe("Private-beta OAuth access HTTP surface", () => {
     expect(response.json()).toEqual({ error: "private_beta_access_required" })
   })
 
+  it("keeps JSON when the client prefers it over acceptable HTML", async () => {
+    // Given
+    const fixture = createFixture(
+      privateBetaOAuthAccess([
+        {
+          passwordHash: "dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42",
+          username: "private-user",
+        },
+      ]),
+    )
+
+    // When
+    const response = await fixture.app.inject({
+      headers: { accept: "application/json;q=1, text/html;q=0.1" },
+      method: "GET",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.statusCode).toBe(401)
+    expect(response.headers["content-type"]).toContain("application/json")
+    expect(response.headers.vary).toBe("Accept")
+    expect(response.json()).toEqual({ error: "private_beta_access_required" })
+  })
+
   it("rejects a private beta user removed from the invitation list", async () => {
     // Given
     const fixture = createFixture(

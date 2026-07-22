@@ -29,16 +29,52 @@ type OAuthRequestAccess = Pick<
   "privateBetaInviteGeneration" | "privateBetaUsername"
 >
 
-function acceptsHtml(accept: string | undefined): boolean {
-  if (accept === undefined) return false
-  return accept.split(",").some((mediaRange) => {
-    const [mediaType, ...parameters] = mediaRange
+type MediaPreference = {
+  readonly quality: number
+  readonly specificity: number
+}
+
+function mediaPreference(
+  accept: string,
+  targetType: string,
+  targetSubtype: string,
+): MediaPreference {
+  let preference: MediaPreference = { quality: 0, specificity: -1 }
+  for (const mediaRange of accept.split(",")) {
+    const [rawMediaType = "", ...parameters] = mediaRange
       .split(";")
       .map((part) => part.trim().toLowerCase())
-    if (mediaType !== "text/html" && mediaType !== "application/xhtml+xml") return false
-    const quality = parameters.find((parameter) => parameter.startsWith("q="))
-    return quality === undefined || Number(quality.slice(2)) > 0
-  })
+    const [rangeType = "", rangeSubtype = ""] = rawMediaType.split("/")
+    const specificity =
+      rangeType === targetType && rangeSubtype === targetSubtype
+        ? 2
+        : rangeType === targetType && rangeSubtype === "*"
+          ? 1
+          : rangeType === "*" && rangeSubtype === "*"
+            ? 0
+            : -1
+    if (specificity < 0) continue
+
+    const qualityParameter = parameters.find((parameter) => parameter.startsWith("q="))
+    const parsedQuality = qualityParameter === undefined ? 1 : Number(qualityParameter.slice(2))
+    const quality =
+      Number.isFinite(parsedQuality) && parsedQuality >= 0 && parsedQuality <= 1 ? parsedQuality : 0
+    if (
+      specificity > preference.specificity ||
+      (specificity === preference.specificity && quality > preference.quality)
+    ) {
+      preference = { quality, specificity }
+    }
+  }
+  return preference
+}
+
+function acceptsHtml(accept: string | undefined): boolean {
+  if (accept === undefined) return false
+  const html = mediaPreference(accept, "text", "html")
+  const json = mediaPreference(accept, "application", "json")
+  if (html.quality !== json.quality) return html.quality > json.quality
+  return html.quality > 0 && html.specificity > json.specificity
 }
 
 function prepareAccessErrorReply(reply: FastifyReply): FastifyReply {
