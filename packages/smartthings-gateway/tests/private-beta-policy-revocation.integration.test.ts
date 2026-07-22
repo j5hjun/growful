@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
+import {
+  type ConnectionAccessPolicy,
+  InstalledAppIdSchema,
+  RefreshClaimIdSchema,
+} from "../src/oauth/contracts.js"
 import { generateGrowfulToken, hashGrowfulToken } from "../src/security/growful-token.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
@@ -28,6 +32,61 @@ afterAll(async () => {
 })
 
 describe("private beta connection policy revocation", () => {
+  it("preserves a legacy connection in quarantine until it can be reauthorized", async () => {
+    // Given
+    const growfulToken = generateGrowfulToken()
+    const installedAppId = InstalledAppIdSchema.parse("legacy-policy-installed-app")
+    const issuedAt = new Date("2026-07-22T00:00:00.000Z")
+    await store.saveTokens({
+      authorization: oauthAuthorization(["r:devices:*"], "private-user"),
+      grant: {
+        accessToken: "legacy-policy-access",
+        expiresInSeconds: 3_600,
+        installedAppId,
+        refreshToken: "legacy-policy-refresh",
+        scopes: ["r:devices:*"],
+        tokenType: "bearer",
+      },
+      growfulTokenCreatedAt: issuedAt,
+      growfulTokenHash: hashGrowfulToken(growfulToken),
+      issuedAt,
+      source: "authorization",
+    })
+    await database
+      .updateTable("smartThingsConnections")
+      .set({
+        consentedAt: null,
+        policyVersion: null,
+        privateBetaInviteGeneration: null,
+        privateBetaUsername: null,
+      })
+      .where("installedAppId", "=", installedAppId)
+      .execute()
+
+    // When
+    const accessPolicies = [
+      { policyVersion: "test-policy", privateBetaUsernames: null },
+      { policyVersion: "test-policy", privateBetaUsernames: [] },
+      { policyVersion: "test-policy", privateBetaUsernames: ["private-user"] },
+    ] satisfies readonly ConnectionAccessPolicy[]
+    const revokedCounts = await Promise.all(
+      accessPolicies.map((accessPolicy) => store.revokeUnauthorizedConnections(accessPolicy)),
+    )
+    const refreshClaim = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000901"),
+      kind: "due",
+      leaseMs: 60_000,
+      now: issuedAt,
+      refreshBeforeExpiryMs: 7_200_000,
+    })
+
+    // Then
+    expect(revokedCounts).toEqual([0, 0, 0])
+    await expect(store.getTokens(installedAppId)).resolves.not.toBeNull()
+    await expect(store.authenticate(hashGrowfulToken(growfulToken))).resolves.toBeNull()
+    expect(refreshClaim).toBeNull()
+  })
+
   it("revokes every connection when no invitations remain active", async () => {
     // Given
     const growfulToken = generateGrowfulToken()
