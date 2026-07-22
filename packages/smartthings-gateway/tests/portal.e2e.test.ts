@@ -189,6 +189,10 @@ describe("Growful portal HTTP surface", () => {
     for (const page of [home, manage, privacy, terms, support, status]) {
       expect(page.body).toContain('<meta name="robots" content="noindex,nofollow">')
     }
+    expect(home.body).toContain("data-private-beta-entry-guidance")
+    expect(home.body).toContain("초대받은 사용자 이름과 비밀번호")
+    expect(home.body).toContain("삼성 계정 비밀번호가 아닙니다")
+    expect(home.body).toContain("반복해서 잘못 입력하면 잠시 연결 시작이 제한될 수 있습니다")
     expect(privacy.body).toContain("비공개 베타 범위에서 운영합니다")
     expect(privacy.body).toContain("비공개 베타 사용자명")
     expect(privacy.body).toContain("비공개 초대·운영 정책이 회수")
@@ -196,6 +200,17 @@ describe("Growful portal HTTP surface", () => {
     expect(support.body).toContain("비공개 베타 초대나 접근을 회수")
     expect(robots.headers["cache-control"]).toBe("no-store")
     expect(robots.body).toBe("User-agent: *\nDisallow: /\n")
+  })
+
+  it("does not show private beta credential guidance on the public landing page", async () => {
+    // Given
+    const app = createFixture()
+
+    // When
+    const response = await app.inject({ method: "GET", url: "/" })
+
+    // Then
+    expect(response.body).not.toContain("data-private-beta-entry-guidance")
   })
 
   it("serves the compiled browser client without caching it", async () => {

@@ -18,6 +18,13 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
   const privacyPolicyUrl = escapeHtml(access.privacyPolicyUrl.toString())
   const supportEmail = escapeHtml(access.supportEmail)
   const termsUrl = escapeHtml(access.termsUrl.toString())
+  const privateBetaEntryGuidance =
+    access.mode === "private_beta"
+      ? `<aside class="beta-entry-guidance" data-private-beta-entry-guidance aria-labelledby="beta-entry-title">
+        <h2 id="beta-entry-title">초대 정보를 준비하세요</h2>
+        <p><span class="phrase">연결 시작 시 초대받은 사용자 이름과 비밀번호를 입력합니다.</span> <span class="phrase">삼성 계정 비밀번호가 아닙니다.</span> <span class="phrase">반복해서 잘못 입력하면 잠시 연결 시작이 제한될 수 있습니다.</span></p>
+      </aside>`
+      : ""
   return renderGatewayPage({
     body: `
     ${renderPortalNavigation("home")}
@@ -25,6 +32,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
       <p class="eyebrow">${accessLabel}</p>
       <h1><span class="phrase">SmartThings 연결은 한 번,</span><br><span class="phrase">토큰 관리는 안전하게.</span></h1>
       <p class="hero-copy">Growful Gateway가 SmartThings OAuth 토큰을 암호화해 보관하고 갱신합니다. <span class="phrase">삼성 계정 비밀번호 대신</span> <span class="phrase">별도로 발급된 Growful 토큰으로</span> <span class="phrase">SmartThings API를 호출합니다.</span></p>
+      ${privateBetaEntryGuidance}
       <div class="action-row">
         <a class="action action-primary" href="/oauth/start" data-action="connect">SmartThings 연결 시작</a>
         <a class="action action-secondary" href="/manage" data-action="manage">기존 연결 관리</a>
@@ -62,6 +70,10 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     .hero { max-width: var(--panel-manage); padding: var(--space-12) 0 var(--space-16); }
     .hero h1 { margin-bottom: var(--space-6); }
     .hero-copy { font-size: var(--font-h2); }
+    .beta-entry-guidance { margin-bottom: var(--space-6); padding: var(--space-4); border-left: var(--space-2) solid var(--border); background: var(--surface-subtle); }
+    .beta-entry-guidance h2 { margin: 0 0 var(--space-2); }
+    .beta-entry-guidance p { margin: 0; font-size: var(--font-small); }
+    .beta-entry-guidance .phrase { white-space: normal; }
     .flow { padding: var(--space-8) 0; border-top: 1px solid var(--border); }
     .flow h2 { margin: 0 0 var(--space-8); }
     .flow ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); margin: 0; padding: 0; list-style: none; }
