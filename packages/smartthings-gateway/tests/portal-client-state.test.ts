@@ -152,29 +152,53 @@ describe("Growful portal connection states", () => {
     expect(errorMessage.textContent).toBe("네트워크 연결을 확인한 뒤 다시 시도하세요.")
   })
 
-  it("offers SmartThings reconnection in the action slot after disconnecting", async () => {
+  it("checks another token while keeping SmartThings reconnection after disconnecting", async () => {
+    // Given
+    const replacementToken = `grw_st_${"B".repeat(43)}`
     const fixture = createPortalBrowserFixture()
     const confirm = getPortalElement(fixture.elements, "confirm")
+    const dialog = getPortalElement(fixture.elements, "dialog")
     const disconnect = getPortalElement(fixture.elements, "disconnect")
     const disconnectForm = getPortalElement(fixture.elements, "disconnectForm")
     const form = getPortalElement(fixture.elements, "form")
     const input = getPortalElement(fixture.elements, "input")
     const reconnect = getPortalElement(fixture.elements, "reconnect")
     const status = getPortalElement(fixture.elements, "status")
-    runPortalClient(fixture, async (_path, options) =>
-      options.method === "DELETE" ? response(204) : response(200, activeConnection()),
-    )
+    const submit = getPortalElement(fixture.elements, "submit")
+    let statusRequests = 0
+    runPortalClient(fixture, async (_path, options) => {
+      if (options.method === "DELETE") return response(204)
+      statusRequests += 1
+      return response(200, activeConnection())
+    })
     input.value = validToken
     await form.dispatch("submit", { preventDefault() {} })
     await new Promise<void>((resolve) => setImmediate(resolve))
 
+    // When
     await disconnect.dispatch("click")
     await disconnectForm.dispatch("submit", { preventDefault() {}, submitter: confirm })
+    await dialog.dispatch("close")
 
+    // Then
     expect(status.hidden).toBe(true)
     expect(form.hidden).toBe(false)
+    expect(submit.hidden).toBe(false)
+    expect(submit.textContent).toBe("연결 상태 확인")
     expect(reconnect.hidden).toBe(false)
     expect(reconnect.textContent).toBe("SmartThings 다시 연결")
+    expect(input.focusCount).toBe(1)
+    expect(reconnect.focusCount).toBe(0)
+
+    // When
+    input.value = replacementToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    // Then
+    expect(statusRequests).toBe(2)
+    expect(status.hidden).toBe(false)
+    expect(status.focusCount).toBe(2)
   })
 
   it("does not start a status check while token rotation is pending", async () => {

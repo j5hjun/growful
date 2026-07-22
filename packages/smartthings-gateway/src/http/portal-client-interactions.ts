@@ -213,10 +213,10 @@ export function bindPortalInteractions(
   })
   elements.disconnectButton.addEventListener("click", () => elements.disconnectDialog.showModal())
   elements.disconnectDialog.addEventListener("close", () => {
-    if (!elements.reconnectAction.hidden) {
-      elements.reconnectAction.focus()
+    if (elements.statusSection.hidden) {
+      elements.tokenInput.focus()
     } else {
-      ;(elements.statusSection.hidden ? elements.tokenInput : elements.disconnectButton).focus()
+      elements.disconnectButton.focus()
     }
   })
   elements.disconnectForm.addEventListener("submit", async (event) => {
