@@ -10,8 +10,30 @@ export async function revokePostgresUnauthorizedConnections(
     .deleteFrom("smartThingsConnections")
     .where((expression) =>
       expression.or([
-        expression("consentedAt", "is", null),
-        expression("policyVersion", "is", null),
+        expression.and([
+          expression("consentedAt", "is", null),
+          expression("policyVersion", "is not", null),
+        ]),
+        expression.and([
+          expression("consentedAt", "is not", null),
+          expression("policyVersion", "is", null),
+        ]),
+        expression.and([
+          expression("consentedAt", "is", null),
+          expression("policyVersion", "is", null),
+          expression.or([
+            expression("privateBetaUsername", "is not", null),
+            expression("privateBetaInviteGeneration", "is not", null),
+          ]),
+        ]),
+        expression.and([
+          expression("privateBetaUsername", "is", null),
+          expression("privateBetaInviteGeneration", "is not", null),
+        ]),
+        expression.and([
+          expression("privateBetaUsername", "is not", null),
+          expression("privateBetaInviteGeneration", "is", null),
+        ]),
         expression("policyVersion", "!=", accessPolicy.policyVersion),
       ]),
     )
@@ -20,11 +42,15 @@ export async function revokePostgresUnauthorizedConnections(
     return Number(invalidConsent.numDeletedRows)
   }
   if (accessPolicy.privateBetaUsernames.length === 0) {
-    const inactiveInvite = await database.deleteFrom("smartThingsConnections").executeTakeFirst()
+    const inactiveInvite = await database
+      .deleteFrom("smartThingsConnections")
+      .where("policyVersion", "is not", null)
+      .executeTakeFirst()
     return Number(invalidConsent.numDeletedRows + inactiveInvite.numDeletedRows)
   }
   const inactiveInvite = await database
     .deleteFrom("smartThingsConnections")
+    .where("policyVersion", "is not", null)
     .where((expression) =>
       expression.or([
         expression("privateBetaUsername", "is", null),

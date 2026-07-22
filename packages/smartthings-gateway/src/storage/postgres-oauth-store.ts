@@ -80,6 +80,8 @@ export class PostgresOAuthStore implements OAuthStore {
       let query = transaction
         .selectFrom("smartThingsConnections")
         .selectAll()
+        .where("consentedAt", "is not", null)
+        .where("policyVersion", "is not", null)
         .where((expression) =>
           expression.or([
             expression("refreshClaimedUntil", "is", null),

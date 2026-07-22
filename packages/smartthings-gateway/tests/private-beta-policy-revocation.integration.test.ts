@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
+import {
+  type ConnectionAccessPolicy,
+  InstalledAppIdSchema,
+  RefreshClaimIdSchema,
+} from "../src/oauth/contracts.js"
 import { generateGrowfulToken, hashGrowfulToken } from "../src/security/growful-token.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
@@ -13,6 +17,44 @@ const store = new PostgresOAuthStore({
   database,
   encryptionKeyBase64: Buffer.alloc(32, 7).toString("base64"),
 })
+const issuedAt = new Date("2026-07-22T00:00:00.000Z")
+
+async function seedConnection(installedAppIdValue: string, privateBetaUsername = "private-user") {
+  const growfulToken = generateGrowfulToken()
+  const installedAppId = InstalledAppIdSchema.parse(installedAppIdValue)
+  const accessToken = `${installedAppIdValue}-access`
+  await store.saveTokens({
+    authorization: oauthAuthorization(["r:devices:*"], privateBetaUsername),
+    grant: {
+      accessToken,
+      expiresInSeconds: 3_600,
+      installedAppId,
+      refreshToken: `${installedAppIdValue}-refresh`,
+      scopes: ["r:devices:*"],
+      tokenType: "bearer",
+    },
+    growfulTokenCreatedAt: issuedAt,
+    growfulTokenHash: hashGrowfulToken(growfulToken),
+    issuedAt,
+    source: "authorization",
+  })
+  return { accessToken, growfulToken, installedAppId }
+}
+
+async function quarantineLegacyConnection(
+  installedAppId: ReturnType<typeof InstalledAppIdSchema.parse>,
+) {
+  await database
+    .updateTable("smartThingsConnections")
+    .set({
+      consentedAt: null,
+      policyVersion: null,
+      privateBetaInviteGeneration: null,
+      privateBetaUsername: null,
+    })
+    .where("installedAppId", "=", installedAppId)
+    .execute()
+}
 
 beforeAll(async () => {
   await runMigrations(database)
@@ -28,24 +70,104 @@ afterAll(async () => {
 })
 
 describe("private beta connection policy revocation", () => {
-  it("revokes every connection when no invitations remain active", async () => {
+  it("preserves only a fully null legacy connection in quarantine", async () => {
     // Given
-    const growfulToken = generateGrowfulToken()
+    const { growfulToken, installedAppId } = await seedConnection("legacy-policy-installed-app")
+    await quarantineLegacyConnection(installedAppId)
+
+    // When
+    const publicPolicy = {
+      policyVersion: "test-policy",
+      privateBetaUsernames: null,
+    } satisfies ConnectionAccessPolicy
+    const emptyPrivatePolicy = {
+      policyVersion: "test-policy",
+      privateBetaUsernames: [],
+    } satisfies ConnectionAccessPolicy
+    const activePrivatePolicy = {
+      policyVersion: "test-policy",
+      privateBetaUsernames: ["private-user"],
+    } satisfies ConnectionAccessPolicy
+
+    // Then
+    await expect(store.revokeUnauthorizedConnections(publicPolicy)).resolves.toBe(0)
+    await expect(store.revokeUnauthorizedConnections(emptyPrivatePolicy)).resolves.toBe(0)
+    await expect(store.revokeUnauthorizedConnections(activePrivatePolicy)).resolves.toBe(0)
+    await expect(store.getTokens(installedAppId)).resolves.not.toBeNull()
+    await expect(store.authenticate(hashGrowfulToken(growfulToken))).resolves.toBeNull()
+  })
+
+  it("excludes a quarantined legacy connection from due and forced refresh", async () => {
+    // Given
+    const { accessToken, installedAppId } = await seedConnection("legacy-refresh-installed-app")
+    await quarantineLegacyConnection(installedAppId)
+
+    // When / Then
+    await expect(
+      store.claimTokensForRefresh({
+        claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000901"),
+        kind: "due",
+        leaseMs: 60_000,
+        now: issuedAt,
+        refreshBeforeExpiryMs: 7_200_000,
+      }),
+    ).resolves.toBeNull()
+    await expect(
+      store.claimTokensForRefresh({
+        claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000902"),
+        expectedAccessToken: accessToken,
+        installedAppId,
+        kind: "forced",
+        leaseMs: 60_000,
+        now: issuedAt,
+      }),
+    ).resolves.toBeNull()
+  })
+
+  it("replaces a quarantined legacy row when the installation is reauthorized", async () => {
+    // Given
+    const legacy = await seedConnection("legacy-reauthorized-installed-app")
+    await quarantineLegacyConnection(legacy.installedAppId)
+    const replacementGrowfulToken = generateGrowfulToken()
+
+    // When
     await store.saveTokens({
-      authorization: oauthAuthorization(["r:devices:*"], "private-user"),
+      authorization: oauthAuthorization(
+        ["r:devices:*"],
+        "replacement-user",
+        "replacement-generation",
+      ),
       grant: {
-        accessToken: "private-policy-access",
+        accessToken: "replacement-access",
         expiresInSeconds: 3_600,
-        installedAppId: InstalledAppIdSchema.parse("private-policy-installed-app"),
-        refreshToken: "private-policy-refresh",
+        installedAppId: legacy.installedAppId,
+        refreshToken: "replacement-refresh",
         scopes: ["r:devices:*"],
         tokenType: "bearer",
       },
-      growfulTokenCreatedAt: new Date("2026-07-22T00:00:00.000Z"),
-      growfulTokenHash: hashGrowfulToken(growfulToken),
-      issuedAt: new Date("2026-07-22T00:00:00.000Z"),
+      growfulTokenCreatedAt: issuedAt,
+      growfulTokenHash: hashGrowfulToken(replacementGrowfulToken),
+      issuedAt,
       source: "authorization",
     })
+
+    // Then
+    await expect(store.authenticate(hashGrowfulToken(legacy.growfulToken))).resolves.toBeNull()
+    await expect(store.authenticate(hashGrowfulToken(replacementGrowfulToken))).resolves.toEqual({
+      installedAppId: legacy.installedAppId,
+      policyVersion: "test-policy",
+      privateBetaInviteGeneration: "replacement-generation",
+      privateBetaUsername: "replacement-user",
+    })
+    await expect(store.getTokens(legacy.installedAppId)).resolves.toMatchObject({
+      accessToken: "replacement-access",
+      refreshToken: "replacement-refresh",
+    })
+  })
+
+  it("revokes every current connection when no invitations remain active", async () => {
+    // Given
+    const { growfulToken } = await seedConnection("private-policy-installed-app")
 
     // When
     const revokedCount = await store.revokeUnauthorizedConnections({
@@ -56,5 +178,88 @@ describe("private beta connection policy revocation", () => {
     // Then
     expect(revokedCount).toBe(1)
     await expect(store.authenticate(hashGrowfulToken(growfulToken))).resolves.toBeNull()
+  })
+
+  it.each([
+    { name: "empty invite list", privateBetaUsernames: [] },
+    { name: "different active invite", privateBetaUsernames: ["different-user"] },
+  ] satisfies readonly {
+    readonly name: string
+    readonly privateBetaUsernames: readonly string[]
+  }[])(
+    "revokes a partially populated legacy tuple with $name",
+    async ({ privateBetaUsernames }) => {
+      // Given
+      const { installedAppId } = await seedConnection(
+        `partial-legacy-${privateBetaUsernames.length}-installed-app`,
+        "inactive-private-user",
+      )
+      await database
+        .updateTable("smartThingsConnections")
+        .set({ consentedAt: null, policyVersion: null })
+        .where("installedAppId", "=", installedAppId)
+        .execute()
+
+      // When
+      const revokedCount = await store.revokeUnauthorizedConnections({
+        policyVersion: "test-policy",
+        privateBetaUsernames,
+      })
+
+      // Then
+      expect(revokedCount).toBe(1)
+      await expect(store.getTokens(installedAppId)).resolves.toBeNull()
+    },
+  )
+
+  it.each([
+    {
+      id: "public-username-only",
+      name: "public policy with only a private username",
+      privateBetaInviteGeneration: null,
+      privateBetaUsername: "private-user",
+      privateBetaUsernames: null,
+    },
+    {
+      id: "public-generation-only",
+      name: "public policy with only an invite generation",
+      privateBetaInviteGeneration: "orphaned-generation",
+      privateBetaUsername: null,
+      privateBetaUsernames: null,
+    },
+    {
+      id: "active-private-username-only",
+      name: "active private policy with only a private username",
+      privateBetaInviteGeneration: null,
+      privateBetaUsername: "private-user",
+      privateBetaUsernames: ["private-user"],
+    },
+  ] satisfies readonly {
+    readonly id: string
+    readonly name: string
+    readonly privateBetaInviteGeneration: string | null
+    readonly privateBetaUsername: string | null
+    readonly privateBetaUsernames: readonly string[] | null
+  }[])("revokes an inconsistent private-beta tuple under $name", async (testCase) => {
+    // Given
+    const { installedAppId } = await seedConnection(`${testCase.id}-installed-app`)
+    await database
+      .updateTable("smartThingsConnections")
+      .set({
+        privateBetaInviteGeneration: testCase.privateBetaInviteGeneration,
+        privateBetaUsername: testCase.privateBetaUsername,
+      })
+      .where("installedAppId", "=", installedAppId)
+      .execute()
+
+    // When
+    const revokedCount = await store.revokeUnauthorizedConnections({
+      policyVersion: "test-policy",
+      privateBetaUsernames: testCase.privateBetaUsernames,
+    })
+
+    // Then
+    expect(revokedCount).toBe(1)
+    await expect(store.getTokens(installedAppId)).resolves.toBeNull()
   })
 })
