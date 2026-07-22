@@ -166,6 +166,12 @@ PR의 CI는 다음 순서로 배포 이미지 자체를 검증합니다.
    - 서명 없는 webhook `EVENT`가 `401`로 거부되는지 확인
 6. Gateway 컨테이너 재시작 횟수가 0인지 확인
 
+버전 교차 smoke의 롤백 callback 검증은 이전 이미지가 `400` HTML 복구 페이지,
+`Cache-Control: no-store`, callback 전용 Content Security Policy와 clickjacking·MIME sniffing
+방지 헤더를 반환하는지 확인합니다. 복구 페이지에는 OAuth 재시작·지원 동선과 민감정보를
+공유하지 말라는 안내가 있어야 하며, 사용한 state와 callback에 보낸 민감 입력은 응답에 나타나면 안 됩니다.
+현재 롤백 기준인 `main`이 HTML 계약을 제공하므로 레거시 JSON 응답은 허용하지 않습니다.
+
 `main` 배포의 CD는 다음 순서로 실제 서버를 검증합니다.
 
 1. Docker/Compose 접근, amd64 아키텍처, `.env` 필수값을 읽기 전용으로 사전 점검
