@@ -3,27 +3,26 @@ import {
   GrowfulAbuseBlockReasonSchema,
   PostgresGrowfulAbuseControl,
 } from "./abuse/abuse-control.js"
-import { AuditEventHashSchema, hashAuditValue } from "./audit/audit-event.js"
+import {
+  AuditEventHashSchema,
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditTicketIdentity,
+} from "./audit/audit-event.js"
 import { createDatabase, runMigrations } from "./storage/database.js"
 
 const environmentSchema = z.object({ DATABASE_URL: z.url() })
-const operatorIdentitySchema = z.string().trim().min(1).max(200)
-const ticketIdentitySchema = z.string().trim().min(1).max(200)
 const commandSchema = z.union([
   z.tuple([z.literal("list")]),
   z.tuple([
     z.literal("block"),
     AuditEventHashSchema,
     GrowfulAbuseBlockReasonSchema,
-    operatorIdentitySchema,
-    ticketIdentitySchema,
+    AuditOperatorIdSchema,
+    AuditTicketIdSchema,
   ]),
-  z.tuple([
-    z.literal("unblock"),
-    AuditEventHashSchema,
-    operatorIdentitySchema,
-    ticketIdentitySchema,
-  ]),
+  z.tuple([z.literal("unblock"), AuditEventHashSchema, AuditOperatorIdSchema, AuditTicketIdSchema]),
 ])
 
 async function main(): Promise<void> {
@@ -41,10 +40,10 @@ async function main(): Promise<void> {
       case "block": {
         const [, supportReference, reason, operatorId, ticketId] = command
         const changed = await abuseControl.block({
-          actorIdHash: hashAuditValue(operatorId),
+          actorIdHash: hashAuditOperatorIdentity({ operatorId }),
           reason,
           supportReference,
-          ticketHash: hashAuditValue(ticketId),
+          ticketHash: hashAuditTicketIdentity({ ticketId }),
         })
         console.log(JSON.stringify({ action: "block", changed, supportReference }))
         return
@@ -52,9 +51,9 @@ async function main(): Promise<void> {
       case "unblock": {
         const [, supportReference, operatorId, ticketId] = command
         const changed = await abuseControl.unblock({
-          actorIdHash: hashAuditValue(operatorId),
+          actorIdHash: hashAuditOperatorIdentity({ operatorId }),
           supportReference,
-          ticketHash: hashAuditValue(ticketId),
+          ticketHash: hashAuditTicketIdentity({ ticketId }),
         })
         console.log(JSON.stringify({ action: "unblock", changed, supportReference }))
         return

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import type { GrowfulAbuseControl } from "../../src/abuse/abuse-control.js"
 import { type AppOptions, createApp } from "../../src/http/app.js"
+import type { GrowfulRequestQuota } from "../../src/http/growful-request-quota.js"
 import { OAuthService } from "../../src/oauth/oauth-service.js"
 import { GrowfulTokenSchema } from "../../src/security/growful-token.js"
 import { allowAllGrowfulAbuseControl } from "./abuse-control.js"
@@ -16,6 +17,7 @@ export type GatewayAppFixtureOptions = {
   readonly apps: FastifyInstance[]
   readonly logger?: AppOptions["logger"]
   readonly readinessProbe?: AppOptions["readinessProbe"]
+  readonly requestQuota?: GrowfulRequestQuota
   readonly serviceStatusSource?: AppOptions["serviceStatusSource"]
 }
 
@@ -51,6 +53,7 @@ export function createGatewayAppFixture(options: GatewayAppFixtureOptions) {
     oauthAccess: publicOAuthAccess,
     readinessProbe: options.readinessProbe ?? readyProbe,
     redirectOrigin: gatewayRedirectOrigin,
+    ...(options.requestQuota === undefined ? {} : { requestQuota: options.requestQuota }),
     serviceStatusSource: options.serviceStatusSource ?? {
       listPublicIncidents: async () => [],
     },

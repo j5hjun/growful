@@ -8,7 +8,10 @@ async function verifyAudit(): Promise<void> {
   const environment = environmentSchema.parse(process.env)
   const database = createDatabase(environment.DATABASE_URL)
   try {
-    const result = await verifyPostgresAuditIntegrity(database)
+    let result = await verifyPostgresAuditIntegrity(database)
+    while (result.status === "in_progress") {
+      result = await verifyPostgresAuditIntegrity(database, result.checkpoint)
+    }
     console.log(JSON.stringify(result))
     if (result.status === "invalid") {
       process.exitCode = 1

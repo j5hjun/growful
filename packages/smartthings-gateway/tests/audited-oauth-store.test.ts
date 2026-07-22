@@ -64,9 +64,33 @@ describe("AuditedOAuthStore", () => {
         affectedCount: 1,
         occurredAt: new Date("2026-07-22T04:01:00.000Z"),
         outcome: "succeeded",
-        subjectHash: hashAuditSubject(fixture.installedAppId),
+        subjectHash: hashAuditSubject({ installedAppId: fixture.installedAppId }),
       },
     ])
+  })
+
+  it("waits for connection admission before recording credential access", async () => {
+    // Given
+    const fixture = await createFixture()
+    const operations: string[] = []
+    const auditSink = new MemoryAuditSink()
+    const auditedStore = new AuditedOAuthStore({
+      auditSink: {
+        append: async (event) => {
+          operations.push("audit")
+          await auditSink.append(event)
+        },
+      },
+      store: fixture.auditedStore,
+    })
+
+    // When
+    await auditedStore.authenticate(hashGrowfulToken(fixture.growfulToken), async () => {
+      operations.push("admission")
+    })
+
+    // Then
+    expect(operations).toEqual(["admission", "audit"])
   })
 
   it("records access to decrypted SmartThings tokens", async () => {
@@ -84,7 +108,7 @@ describe("AuditedOAuthStore", () => {
         affectedCount: 1,
         occurredAt: new Date("2026-07-22T04:01:00.000Z"),
         outcome: "succeeded",
-        subjectHash: hashAuditSubject(fixture.installedAppId),
+        subjectHash: hashAuditSubject({ installedAppId: fixture.installedAppId }),
       },
     ])
   })

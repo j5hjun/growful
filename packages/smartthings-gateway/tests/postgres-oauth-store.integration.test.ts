@@ -84,7 +84,10 @@ describe("PostgresOAuthStore", () => {
     const replay = await store.consumeState(stateHash, now)
 
     // Then
-    expect(first).toEqual(authorization)
+    expect(first).toEqual({
+      ...authorization,
+      privacyDeletionEpoch: expect.stringMatching(/^(0|[1-9][0-9]*)$/),
+    })
     expect(replay).toBeNull()
   })
 

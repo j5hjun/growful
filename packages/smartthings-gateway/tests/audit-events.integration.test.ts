@@ -8,7 +8,6 @@ import {
   createAuditEvent,
   hashAuditSubject,
 } from "../src/audit/audit-event.js"
-import { verifyPostgresAuditIntegrity } from "../src/audit/postgres-audit-integrity.js"
 import { PostgresAuditSink } from "../src/audit/postgres-audit-sink.js"
 import { InstalledAppIdSchema, RefreshClaimIdSchema } from "../src/oauth/contracts.js"
 import {
@@ -18,6 +17,7 @@ import {
 } from "../src/security/growful-token.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
+import { verifyCompleteAuditChain } from "./fixtures/audit-integrity.js"
 import { oauthAuthorization } from "./fixtures/oauth-access.js"
 
 const testEnvironmentSchema = z.object({ TEST_DATABASE_URL: z.url() })
@@ -70,7 +70,7 @@ describe("audit event storage", () => {
   it("appends hash-chained events without storing the raw connection identifier", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-chain-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
     const occurredAt = new Date("2026-07-22T01:00:00.000Z")
 
     // When
@@ -110,7 +110,7 @@ describe("audit event storage", () => {
   it("uses the shared canonical hash for trigger-generated events", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-canonical-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
 
     // When
     await oauthStore.saveTokens({
@@ -166,7 +166,7 @@ describe("audit event storage", () => {
     })
 
     // When
-    const result = await verifyPostgresAuditIntegrity(database)
+    const result = await verifyCompleteAuditChain(database)
 
     // Then
     expect(result.status).toBe("valid")
@@ -174,7 +174,9 @@ describe("audit event storage", () => {
 
   it("rejects mutation of an existing audit event", async () => {
     // Given
-    const subjectHash = hashAuditSubject(InstalledAppIdSchema.parse("audit-mutation-installed-app"))
+    const subjectHash = hashAuditSubject({
+      installedAppId: InstalledAppIdSchema.parse("audit-mutation-installed-app"),
+    })
     await sink.append({
       action: "connection.disconnect",
       actorIdHash: null,
@@ -200,7 +202,7 @@ describe("audit event storage", () => {
   it("audits connection authorization, token rotation, and disconnection atomically", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-lifecycle-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
     const firstToken = GrowfulTokenSchema.parse(
       `grw_st_${Buffer.alloc(32, 31).toString("base64url")}`,
     )
@@ -248,7 +250,7 @@ describe("audit event storage", () => {
   it("audits a refresh failure in the same transaction as its failure state", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-refresh-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
     const claimId = RefreshClaimIdSchema.parse(randomUUID())
     await oauthStore.saveTokens({
       authorization: oauthAuthorization(["r:devices:*"]),

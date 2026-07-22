@@ -4,10 +4,15 @@ import type { SmartThingsScope } from "./smartthings-scope.js"
 
 export const InstalledAppIdSchema = z.string().min(1).brand("InstalledAppId")
 export const OAuthStateHashSchema = z.string().length(64).brand("OAuthStateHash")
+export const PrivacyDeletionEpochSchema = z
+  .string()
+  .regex(/^(0|[1-9][0-9]*)$/)
+  .brand("PrivacyDeletionEpoch")
 export const RefreshClaimIdSchema = z.uuid().brand("RefreshClaimId")
 
 export type InstalledAppId = z.infer<typeof InstalledAppIdSchema>
 export type OAuthStateHash = z.infer<typeof OAuthStateHashSchema>
+export type PrivacyDeletionEpoch = z.infer<typeof PrivacyDeletionEpochSchema>
 export type RefreshClaimId = z.infer<typeof RefreshClaimIdSchema>
 
 export class StaleRefreshClaimError extends Error {
@@ -44,9 +49,14 @@ export type ConnectionStatus = {
   readonly lastRefreshedAt: string | null
 }
 
+export type PrivateBetaInviteIdentity = {
+  readonly generation: string
+  readonly username: string
+}
+
 export type ConnectionAccessPolicy = {
   readonly policyVersion: string
-  readonly privateBetaUsernames: readonly string[] | null
+  readonly privateBetaInvites: readonly PrivateBetaInviteIdentity[] | null
 }
 
 export type ConnectionAuthentication = {
@@ -56,12 +66,19 @@ export type ConnectionAuthentication = {
   readonly privateBetaUsername: string | null
 }
 
+export type ConnectionAdmission = (installedAppId: InstalledAppId) => Promise<void>
+
 export type OAuthAuthorization = {
   readonly consentedAt: Date
   readonly policyVersion: string
   readonly privateBetaInviteGeneration: string | null
   readonly privateBetaUsername: string | null
+  readonly privacyDeletionEpoch: PrivacyDeletionEpoch | null
   readonly requestedScopes: readonly SmartThingsScope[]
+}
+
+export type OAuthCompletionAuthorization = OAuthAuthorization & {
+  readonly privacyDeletionEpoch: PrivacyDeletionEpoch
 }
 
 export type RefreshClaim =
@@ -97,10 +114,10 @@ export type SaveTokensInput =
       readonly source: "refresh"
     }
 
-export type AuthorizationSaveTokensInput = Extract<
-  SaveTokensInput,
-  { readonly source: "authorization" }
->
+export type AuthorizationSaveTokensInput = Omit<
+  Extract<SaveTokensInput, { readonly source: "authorization" }>,
+  "authorization"
+> & { readonly authorization: OAuthCompletionAuthorization }
 
 export type RefreshFailure = {
   readonly claimId: RefreshClaimId
@@ -110,7 +127,10 @@ export type RefreshFailure = {
 }
 
 export interface OAuthStore {
-  authenticate(growfulTokenHash: GrowfulTokenHash): Promise<ConnectionAuthentication | null>
+  authenticate(
+    growfulTokenHash: GrowfulTokenHash,
+    admission?: ConnectionAdmission,
+  ): Promise<ConnectionAuthentication | null>
   claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null>
   consumeState(stateHash: OAuthStateHash, now: Date): Promise<OAuthAuthorization | null>
   deleteConnection(installedAppId: InstalledAppId): Promise<boolean>

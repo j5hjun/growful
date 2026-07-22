@@ -38,6 +38,7 @@ export function oauthAuthorization(
     policyVersion: testDisclosures.policyVersion,
     privateBetaInviteGeneration,
     privateBetaUsername,
+    privacyDeletionEpoch: null,
     requestedScopes,
   }
 }

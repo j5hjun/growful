@@ -5,6 +5,10 @@ import { hashAuditSubject } from "../src/audit/audit-event.js"
 import { AuditedOAuthStore } from "../src/audit/audited-oauth-store.js"
 import { PostgresAuditSink } from "../src/audit/postgres-audit-sink.js"
 import { createApp } from "../src/http/app.js"
+import {
+  GrowfulRequestQuota,
+  PostgresGrowfulRequestQuotaStore,
+} from "../src/http/growful-request-quota.js"
 import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import { generateGrowfulToken, hashGrowfulToken } from "../src/security/growful-token.js"
@@ -63,6 +67,10 @@ describe("audited HTTP access", () => {
       oauthAccess: publicOAuthAccess,
       readinessProbe: readyProbe,
       redirectOrigin: "https://smartthings.growful.click",
+      requestQuota: new GrowfulRequestQuota({
+        limit: 1,
+        store: new PostgresGrowfulRequestQuotaStore({ database }),
+      }),
       serviceStatusSource: emptyServiceStatusSource,
       service: new OAuthService({
         client: new FakeSmartThingsClient(),
@@ -79,7 +87,12 @@ describe("audited HTTP access", () => {
       method: "GET",
       url: "/connection",
     })
-    const subjectHash = hashAuditSubject(installedAppId)
+    const rejectedResponse = await app.inject({
+      headers: { authorization: `Bearer ${growfulToken}` },
+      method: "GET",
+      url: "/connection",
+    })
+    const subjectHash = hashAuditSubject({ installedAppId })
     const events = await database
       .selectFrom("auditEvents")
       .select(["action", "subjectHash"])
@@ -90,6 +103,8 @@ describe("audited HTTP access", () => {
 
     // Then
     expect(response.statusCode).toBe(200)
+    expect(rejectedResponse.statusCode).toBe(429)
+    expect(rejectedResponse.json()).toEqual({ error: "growful_rate_limited" })
     expect(events).toEqual([
       { action: "connection.authorize", subjectHash },
       { action: "connection.access", subjectHash },

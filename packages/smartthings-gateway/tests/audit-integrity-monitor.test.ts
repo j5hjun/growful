@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import type { AuditChainVerification } from "../src/audit/audit-event.js"
+import { type AuditChainVerification, AuditEventHashSchema } from "../src/audit/audit-event.js"
 import {
   type AuditIntegrityLogger,
   AuditIntegrityMonitor,
 } from "../src/audit/audit-integrity-monitor.js"
+import type { AuditIntegrityCheckpoint } from "../src/audit/postgres-audit-integrity.js"
 
 type LoggedFailure = {
   readonly fields: Parameters<AuditIntegrityLogger["error"]>[0]
@@ -75,6 +76,63 @@ describe("AuditIntegrityMonitor", () => {
         message: "audit.integrity.failed",
       },
     ])
+  })
+
+  it("keeps startup unavailable until all bounded pages are verified", async () => {
+    // Given
+    const eventHash = AuditEventHashSchema.parse("0".repeat(64))
+    const checkpoint = {
+      eventCount: 1_000,
+      lastEventHash: eventHash,
+      lastSequence: "1000",
+      targetEventHash: eventHash,
+      targetSequence: "1001",
+    }
+    const receivedCheckpoints: Array<AuditIntegrityCheckpoint | null> = []
+    const monitor = new AuditIntegrityMonitor(async (receivedCheckpoint) => {
+      receivedCheckpoints.push(receivedCheckpoint)
+      return receivedCheckpoint === null
+        ? { checkpoint, status: "in_progress" }
+        : { eventCount: 1_001, lastEventHash: eventHash, status: "valid" }
+    })
+    const { logger } = captureLogger()
+
+    // When
+    await monitor.refresh(logger)
+    const startupStatus = await monitor.check()
+    await monitor.refresh(logger)
+
+    // Then
+    expect(startupStatus).toBe("unavailable")
+    expect(await monitor.check()).toBe("ready")
+    expect(receivedCheckpoints).toEqual([null, checkpoint])
+  })
+
+  it("keeps readiness while a later bounded verification cycle is in progress", async () => {
+    // Given
+    const eventHash = AuditEventHashSchema.parse("1".repeat(64))
+    const checkpoint = {
+      eventCount: 1_000,
+      lastEventHash: eventHash,
+      lastSequence: "1000",
+      targetEventHash: eventHash,
+      targetSequence: "1001",
+    }
+    let verificationCount = 0
+    const monitor = new AuditIntegrityMonitor(async () => {
+      verificationCount += 1
+      return verificationCount === 1
+        ? { eventCount: 1_001, lastEventHash: eventHash, status: "valid" }
+        : { checkpoint, status: "in_progress" }
+    })
+    const { logger } = captureLogger()
+    await monitor.refresh(logger)
+
+    // When
+    await monitor.refresh(logger)
+
+    // Then
+    expect(await monitor.check()).toBe("ready")
   })
 
   it("reports only the error class when verification cannot read storage", async () => {

@@ -83,7 +83,7 @@ describe("Growful abuse operator CLI", () => {
       blockReason: null,
       lastRejectedAt: expect.any(String),
       rejectedCount: 1,
-      supportReference: hashAuditSubject(installedAppId),
+      supportReference: hashAuditSubject({ installedAppId }),
     })
     expect(result.stdout).not.toContain(installedAppId)
   })
@@ -91,7 +91,7 @@ describe("Growful abuse operator CLI", () => {
   it("blocks by support reference and hashes operator evidence", async () => {
     // Given
     const installedAppId = await seedConnection()
-    const supportReference = hashAuditSubject(installedAppId)
+    const supportReference = hashAuditSubject({ installedAppId })
 
     // When
     const result = await runCli([
@@ -125,7 +125,7 @@ describe("Growful abuse operator CLI", () => {
   it("unblocks by support reference", async () => {
     // Given
     const installedAppId = await seedConnection()
-    const supportReference = hashAuditSubject(installedAppId)
+    const supportReference = hashAuditSubject({ installedAppId })
     await runCli(["block", supportReference, "quota_abuse", operatorId, ticketId])
 
     // When

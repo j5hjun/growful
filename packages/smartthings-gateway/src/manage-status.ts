@@ -1,5 +1,10 @@
 import { z } from "zod"
-import { hashAuditValue } from "./audit/audit-event.js"
+import {
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditTicketIdentity,
+} from "./audit/audit-event.js"
 import { PostgresServiceStatusManager } from "./status/postgres-service-status.js"
 import {
   ServiceIncidentIdSchema,
@@ -10,8 +15,6 @@ import {
 import { createDatabase, runMigrations } from "./storage/database.js"
 
 const environmentSchema = z.object({ DATABASE_URL: z.url() })
-const operatorIdentitySchema = z.string().trim().min(1).max(200)
-const ticketIdentitySchema = z.string().trim().min(1).max(200)
 const activeIncidentStatusSchema = z.enum(["investigating", "monitoring"])
 const commandSchema = z.union([
   z.tuple([z.literal("list")]),
@@ -20,23 +23,23 @@ const commandSchema = z.union([
     ServiceIncidentImpactSchema,
     ServiceIncidentTitleSchema,
     ServiceIncidentMessageSchema,
-    operatorIdentitySchema,
-    ticketIdentitySchema,
+    AuditOperatorIdSchema,
+    AuditTicketIdSchema,
   ]),
   z.tuple([
     z.literal("update"),
     ServiceIncidentIdSchema,
     activeIncidentStatusSchema,
     ServiceIncidentMessageSchema,
-    operatorIdentitySchema,
-    ticketIdentitySchema,
+    AuditOperatorIdSchema,
+    AuditTicketIdSchema,
   ]),
   z.tuple([
     z.literal("resolve"),
     ServiceIncidentIdSchema,
     ServiceIncidentMessageSchema,
-    operatorIdentitySchema,
-    ticketIdentitySchema,
+    AuditOperatorIdSchema,
+    AuditTicketIdSchema,
   ]),
 ])
 
@@ -55,10 +58,10 @@ async function main(): Promise<void> {
       case "open": {
         const [, impact, title, message, operatorId, ticketId] = command
         const incidentId = await manager.open({
-          actorIdHash: hashAuditValue(operatorId),
+          actorIdHash: hashAuditOperatorIdentity({ operatorId }),
           impact,
           message,
-          ticketHash: hashAuditValue(ticketId),
+          ticketHash: hashAuditTicketIdentity({ ticketId }),
           title,
         })
         console.log(JSON.stringify({ action: "open", incidentId }))
@@ -67,11 +70,11 @@ async function main(): Promise<void> {
       case "update": {
         const [, incidentId, status, message, operatorId, ticketId] = command
         const changed = await manager.update({
-          actorIdHash: hashAuditValue(operatorId),
+          actorIdHash: hashAuditOperatorIdentity({ operatorId }),
           incidentId,
           message,
           status,
-          ticketHash: hashAuditValue(ticketId),
+          ticketHash: hashAuditTicketIdentity({ ticketId }),
         })
         console.log(JSON.stringify({ action: "update", changed, incidentId }))
         return
@@ -79,10 +82,10 @@ async function main(): Promise<void> {
       case "resolve": {
         const [, incidentId, message, operatorId, ticketId] = command
         const changed = await manager.resolve({
-          actorIdHash: hashAuditValue(operatorId),
+          actorIdHash: hashAuditOperatorIdentity({ operatorId }),
           incidentId,
           message,
-          ticketHash: hashAuditValue(ticketId),
+          ticketHash: hashAuditTicketIdentity({ ticketId }),
         })
         console.log(JSON.stringify({ action: "resolve", changed, incidentId }))
         return

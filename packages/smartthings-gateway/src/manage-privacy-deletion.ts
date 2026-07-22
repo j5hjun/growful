@@ -1,16 +1,20 @@
 import { z } from "zod"
-import { AuditEventHashSchema, hashAuditValue } from "./audit/audit-event.js"
+import {
+  AuditEventHashSchema,
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditTicketIdentity,
+} from "./audit/audit-event.js"
 import { PostgresPrivacyDeletion } from "./privacy/postgres-privacy-deletion.js"
 import { createDatabase, runMigrations } from "./storage/database.js"
 
 const environmentSchema = z.object({ DATABASE_URL: z.url() })
-const operatorIdentitySchema = z.string().trim().min(1).max(200)
-const ticketIdentitySchema = z.string().trim().min(1).max(200)
 const commandSchema = z.tuple([
   z.literal("delete"),
   AuditEventHashSchema,
-  operatorIdentitySchema,
-  ticketIdentitySchema,
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
 ])
 
 async function main(): Promise<void> {
@@ -22,9 +26,9 @@ async function main(): Promise<void> {
     const privacyDeletion = new PostgresPrivacyDeletion({ database })
     const [, supportReference, operatorId, ticketId] = command
     const result = await privacyDeletion.delete({
-      actorIdHash: hashAuditValue(operatorId),
+      actorIdHash: hashAuditOperatorIdentity({ operatorId }),
       supportReference,
-      ticketHash: hashAuditValue(ticketId),
+      ticketHash: hashAuditTicketIdentity({ ticketId }),
     })
     console.log(JSON.stringify({ action: "privacy.delete", ...result, supportReference }))
     switch (result.outcome) {

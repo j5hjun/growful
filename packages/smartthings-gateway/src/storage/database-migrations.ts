@@ -69,6 +69,16 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   await sql`alter table oauth_states add column if not exists private_beta_invite_generation text`.execute(
     database,
   )
+  await sql`create sequence if not exists privacy_deletion_epoch_sequence`.execute(database)
+  await sql`alter table oauth_states add column if not exists privacy_deletion_epoch bigint not null default 0`.execute(
+    database,
+  )
+  await sql`
+    create table if not exists privacy_deletion_epochs (
+      subject_hash varchar(64) primary key,
+      deletion_epoch bigint not null
+    )
+  `.execute(database)
   await sql`create index if not exists oauth_states_expires_at_index on oauth_states (expires_at)`.execute(
     database,
   )

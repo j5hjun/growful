@@ -3,6 +3,10 @@ import { z } from "zod"
 import type { InstalledAppId } from "../oauth/contracts.js"
 import type { OAuthService } from "../oauth/oauth-service.js"
 import { GrowfulTokenSchema } from "../security/growful-token.js"
+import {
+  type GrowfulRequestQuota,
+  GrowfulRequestQuotaExceededError,
+} from "./growful-request-quota.js"
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -27,20 +31,42 @@ export function registerGrowfulAuthentication(app: FastifyInstance): void {
   app.decorateRequest("growfulConnectionId", null)
 }
 
+export type GrowfulAuthenticationOptions = {
+  readonly reply: FastifyReply
+  readonly request: FastifyRequest
+  readonly requestQuota: GrowfulRequestQuota
+  readonly service: OAuthService
+}
+
 export async function requireGrowfulAuthentication(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  service: OAuthService,
+  options: GrowfulAuthenticationOptions,
 ): Promise<FastifyReply | undefined> {
-  const parsed = bearerAuthorizationSchema.safeParse(request.headers.authorization)
+  const parsed = bearerAuthorizationSchema.safeParse(options.request.headers.authorization)
   if (!parsed.success) {
-    return reply.status(401).send({ error: "unauthorized" as const })
+    return options.reply.status(401).send({ error: "unauthorized" as const })
   }
-  const installedAppId = await service.authenticate(parsed.data)
+  let installedAppId: InstalledAppId | null
+  try {
+    installedAppId = await options.service.authenticate(parsed.data, async (connectionId) => {
+      const retryAfterSeconds = await options.requestQuota.consume(connectionId)
+      if (retryAfterSeconds !== null) {
+        throw new GrowfulRequestQuotaExceededError(retryAfterSeconds)
+      }
+    })
+  } catch (error: unknown) {
+    if (error instanceof GrowfulRequestQuotaExceededError) {
+      return options.reply
+        .header("Cache-Control", "no-store")
+        .header("Retry-After", String(error.retryAfterSeconds))
+        .status(429)
+        .send({ error: "growful_rate_limited" as const })
+    }
+    throw error
+  }
   if (installedAppId === null) {
-    return reply.status(401).send({ error: "unauthorized" as const })
+    return options.reply.status(401).send({ error: "unauthorized" as const })
   }
-  request.growfulConnectionId = installedAppId
+  options.request.growfulConnectionId = installedAppId
   return undefined
 }
 

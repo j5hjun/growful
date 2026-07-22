@@ -96,11 +96,12 @@ export function registerSmartThingsProxy(
     "/v1/*",
     {
       onRequest: async (request, reply) => {
-        const unauthorizedReply = await requireGrowfulAuthentication(
-          request,
+        const unauthorizedReply = await requireGrowfulAuthentication({
           reply,
-          options.service,
-        )
+          request,
+          requestQuota: options.requestQuota,
+          service: options.service,
+        })
         if (unauthorizedReply !== undefined) {
           return unauthorizedReply
         }
@@ -116,15 +117,8 @@ export function registerSmartThingsProxy(
           return reply.status(403).send({
             error: "growful_access_blocked" as const,
             reason: block.reason,
-            supportReference: hashAuditSubject(installedAppId),
+            supportReference: hashAuditSubject({ installedAppId }),
           })
-        }
-        const quotaRetryAfterSeconds = await options.requestQuota.consume(installedAppId)
-        if (quotaRetryAfterSeconds !== null) {
-          return reply
-            .header("Retry-After", String(quotaRetryAfterSeconds))
-            .status(429)
-            .send({ error: "growful_rate_limited" as const })
         }
         const retryAfterSeconds =
           await options.rateLimitBackoff.getRetryAfterSeconds(installedAppId)

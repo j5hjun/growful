@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { afterEach, describe, expect, it } from "vitest"
 import { hashAuditSubject } from "../src/audit/audit-event.js"
+import { GrowfulRequestQuota } from "../src/http/growful-request-quota.js"
 import {
   authorizeGatewayApp,
   createGatewayAppFixture,
@@ -52,7 +53,9 @@ describe("SmartThings Gateway HTTP API", () => {
       grantedScopes: ["r:devices:$", "x:devices:$", "r:locations:*"],
       lastRefreshedAt: null,
       serviceAccess: { status: "active" },
-      supportReference: hashAuditSubject(fixture.client.exchangeGrant.installedAppId),
+      supportReference: hashAuditSubject({
+        installedAppId: fixture.client.exchangeGrant.installedAppId,
+      }),
     })
     expect(authenticatedStatus.body).not.toContain("initial-access-token")
     expect(authenticatedStatus.body).not.toContain("initial-refresh-token")
@@ -85,6 +88,33 @@ describe("SmartThings Gateway HTTP API", () => {
       status: "blocked",
     })
     expect(response.body).not.toContain(fixture.client.exchangeGrant.installedAppId)
+  })
+
+  it("rate limits repeated connection status reads per connection", async () => {
+    // Given
+    const fixture = createGatewayAppFixture({
+      apps,
+      requestQuota: new GrowfulRequestQuota({ limit: 1 }),
+    })
+    await authorizeGatewayApp(fixture.app)
+
+    // When
+    const firstResponse = await fixture.app.inject({
+      headers: { authorization: `Bearer ${testGrowfulToken(1)}` },
+      method: "GET",
+      url: "/connection",
+    })
+    const rejectedResponse = await fixture.app.inject({
+      headers: { authorization: `Bearer ${testGrowfulToken(1)}` },
+      method: "GET",
+      url: "/connection",
+    })
+
+    // Then
+    expect(firstResponse.statusCode).toBe(200)
+    expect(rejectedResponse.statusCode).toBe(429)
+    expect(rejectedResponse.headers["retry-after"]).toBe("60")
+    expect(rejectedResponse.json()).toEqual({ error: "growful_rate_limited" })
   })
 
   it("rotates the Growful token and invalidates the previous token", async () => {

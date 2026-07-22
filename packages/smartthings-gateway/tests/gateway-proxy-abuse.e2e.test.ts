@@ -46,7 +46,9 @@ describe("Growful proxy abuse block", () => {
     expect(response.json()).toEqual({
       error: "growful_access_blocked",
       reason: "quota_abuse",
-      supportReference: hashAuditSubject(fixture.client.exchangeGrant.installedAppId),
+      supportReference: hashAuditSubject({
+        installedAppId: fixture.client.exchangeGrant.installedAppId,
+      }),
     })
     expect(api.requests).toHaveLength(0)
   })

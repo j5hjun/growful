@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import type { Kysely } from "kysely"
+import type { PrivateBetaInviteIdentity } from "../oauth/contracts.js"
 import type { GatewayDatabase } from "../storage/database.js"
 import {
   getPrivateBetaInviteUsername,
@@ -11,7 +12,7 @@ import {
 export interface PrivateBetaInviteAccess {
   authenticate(authorization: string | undefined): Promise<AuthenticatedPrivateBetaInvite | null>
   isUsernameActive(username: string): Promise<boolean>
-  listActiveUsernames(): Promise<readonly string[]>
+  listActiveInvites(): Promise<readonly PrivateBetaInviteIdentity[]>
   resolveActiveInvite(username: string): Promise<ActivePrivateBetaInvite | null>
 }
 
@@ -42,8 +43,11 @@ export class ConfiguredPrivateBetaInviteAccess implements PrivateBetaInviteAcces
     return (await this.resolveActiveInvite(username)) !== null
   }
 
-  async listActiveUsernames(): Promise<readonly string[]> {
-    return this.invites.map((invite) => invite.username)
+  async listActiveInvites(): Promise<readonly PrivateBetaInviteIdentity[]> {
+    return this.invites.map((invite) => ({
+      generation: getConfiguredPrivateBetaInviteGeneration(invite),
+      username: invite.username,
+    }))
   }
 
   async resolveActiveInvite(username: string): Promise<ActivePrivateBetaInvite | null> {
@@ -119,19 +123,26 @@ export class PostgresPrivateBetaInviteAccess implements PrivateBetaInviteAccess 
       : { generation: getConfiguredPrivateBetaInviteGeneration(configuredInvite) }
   }
 
-  async listActiveUsernames(): Promise<readonly string[]> {
+  async listActiveInvites(): Promise<readonly PrivateBetaInviteIdentity[]> {
     const storedInvites = await this.database
       .selectFrom("privateBetaInvites")
-      .select(["revokedAt", "username"])
+      .select(["generationId", "revokedAt", "username"])
       .execute()
-    const activeUsernames = new Set(this.configuredInvites.map((invite) => invite.username))
+    const activeInvites = new Map(
+      this.configuredInvites.map((invite) => [
+        invite.username,
+        getConfiguredPrivateBetaInviteGeneration(invite),
+      ]),
+    )
     for (const invite of storedInvites) {
       if (invite.revokedAt === null) {
-        activeUsernames.add(invite.username)
+        activeInvites.set(invite.username, invite.generationId)
       } else {
-        activeUsernames.delete(invite.username)
+        activeInvites.delete(invite.username)
       }
     }
-    return [...activeUsernames].sort()
+    return [...activeInvites]
+      .map(([username, generation]) => ({ generation, username }))
+      .sort((left, right) => left.username.localeCompare(right.username))
   }
 }

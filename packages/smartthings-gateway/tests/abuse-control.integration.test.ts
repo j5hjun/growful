@@ -83,7 +83,7 @@ describe("PostgreSQL Growful abuse control", () => {
       blockReason: null,
       lastRejectedAt: expect.any(Date),
       rejectedCount: 2,
-      supportReference: hashAuditSubject(installedAppId),
+      supportReference: hashAuditSubject({ installedAppId }),
     })
     expect(JSON.stringify(reviews)).not.toContain(installedAppId)
   })
@@ -91,7 +91,7 @@ describe("PostgreSQL Growful abuse control", () => {
   it("blocks a connection and appends operator evidence atomically", async () => {
     // Given
     const installedAppId = await seedConnection()
-    const supportReference = hashAuditSubject(installedAppId)
+    const supportReference = hashAuditSubject({ installedAppId })
 
     // When
     const changed = await abuseControl.block({
@@ -123,7 +123,7 @@ describe("PostgreSQL Growful abuse control", () => {
   it("unblocks a blocked connection and appends operator evidence", async () => {
     // Given
     const installedAppId = await seedConnection()
-    const supportReference = hashAuditSubject(installedAppId)
+    const supportReference = hashAuditSubject({ installedAppId })
     const command = operatorCommand(supportReference)
     await abuseControl.block({ ...command, reason: "security_incident" })
 

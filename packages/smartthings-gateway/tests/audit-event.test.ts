@@ -1,11 +1,16 @@
+import { randomUUID } from "node:crypto"
 import { describe, expect, it } from "vitest"
 import {
   AuditActionSchema,
   AuditActorTypeSchema,
   AuditEventHashSchema,
   AuditEventIdSchema,
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
   createAuditEvent,
+  hashAuditOperatorIdentity,
   hashAuditSubject,
+  hashAuditTicketIdentity,
   verifyAuditChain,
 } from "../src/audit/audit-event.js"
 import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
@@ -96,11 +101,28 @@ describe("audit events", () => {
     const installedAppId = InstalledAppIdSchema.parse("private-installed-app-id")
 
     // When
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
 
     // Then
     expect(subjectHash).toMatch(/^[a-f0-9]{64}$/)
     expect(subjectHash).not.toContain(installedAppId)
+  })
+
+  it("rejects secret-shaped values at the audit identity hashing boundary", () => {
+    // Given
+    const operatorId = AuditOperatorIdSchema.parse(randomUUID())
+    const ticketId = AuditTicketIdSchema.parse(randomUUID())
+    const secretShapedInput = { password: randomUUID() }
+
+    // When
+    const actorIdHash = hashAuditOperatorIdentity({ operatorId })
+    const ticketHash = hashAuditTicketIdentity({ ticketId })
+    const hashSecret = () => hashAuditOperatorIdentity(secretShapedInput as never)
+
+    // Then
+    expect(actorIdHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(ticketHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(hashSecret).toThrow()
   })
 
   it("binds every audit field and the previous hash into the event hash", () => {

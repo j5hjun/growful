@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto"
 import { sql } from "kysely"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { hashAuditValue } from "../src/audit/audit-event.js"
+import {
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditTicketIdentity,
+} from "../src/audit/audit-event.js"
 import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
 import { InvalidOAuthStateError, OAuthService } from "../src/oauth/oauth-service.js"
 import { PostgresPrivateBetaInviteAccess } from "../src/private-beta/invite-access.js"
@@ -19,6 +24,13 @@ const scenarioId = randomUUID()
 const username = `revocation-race-${scenarioId}`
 const installedAppId = InstalledAppIdSchema.parse(`revocation-race-${scenarioId}`)
 const revocationPauseLockId = 904_582_301
+const actorIdHash = hashAuditOperatorIdentity({
+  operatorId: AuditOperatorIdSchema.parse(randomUUID()),
+})
+
+function ticketHash(): ReturnType<typeof hashAuditTicketIdentity> {
+  return hashAuditTicketIdentity({ ticketId: AuditTicketIdSchema.parse(randomUUID()) })
+}
 
 function deferred<T>() {
   let resolvePromise: (value: T | PromiseLike<T>) => void = () => undefined
@@ -95,9 +107,9 @@ describe("private beta OAuth and invitation revocation concurrency", () => {
   it("does not retain credentials when revocation overlaps OAuth completion", async () => {
     const manager = new PostgresPrivateBetaInviteManager({ configuredInvites: [], database })
     const issued = await manager.issue({
-      actorIdHash: hashAuditValue("race-test-operator"),
+      actorIdHash,
       passwordHash: "a".repeat(64),
-      ticketHash: hashAuditValue("RACE-ISSUE"),
+      ticketHash: ticketHash(),
       username,
     })
     expect(issued).toBe(true)
@@ -154,8 +166,8 @@ describe("private beta OAuth and invitation revocation concurrency", () => {
     let revocationSettled = false
     const revocation = manager
       .revoke({
-        actorIdHash: hashAuditValue("race-test-operator"),
-        ticketHash: hashAuditValue("RACE-REVOKE"),
+        actorIdHash,
+        ticketHash: ticketHash(),
         username,
       })
       .finally(() => {
