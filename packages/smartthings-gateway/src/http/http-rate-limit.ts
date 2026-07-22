@@ -4,6 +4,10 @@ import type { FastifyInstance } from "fastify"
 const rateLimitWindowMs = 60_000
 
 export const httpRateLimitPolicies = {
+  oauthCallback: {
+    max: 60,
+    timeWindow: rateLimitWindowMs,
+  },
   oauthStart: {
     max: 60,
     timeWindow: rateLimitWindowMs,

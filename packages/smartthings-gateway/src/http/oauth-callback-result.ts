@@ -4,6 +4,7 @@ export const oauthCallbackResultKinds = {
   cancelled: "cancelled",
   invalidRequest: "invalid_request",
   invalidState: "invalid_state",
+  rateLimited: "rate_limited",
   scopeMismatch: "scope_mismatch",
   tokenExchangeFailed: "token_exchange_failed",
   unexpected: "unexpected",
@@ -40,6 +41,13 @@ const resultCopy = {
       "보안을 위해 연결 요청은 일정 시간이 지나면 만료되며 한 번만 사용할 수 있습니다. 새 OAuth 요청을 시작하면 다시 연결할 수 있습니다.",
     label: "요청 만료",
     title: "연결 요청을 다시 시작해 주세요",
+  },
+  rate_limited: {
+    description: "반복된 SmartThings OAuth callback 요청을 안전하게 제한합니다.",
+    explanation:
+      "짧은 시간에 연결 완료 요청이 너무 많이 접수되었습니다. 잠시 기다린 뒤 새 OAuth 요청을 시작해 주세요.",
+    label: "요청 제한",
+    title: "요청이 너무 많습니다",
   },
   scope_mismatch: {
     description: "SmartThings 권한 확인이 일치하지 않아 연결을 완료하지 않았습니다.",

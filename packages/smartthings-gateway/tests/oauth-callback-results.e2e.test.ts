@@ -29,7 +29,7 @@ async function startAuthorization(app: FastifyInstance): Promise<string> {
 
 function expectRecoveryPage(
   response: LightMyRequestResponse,
-  expectedStatus: 400 | 500 | 502,
+  expectedStatus: 400 | 429 | 500 | 502,
   expectedTitle: string,
 ): void {
   expect(response.statusCode).toBe(expectedStatus)
@@ -247,5 +247,28 @@ describe("OAuth callback browser results", () => {
     expect(response.body).not.toContain(originalError)
     expect(response.body).not.toContain(code)
     expect(response.body).not.toContain(state)
+  })
+
+  it("rate limits repeated callback requests with a recovery page", async () => {
+    // Given
+    const fixture = createGatewayAppFixture({ apps })
+    for (let requestIndex = 0; requestIndex < 60; requestIndex += 1) {
+      const response = await fixture.app.inject({
+        method: "GET",
+        url: `/oauth/callback?code=invalid-code-${requestIndex}`,
+      })
+      expect(response.statusCode).toBe(400)
+    }
+
+    // When
+    const response = await fixture.app.inject({
+      method: "GET",
+      url: "/oauth/callback?code=rate-limited-sensitive-code",
+    })
+
+    // Then
+    expectRecoveryPage(response, 429, "요청이 너무 많습니다")
+    expect(response.body).not.toContain("rate-limited-sensitive-code")
+    expect(response.headers["retry-after"]).toBeDefined()
   })
 })
