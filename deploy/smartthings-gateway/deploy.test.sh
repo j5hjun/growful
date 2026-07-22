@@ -64,7 +64,8 @@ cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$release_dir/"
 cp "$source_dir/compose.yaml" "$previous_release/"
 grep -Fq 'stop_grace_period: 120s' "$source_dir/compose.yaml"
 grep -Fq "fetch('http://127.0.0.1:8100/readyz')" "$source_dir/compose.yaml"
-touch "$deployment_root/.env"
+printf '%s\n' 'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
+  >"$deployment_root/.env"
 touch "$deployment_root/.env.rollback.stale"
 printf '%s\n' "$previous_image_reference" 'previous' "$previous_release" '1' >"$release_state_file"
 
@@ -105,6 +106,13 @@ printf '%s\n' \
   '    printf "%s|rollback-credentials=valid\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
   '  else' \
   '    printf "%s|rollback-credentials=invalid\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
+  '  fi' \
+  '  privacy_policy_url="$(sed -n "s/^PUBLIC_PRIVACY_POLICY_URL=//p" "${GATEWAY_ENV_FILE:?}")"' \
+  '  terms_url="$(sed -n "s/^PUBLIC_TERMS_URL=//p" "${GATEWAY_ENV_FILE:?}")"' \
+  '  if [[ "$privacy_policy_url" == "https://smartthings.growful.click/privacy" && "$terms_url" == "https://smartthings.growful.click/terms" ]]; then' \
+  '    printf "%s|rollback-policy-urls=valid\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
+  '  else' \
+  '    printf "%s|rollback-policy-urls=invalid\n" "${RELEASE_ID:-}" >>"$FAKE_LOG"' \
   '  fi' \
   'fi' >"$fake_bin/docker"
 
@@ -241,7 +249,13 @@ grep -Fq "previous|image inspect $previous_image_reference" "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Fq 'previous|rollback-scope=exact' "$fake_log"
 grep -Fq 'previous|rollback-credentials=valid' "$fake_log"
-test ! -s "$deployment_root/.env"
+grep -Fq 'previous|rollback-policy-urls=valid' "$fake_log"
+test "$(cat "$deployment_root/.env")" = \
+  'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback'
+if grep -Eq '^PUBLIC_(PRIVACY_POLICY|TERMS)_URL=' "$deployment_root/.env"; then
+  printf 'rollback compatibility values leaked into the deployment environment\n' >&2
+  exit 1
+fi
 grep -Eq '^previous\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1
 assert_deployment_sequence 3 broken "$broken_image_reference"

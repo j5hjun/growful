@@ -215,6 +215,8 @@ deploy_release() {
 }
 
 rollback_release() {
+  local rollback_policy_origin
+
   if [[ -z "$previous_image_reference" || -z "$previous_release_id" ]]; then
     if ! "${compose[@]}" stop gateway >/dev/null 2>&1; then
       printf 'failed to stop the rejected first deployment\n' >&2
@@ -249,6 +251,24 @@ rollback_release() {
   fi
   if ! grep --quiet '^GATEWAY_API_TOKEN=..*' "$environment_file"; then
     printf '%s=%s\n' 'GATEWAY_API_TOKEN' "$(head -c 32 /dev/urandom | base64 | tr -d '\n')" \
+      >>"$rollback_environment_file"
+  fi
+  if ! grep --quiet '^PUBLIC_PRIVACY_POLICY_URL=..*' "$environment_file" ||
+    ! grep --quiet '^PUBLIC_TERMS_URL=..*' "$environment_file"; then
+    rollback_policy_origin="$(
+      sed -n 's#^OAUTH_REDIRECT_URI=\(https://[^/[:space:]]*\)/.*#\1#p' "$environment_file"
+    )"
+    if [[ -z "$rollback_policy_origin" || "$rollback_policy_origin" == *$'\n'* ]]; then
+      printf 'could not derive legacy policy origin for rollback\n' >&2
+      return 1
+    fi
+  fi
+  if ! grep --quiet '^PUBLIC_PRIVACY_POLICY_URL=..*' "$environment_file"; then
+    printf '%s=%s/privacy\n' 'PUBLIC_PRIVACY_POLICY_URL' "$rollback_policy_origin" \
+      >>"$rollback_environment_file"
+  fi
+  if ! grep --quiet '^PUBLIC_TERMS_URL=..*' "$environment_file"; then
+    printf '%s=%s/terms\n' 'PUBLIC_TERMS_URL' "$rollback_policy_origin" \
       >>"$rollback_environment_file"
   fi
   export GATEWAY_ENV_FILE="$rollback_environment_file"
