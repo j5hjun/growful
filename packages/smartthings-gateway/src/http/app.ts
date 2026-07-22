@@ -41,6 +41,7 @@ import {
   SmartThingsConfirmationRequestError,
   type SmartThingsConfirmationRequester,
 } from "./smartthings-webhook.js"
+import { registerTransportSecurity } from "./transport-security.js"
 
 const pathsWithSensitiveRequestData = new Set([
   "/healthz",
@@ -99,6 +100,7 @@ export function createApp(options: AppOptions): FastifyInstance {
       done(null, body)
     },
   )
+  registerTransportSecurity(app)
   registerGrowfulAuthentication(app)
   app.get("/healthz", async () => ({ status: "ok" as const }))
   app.get("/readyz", async (_request, reply) => {

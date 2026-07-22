@@ -3,6 +3,11 @@ services:
     image: "${SMARTTHINGS_GATEWAY_IMAGE_NAME:?SMARTTHINGS_GATEWAY_IMAGE_NAME is required}@${SMARTTHINGS_GATEWAY_IMAGE_DIGEST:?SMARTTHINGS_GATEWAY_IMAGE_DIGEST is required}"
     restart: unless-stopped
     stop_grace_period: 120s
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     env_file:
       - "${GATEWAY_ENV_FILE:-.env}"
     depends_on:

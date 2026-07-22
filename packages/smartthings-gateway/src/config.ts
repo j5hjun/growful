@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { z } from "zod"
 import { type PrivateBetaInvite, parsePrivateBetaInvites } from "./private-beta/invite.js"
 
@@ -6,6 +7,42 @@ const configuredSecret = z
   .string()
   .min(1)
   .refine((value) => !value.startsWith("replace-with-"), "replace placeholder secrets")
+
+const fileBackedSecretSources = [
+  { environmentKey: "DATABASE_URL", fileKey: "DATABASE_URL_FILE" },
+  { environmentKey: "OAUTH_CLIENT_SECRET", fileKey: "OAUTH_CLIENT_SECRET_FILE" },
+  { environmentKey: "TOKEN_ENCRYPTION_KEY", fileKey: "TOKEN_ENCRYPTION_KEY_FILE" },
+] as const
+
+class SecretFileReadError extends Error {
+  override readonly name = "SecretFileReadError"
+
+  constructor(readonly environmentKey: string) {
+    super(`${environmentKey} file could not be read`)
+  }
+}
+
+function resolveFileBackedSecrets(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const resolvedEnvironment = { ...environment }
+  for (const { environmentKey, fileKey } of fileBackedSecretSources) {
+    if (environment[environmentKey] !== undefined) {
+      continue
+    }
+    const filePath = environment[fileKey]
+    if (filePath === undefined) {
+      continue
+    }
+    try {
+      resolvedEnvironment[environmentKey] = readFileSync(filePath, "utf8").replace(/\r?\n$/u, "")
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        throw new SecretFileReadError(environmentKey)
+      }
+      throw error
+    }
+  }
+  return resolvedEnvironment
+}
 
 const smartThingsApiUrl = "https://api.smartthings.com"
 export const servicePolicyRevision = "2026-07-22"
@@ -104,7 +141,7 @@ export type AppConfig = {
 }
 
 export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
-  const parsed = environmentSchema.parse(environment)
+  const parsed = environmentSchema.parse(resolveFileBackedSecrets(environment))
   const disclosure = disclosureSchema.parse(parsed)
   const redirectUri = new URL(parsed.OAUTH_REDIRECT_URI)
   const privacyPolicyUrl = new URL("/privacy", redirectUri)
