@@ -75,7 +75,10 @@ export class PostgresServiceStatusManager implements ServiceStatusSource {
         order by sequence desc
         limit 1
       ) latest on true
-      order by incidents.resolved_at nulls first, incidents.started_at desc
+      order by
+        (incidents.resolved_at is null) desc,
+        incidents.resolved_at desc nulls last,
+        incidents.started_at desc
       limit 50
     `.execute(this.database)
     return z.array(publicIncidentSchema).parse(result.rows)

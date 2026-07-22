@@ -117,6 +117,7 @@ describe("Growful portal HTTP surface", () => {
     expect(privacy.body).toContain('href="/privacy" aria-current="page"')
     expect(privacy.body).toContain("OAuth 상태는 10분 동안 유효")
     expect(privacy.body).toContain("데이터베이스에 남는 시간은 최대 15분")
+    expect(privacy.body).toContain('<span class="phrase">백업·WAL·운영 로그</span>')
     expect(privacy.body).toContain("구체적인 보존 기간은 이 문서에 아직 명시되어 있지 않습니다")
     expect(privacy.body).not.toContain("비공개 베타 범위에서 운영합니다")
     expect(privacy.body).not.toContain("비공개")
