@@ -38,20 +38,20 @@
 | uninstall lifecycle 정리 | 통과 | 서명된 `DELETE` lifecycle의 멱등 연결 삭제 E2E | 운영 SmartThings 계정에서 실제 unlink 확인 |
 | OAuth scope 최소화 | 통과 | 기본 `r:devices:$`, 기능별 opt-in, 서버 allowlist | 새 기능마다 필요 scope 재평가 |
 | access token 만료 전 refresh | 통과 | refresh worker, lease, stale-claim 방지 테스트 | 운영 장기 실행에서 refresh 주기 관찰 |
-| SmartThings rate-limit 응답 보존 | 부분 | proxy가 upstream 상태·허용 응답 헤더를 전달 | 공개 서비스 자체 quota·abuse 통제와 사용자 안내 추가 |
+| SmartThings rate-limit 응답 보존 | 부분 | proxy가 upstream 상태·허용 응답 헤더를 전달하고 PostgreSQL 공유 `Retry-After`를 연결별로 준수; Growful도 연결별 60건/60초 quota, 누적 거부 metadata, 사용자 `supportReference`, 운영자 명시적 차단·해제를 모든 인스턴스에서 공유 | endpoint별 공식 한도 재확인, anomaly alert·지원 ticket/status 연동과 운영 review 절차 추가 |
 
 ## 개인정보
 
 | 공식 요구사항 | 상태 | 현재 증빙 | 남은 조치 |
 | --- | --- | --- | --- |
-| 적절한 고지와 동의 | 차단 | OAuth scope 선택 화면은 있음 | 등록 전 개인정보 처리방침 링크와 실제 운영자 고지 추가 |
+| 적절한 고지와 동의 | 부분 | OAuth 전에 운영자·정책 링크·지원 채널을 표시하고 scope·정책 동의를 연결에 기록; 정책 URL은 배포 서버에서 HTTPS 2xx HTML인지 preflight 확인 | 실제 정책 내용·운영자 사실값·법률 검토 완료 |
 | 수집 항목·목적·보유기간 공개 | 부분 | `PUBLIC-LAUNCH.md`에 현재 데이터 흐름 기록 | 처리위탁자·국가·백업·로그 보존 확정 후 법률 검토·게시 |
 | 제3자 제공·위탁과 공유 데이터 공개 | 차단 | SmartThings API 통신 경계는 코드로 확인 | Samsung/SmartThings 전달 항목과 Licensee subprocessors 확정·제출 |
 | 데이터 판매·광고·분석·모델링 금지 | 통과 | 해당 저장·분석·광고·학습 기능 없음 | 기능 추가 시 회귀 검토와 명시적 SmartThings 합의 없이 유지 |
 | 사용자 삭제 수단 | 부분 | `DELETE /connection`, signed uninstall lifecycle | Growful token 분실 시 권리행사·신원 확인 절차와 백업 파기 구현 |
 | Samsung/User 요청 시 영구 삭제 | 부분 | primary connection row 즉시 삭제 | WAL·backup·snapshot·외부 log의 파기 시한과 증빙 확정 |
 | OAuth 임시 데이터 최소 보존 | 통과 | state 원문 미저장, 10분 만료, 정상 실행 중 최대 5분 내 정리 | 서비스 중단 시 재기동 정리와 운영 모니터링 유지 |
-| privacy policy가 Samsung으로의 공개·사용을 허용 | 차단 | 최종 privacy policy 없음 | 실제 데이터 흐름과 적용법에 맞는 문구를 법률 검토 후 게시 |
+| privacy policy가 Samsung으로의 공개·사용을 허용 | 차단 | 설정 URL의 HTTPS 2xx HTML 접근성은 preflight로 확인하지만 최종 내용은 저장소에서 증명되지 않음 | 실제 데이터 흐름과 적용법에 맞는 문구를 법률 검토 후 게시 |
 | subprocessors 목록 사전 제공 | 차단 | 저장소에는 확정 사업자·국가 목록 없음 | Cloudflare·hosting·DB·backup·monitoring 계약 주체와 국가 확정 |
 
 ## 기술·조직적 보안 조치
@@ -62,7 +62,7 @@
 | 권한 변경 기록 3년 이상 | 차단 | 관리자 권한 audit store 없음 | 변조 방지 권한 이력과 보존 정책 구현 |
 | 안전한 원격 관리자 접근 | 부분 | Tailscale SSH와 tag policy 문서화 | MFA/OTP, session timeout, 실제 ACL 증빙과 정기 검토 |
 | 전송 중·저장 시 암호화 | 부분 | HTTPS 경계, AES-256-GCM token 암호화 | DB volume·backup 암호화와 key lifecycle 문서화·검증 |
-| 관리자·운영자 활동 로그 | 차단 | 애플리케이션 민감 요청 로그 최소화만 구현 | 관리자 활동 audit log, tamper protection, 정기 review 구현 |
+| 관리자·운영자 활동 로그 | 차단 | 연결 수명주기·인증·token 읽기와 수동 차단·해제를 가명 append-only hash-chain에 기록; 차단 작업은 해시된 운영자 ID·승인 ticket 포함, 전체 체인 검증 CLI 구현 | CLI self-asserted ID를 개별 관리자 계정에 귀속, 외부 불변 sink, 보존·검색·정기 review 구현 |
 | malware·patch 관리 | 차단 | digest-pinned container와 Dependabot만 확인 | host·관리 단말 patch/EDR 정책과 긴급 업데이트 절차 |
 | 관리 단말·물리 접근 통제 | 차단 | 저장소에서 증명 불가 | 운영자 단말 전용성, 화면 잠금, 디스크 암호화, 물리 통제 기록 |
 | 운영 데이터의 테스트 사용 방지 | 부분 | 테스트 fixture는 합성 token·ID 사용 | 운영 데이터 export 금지와 예외 승인·비식별 절차 문서화 |

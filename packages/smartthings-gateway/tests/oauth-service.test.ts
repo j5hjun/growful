@@ -1,57 +1,21 @@
 import { describe, expect, it } from "vitest"
-import {
-  InstalledAppIdSchema,
-  OAuthStateHashSchema,
-  type StoredTokens,
-} from "../src/oauth/contracts.js"
+import { InstalledAppIdSchema, OAuthStateHashSchema } from "../src/oauth/contracts.js"
 import {
   InvalidOAuthStateError,
   OAuthConnectionRequiredError,
   OAuthScopeMismatchError,
   OAuthService,
 } from "../src/oauth/oauth-service.js"
-import { GrowfulTokenSchema, hashGrowfulToken } from "../src/security/growful-token.js"
+import { hashGrowfulToken } from "../src/security/growful-token.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 import { oauthAuthorization } from "./fixtures/oauth-access.js"
-
-const now = new Date("2026-07-19T00:00:00.000Z")
-
-function testGrowfulToken(index: number) {
-  return GrowfulTokenSchema.parse(`grw_st_${Buffer.alloc(32, index).toString("base64url")}`)
-}
-
-function createFixture() {
-  const client = new FakeSmartThingsClient()
-  const store = new MemoryOAuthStore()
-  let tokenIndex = 1
-  const service = new OAuthService({
-    client,
-    growfulTokenGenerator: () => {
-      const token = testGrowfulToken(tokenIndex)
-      tokenIndex += 1
-      return token
-    },
-    now: () => now,
-    refreshBeforeExpiryMs: 60 * 60 * 1_000,
-    refreshLeaseMs: 60_000,
-    stateGenerator: () => "test-state-with-sufficient-entropy",
-    store,
-  })
-  return { client, service, store }
-}
-
-function storedTokens(index: number): StoredTokens {
-  return {
-    accessToken: `access-${index}`,
-    expiresAt: new Date("2026-07-19T00:00:30.000Z"),
-    installedAppId: InstalledAppIdSchema.parse(`installed-app-${index}`),
-    lastRefreshedAt: null,
-    refreshToken: `refresh-${index}`,
-    scopes: ["r:devices:*"],
-    tokenType: "bearer",
-  }
-}
+import {
+  createOAuthServiceFixture as createFixture,
+  oauthServiceNow as now,
+  storedTokens,
+  testGrowfulToken,
+} from "./fixtures/oauth-service-fixture.js"
 
 describe("OAuthService", () => {
   it("stores requested scopes with a one-time OAuth state", async () => {
@@ -209,69 +173,6 @@ describe("OAuthService", () => {
       fixture.client.exchangeGrant.installedAppId,
     )
     expect(fixture.store.connections).toHaveLength(1)
-  })
-
-  it("refreshes every due connection without crossing token pairs", async () => {
-    // Given
-    const fixture = createFixture()
-    const first = storedTokens(1)
-    const second = storedTokens(2)
-    fixture.store.seedTokens(first, hashGrowfulToken(testGrowfulToken(1)))
-    fixture.store.seedTokens(second, hashGrowfulToken(testGrowfulToken(2)))
-    fixture.client.refreshGrants.set(first.refreshToken, {
-      accessToken: "rotated-access-1",
-      expiresInSeconds: 86_400,
-      installedAppId: first.installedAppId,
-      refreshToken: "rotated-refresh-1",
-      scopes: first.scopes,
-      tokenType: "bearer",
-    })
-    fixture.client.refreshGrants.set(second.refreshToken, {
-      accessToken: "rotated-access-2",
-      expiresInSeconds: 86_400,
-      installedAppId: second.installedAppId,
-      refreshToken: "rotated-refresh-2",
-      scopes: second.scopes,
-      tokenType: "bearer",
-    })
-
-    // When
-    const result = await fixture.service.refreshDueConnections()
-
-    // Then
-    expect(result).toEqual({ failureNames: [], refreshedCount: 2 })
-    expect(fixture.client.refreshedTokens).toEqual(["refresh-1", "refresh-2"])
-    await expect(fixture.store.getTokens(first.installedAppId)).resolves.toMatchObject({
-      accessToken: "rotated-access-1",
-    })
-    await expect(fixture.store.getTokens(second.installedAppId)).resolves.toMatchObject({
-      accessToken: "rotated-access-2",
-    })
-  })
-
-  it("forces refresh only for the connection whose access token was rejected", async () => {
-    // Given
-    const fixture = createFixture()
-    const first = storedTokens(1)
-    const second = storedTokens(2)
-    fixture.store.seedTokens(first, hashGrowfulToken(testGrowfulToken(1)))
-    fixture.store.seedTokens(second, hashGrowfulToken(testGrowfulToken(2)))
-    fixture.client.refreshGrant = {
-      ...fixture.client.refreshGrant,
-      installedAppId: second.installedAppId,
-      scopes: second.scopes,
-    }
-
-    // When
-    const refreshed = await fixture.service.refreshAccessToken(
-      second.installedAppId,
-      second.accessToken,
-    )
-
-    // Then
-    expect(refreshed).toBe(true)
-    expect(fixture.client.refreshedTokens).toEqual([second.refreshToken])
-    await expect(fixture.store.getTokens(first.installedAppId)).resolves.toEqual(first)
   })
 
   it("preserves an existing connection when reauthorization expands scopes", async () => {

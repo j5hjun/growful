@@ -1,9 +1,13 @@
 import type { IncomingMessage } from "node:http"
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
+import type { GrowfulAbuseControl } from "../abuse/abuse-control.js"
+import { hashAuditSubject } from "../audit/audit-event.js"
 import type { OAuthService } from "../oauth/oauth-service.js"
 import { getGrowfulConnectionId, requireGrowfulAuthentication } from "./growful-auth.js"
+import type { GrowfulRequestQuota } from "./growful-request-quota.js"
 import type { SmartThingsProxy } from "./smartthings-proxy.js"
+import type { SmartThingsRateLimitBackoff } from "./smartthings-rate-limit-backoff.js"
 
 const allowedProxyMethods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
 const allowedProxyMethodSet = new Set(allowedProxyMethods)
@@ -12,7 +16,10 @@ const encodedBytePattern = /%[0-9a-f]{2}/i
 const proxyRequestBodyLimit = 1_048_576
 
 export type SmartThingsProxyRouteOptions = {
+  readonly abuseControl: GrowfulAbuseControl
   readonly proxy: SmartThingsProxy
+  readonly rateLimitBackoff: SmartThingsRateLimitBackoff
+  readonly requestQuota: GrowfulRequestQuota
   readonly service: OAuthService
 }
 
@@ -103,9 +110,34 @@ export function registerSmartThingsProxy(
             .status(405)
             .send({ error: "method_not_allowed" as const })
         }
+        const installedAppId = getGrowfulConnectionId(request)
+        const block = await options.abuseControl.getBlock(installedAppId)
+        if (block !== null) {
+          return reply.status(403).send({
+            error: "growful_access_blocked" as const,
+            reason: block.reason,
+            supportReference: hashAuditSubject(installedAppId),
+          })
+        }
+        const quotaRetryAfterSeconds = await options.requestQuota.consume(installedAppId)
+        if (quotaRetryAfterSeconds !== null) {
+          return reply
+            .header("Retry-After", String(quotaRetryAfterSeconds))
+            .status(429)
+            .send({ error: "growful_rate_limited" as const })
+        }
+        const retryAfterSeconds =
+          await options.rateLimitBackoff.getRetryAfterSeconds(installedAppId)
+        if (retryAfterSeconds !== null) {
+          return reply
+            .header("Retry-After", String(retryAfterSeconds))
+            .status(429)
+            .send({ error: "smartthings_rate_limited" as const })
+        }
       },
     },
     async (request, reply) => {
+      const installedAppId = getGrowfulConnectionId(request)
       const response = await options.proxy.forward(
         {
           body: await readProxyRequestBody(request.body, request.raw),
@@ -113,8 +145,9 @@ export function registerSmartThingsProxy(
           method: request.method,
           rawUrl: proxyUrlSchema.parse(request.raw.url),
         },
-        getGrowfulConnectionId(request),
+        installedAppId,
       )
+      await options.rateLimitBackoff.observeResponse(installedAppId, response)
       for (const [header, value] of Object.entries(response.headers)) {
         reply.raw.setHeader(header, typeof value === "string" ? value : [...value])
       }

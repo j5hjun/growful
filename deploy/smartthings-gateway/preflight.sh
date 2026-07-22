@@ -122,6 +122,43 @@ if [[ ! "$support_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; 
   printf 'PUBLIC_SUPPORT_EMAIL must be an email address\n' >&2
   exit 1
 fi
+
+verify_policy_document() {
+  local document_name="$1"
+  local document_url="$2"
+  local probe_result http_code content_type effective_url
+  if ! probe_result="$(curl \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --max-time 10 \
+    --proto '=https' \
+    --proto-redir '=https' \
+    --output /dev/null \
+    --write-out $'%{http_code}\t%{content_type}\t%{url_effective}' \
+    "$document_url")"; then
+    printf '%s policy document is not reachable over HTTPS\n' "$document_name" >&2
+    exit 1
+  fi
+  IFS=$'\t' read -r http_code content_type effective_url <<<"$probe_result"
+  if [[ ! "$http_code" =~ ^2[0-9]{2}$ ]] || [[ ! "$effective_url" =~ ^https:// ]]; then
+    printf '%s policy document did not resolve to an HTTPS success response\n' \
+      "$document_name" >&2
+    exit 1
+  fi
+  case "$content_type" in
+    text/html* | application/xhtml+xml*) ;;
+    *)
+      printf '%s policy document must return HTML\n' "$document_name" >&2
+      exit 1
+      ;;
+  esac
+}
+
+verify_policy_document privacy "$privacy_policy_url"
+verify_policy_document terms "$terms_url"
+
 if [[ "$service_access_mode" == 'public' ]]; then
   approved_at="$(sed -n 's/^SMARTTHINGS_PUBLIC_USE_APPROVED_AT=//p' "$environment_file")"
   if [[ ! "$approved_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then

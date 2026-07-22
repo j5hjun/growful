@@ -4,17 +4,21 @@ import { renderOAuthCompletion } from "../src/http/oauth-completion.js"
 import { portalClientScript } from "../src/http/portal-client.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import { GrowfulTokenSchema } from "../src/security/growful-token.js"
+import { allowAllGrowfulAbuseControl } from "./fixtures/abuse-control.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
 import { privateBetaOAuthAccess, publicOAuthAccess } from "./fixtures/oauth-access.js"
+import { readyProbe } from "./fixtures/readiness.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const redirectOrigin = "https://smartthings.growful.click"
 
 function createFixture(oauthAccess: AppOptions["oauthAccess"] = publicOAuthAccess) {
   const app = createApp({
+    abuseControl: allowAllGrowfulAbuseControl,
     authorizationOrigin: "https://api.smartthings.test",
     oauthAccess,
+    readinessProbe: readyProbe,
     redirectOrigin,
     service: new OAuthService({
       client: new FakeSmartThingsClient(),
@@ -79,6 +83,9 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body).toContain('type="password"')
     expect(response.body).toContain('autocomplete="off"')
     expect(response.body).toContain("data-portal-status")
+    expect(response.body).toContain("data-support-reference")
+    expect(response.body).toContain("data-blocked-notice")
+    expect(response.body).toContain(`href="mailto:${publicOAuthAccess.supportEmail}"`)
     expect(response.body).toContain(
       '<form class="dialog-content" method="dialog" data-disconnect-form>',
     )

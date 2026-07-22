@@ -131,7 +131,18 @@
 기록은 최소 3년을 목표로 합니다. 최종 기간은 법률 검토 및 인프라 구성 후
 [보존·파기 대장](./DATA-RETENTION.md)에 확정합니다.
 
-현재 관리자 감사 sink와 변조 방지 보존이 구현되지 않았으므로 이 통제는 차단 상태입니다.
+현재 연결 승인·재승인, Growful token 교체, 연결 삭제, 갱신 성공·실패, Growful 인증과
+SmartThings token 읽기는 `installedAppId` 원문 대신 SHA-256 가명값으로 PostgreSQL 감사 테이블에
+기록됩니다. 각 이벤트는 이전 이벤트 hash와 연결되며 애플리케이션 DB 역할의 update·delete·
+truncate를 거부합니다. Node와 PostgreSQL trigger는 동일한 UTC 밀리초 정규화로 이벤트 hash를
+만들며 `node dist/verify-audit.js`와 Gateway 런타임이 전체 체인의 형식·순서·이전 hash·이벤트
+hash를 검증합니다. Gateway는 시작 시와 기존 유지보수 주기마다 자동 재검증하고, 손상 또는
+읽기 실패 동안 준비 상태를 `503`으로 전환합니다. 반복 quota 위반의 수동 차단·해제도 가명
+대상, 고정 사유, 해시된 운영자 ID와
+승인 ticket을 같은 체인에 원자적으로 기록합니다. 다만 CLI 입력 ID는 self-asserted이며 실제
+개별 관리자 계정과의 귀속은 SSH/session audit로 증명해야 합니다. 또한 이 통제는 같은 DB
+소유자의 DDL 변경까지 막는 외부 불변 sink가 아니며, 보존기간, 검색·독립 alert와 운영 검토
+증빙이 구현되지 않았습니다. 따라서 관리자 감사와 변조 방지 보존 통제는 계속 차단 상태입니다.
 
 ## 9. 안전한 개발·변경·배포
 

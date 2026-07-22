@@ -84,6 +84,7 @@ for attempt in {1..30}; do
 done
 
 test "$(curl --fail --silent --show-error "$gateway_origin/healthz")" = '{"status":"ok"}'
+test "$(curl --fail --silent --show-error "$gateway_origin/readyz")" = '{"status":"ready"}'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/")" = '200'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/manage")" = '200'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/robots.txt")" = '200'

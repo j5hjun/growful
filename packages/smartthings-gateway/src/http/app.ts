@@ -1,5 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyServerOptions, LogController } from "fastify"
 import { z } from "zod"
+import type { GrowfulAbuseControl } from "../abuse/abuse-control.js"
+import { hashAuditSubject } from "../audit/audit-event.js"
+import type { ReadinessProbe } from "../health/readiness.js"
 import {
   InvalidOAuthStateError,
   OAuthConnectionRequiredError,
@@ -38,6 +41,7 @@ import {
 
 const pathsWithSensitiveRequestData = new Set([
   "/healthz",
+  "/readyz",
   "/oauth/callback",
   "/oauth/start",
   "/manage",
@@ -46,9 +50,11 @@ const pathsWithSensitiveRequestData = new Set([
 const requestBodyTooLargeErrorSchema = z.object({ statusCode: z.literal(413) })
 
 export type AppOptions = {
+  readonly abuseControl: GrowfulAbuseControl
   readonly authorizationOrigin: string
   readonly logger?: FastifyServerOptions["logger"]
   readonly oauthAccess: OAuthAccessPolicy
+  readonly readinessProbe: ReadinessProbe
   readonly redirectOrigin: string
   readonly service: OAuthService
   readonly smartThingsAppId: string
@@ -89,6 +95,20 @@ export function createApp(options: AppOptions): FastifyInstance {
   )
   registerGrowfulAuthentication(app)
   app.get("/healthz", async () => ({ status: "ok" as const }))
+  app.get("/readyz", async (_request, reply) => {
+    const status = await options.readinessProbe.check()
+    reply.header("Cache-Control", "no-store")
+    switch (status) {
+      case "ready":
+        return reply.send({ status })
+      case "unavailable":
+        return reply.status(503).send({ status })
+      default: {
+        const unreachable: never = status
+        return unreachable
+      }
+    }
+  })
   registerPortalRoutes(app, options.oauthAccess)
   registerOAuthRoutes(app, {
     authorizationOrigin: options.authorizationOrigin,
@@ -109,10 +129,22 @@ export function createApp(options: AppOptions): FastifyInstance {
       onRequest: async (request, reply) =>
         requireGrowfulAuthentication(request, reply, options.service),
     },
-    async (request, reply) =>
-      reply
-        .header("Cache-Control", "no-store")
-        .send(await options.service.getConnectionStatus(getGrowfulConnectionId(request))),
+    async (request, reply) => {
+      const installedAppId = getGrowfulConnectionId(request)
+      const block = await options.abuseControl.getBlock(installedAppId)
+      return reply.header("Cache-Control", "no-store").send({
+        ...(await options.service.getConnectionStatus(installedAppId)),
+        serviceAccess:
+          block === null
+            ? { status: "active" as const }
+            : {
+                blockedAt: block.blockedAt,
+                reason: block.reason,
+                status: "blocked" as const,
+              },
+        supportReference: hashAuditSubject(installedAppId),
+      })
+    },
   )
   app.post(
     "/token/rotate",

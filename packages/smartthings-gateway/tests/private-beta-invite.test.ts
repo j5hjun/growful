@@ -1,5 +1,10 @@
+import { createHash } from "node:crypto"
 import { describe, expect, it } from "vitest"
-import { matchesPrivateBetaInvite, type PrivateBetaInvite } from "../src/private-beta/invite.js"
+import {
+  generatePrivateBetaInviteCredential,
+  matchesPrivateBetaInvite,
+  type PrivateBetaInvite,
+} from "../src/private-beta/invite.js"
 
 const invites = [
   {
@@ -17,6 +22,21 @@ function basicAuthorization(username: string, password: string): string {
 }
 
 describe("matchesPrivateBetaInvite", () => {
+  it("generates a unique 256-bit private beta credential with its storage hash", () => {
+    // Given
+    const expectedByteLength = 32
+
+    // When
+    const first = generatePrivateBetaInviteCredential()
+    const second = generatePrivateBetaInviteCredential()
+
+    // Then
+    expect(Buffer.from(first.password, "base64url")).toHaveLength(expectedByteLength)
+    expect(first.password).not.toBe(second.password)
+    expect(first.passwordHash).toBe(createHash("sha256").update(first.password).digest("hex"))
+    expect(first.passwordHash).toMatch(/^[0-9a-f]{64}$/)
+  })
+
   it("accepts each active invitation independently", () => {
     // Given
     const firstAuthorization = basicAuthorization("private-user", "private-password")

@@ -27,6 +27,10 @@
 | token 종류·만료·갱신 metadata | 연결 행 | 안전한 refresh | 연결 행과 함께 삭제 | 구현·test 완료 |
 | Growful token | 원문 1회 출력, DB에는 SHA-256 hash | 연결 인증 | rotate 또는 연결 삭제 시 이전 hash 폐기 | 구현·test 완료 |
 | refresh lease·마지막 오류 | 연결 행 | 중복 refresh 방지·운영 상태 | 연결 행과 함께 삭제 | 구현·test 완료 |
+| Growful quota 창 시작·허용 건수 | 연결 행 | 연결별 60건/60초 공정 사용 제한 | 60초 뒤 효력 없음, 다음 요청이 덮어씀, 연결 행과 함께 삭제 | 구현·test 완료 |
+| Growful quota 누적 거부 횟수·마지막 시각 | 연결 행 | 반복 위반 검토 | 연결 행과 함께 삭제; 별도 기간 정책 미확정 | 구현·test 완료 |
+| proxy 차단 시각·고정 사유 | 연결 행 | 수동 abuse 대응 | 해제 시 현재 상태 삭제, 연결 행과 함께 삭제; 감사 이벤트는 별도 보존 | 구현·test 완료 |
+| SmartThings rate-limit 마감 | 연결 행 | upstream `Retry-After`를 인스턴스 간 공유 | 만료 뒤 효력 없음, 연결 행과 함께 삭제 | 구현·test 완료 |
 | proxy request/response | process memory | SmartThings API 전달 | 응답 완료 후 참조 해제; DB 미저장 | 구현 확인, memory dump 제외 미검증 |
 | 관리 화면 입력 token | 현재 browser tab memory | 연결 확인·교체·삭제 | 입력 초기화·새로고침·tab 종료 | 구현·test 완료 |
 | OAuth 완료 token 출력 | HTTP 응답/화면 1회 | 최초 전달 | server 재조회 불가; 사용자 환경 사본은 사용자 통제 | 구현·test 완료 |
@@ -68,12 +72,22 @@ SmartThings 측 credential의 확실한 회수가 필요한 경우 공식 설치
 | reverse proxy/CDN/WAF | 시간, route, status, bytes, 가명 IP 정책값 | Authorization/header·본문 원문 | `[EDGE_LOG_RETENTION]` | `[PROVIDER]` | 미확정 |
 | host/system | service·security event | 환경변수·secret dump | `[HOST_LOG_RETENTION]` | `[HOST_PROVIDER]` | 미확정 |
 | PostgreSQL | 접속·관리·오류 metadata | query parameter의 token/본문 | `[DB_LOG_RETENTION]` | `[DB_OWNER]` | 미확정 |
-| 관리자 audit | 주체, 목적, 가명 대상, 작업, 결과, UTC 시각 | token/secret/불필요한 개인정보 | 1/2년 법적 검토, 권한 변경 3년 목표 | `[AUDIT_PROVIDER]` | 미구현 |
+| 연결 수명주기·접근 audit | 가명 연결 hash, 작업, 결과, UTC 시각, 이전 이벤트 hash | token, secret, 사용자명, `installedAppId` 원문 | `[AUDIT_RETENTION]` | `[DB_OWNER]` | append-only·단일 정규화 hash chain·CLI/런타임 자동 검증 구현, 외부 불변 보존 미확정 |
+| 관리자 audit | 해시된 주체·승인 ticket, 고정 목적 사유, 가명 대상, 차단·해제, 결과, UTC 시각 | token/secret/원시 운영자 ID·원시 ticket·`installedAppId` | 1/2년 법적 검토, 권한 변경 3년 목표 | `[AUDIT_PROVIDER]` | 차단·해제 append-only 기록 구현; 중앙 신원 귀속·외부 불변 보존 미구현 |
 | CI/registry | actor, workflow, commit, digest, 결과 | secret 출력 | `[CI_LOG_RETENTION]` | GitHub/`[OWNER]` | 실제 설정 미검증 |
 | incident evidence | 최소 forensic 자료, hash, chain of custody | 불필요한 원문 확산 | `[LEGAL_RETENTION]` | `[SECURITY_OWNER]` | 미확정 |
 
 보존기간을 길게 설정하는 것만으로 적법·안전하지 않습니다. 목적 종료 시 삭제하고, 법적 보존
 필요가 있는 경우 접근 제한과 보존 중지 사유·해제일을 기록합니다.
+
+감사 체인은 `node dist/verify-audit.js`와 Gateway 런타임이 전체 행의 형식, sequence 순서, 이전
+해시와 이벤트 해시를 재계산합니다. CLI 정상 결과는 종료코드 0, 손상 결과는 종료코드 1입니다.
+Gateway는 시작 시와 기존 유지보수 주기마다 재검증하고 손상 또는 읽기 실패 동안 `/readyz`를
+`503`으로 전환합니다. 출력과 로그에는 원문 연결 식별자나 token을 포함하지 않습니다.
+`manage-abuse` CLI의 운영자 ID와 ticket은 입력 직후
+SHA-256 값으로만 기록되지만 입력 주체를 중앙 인증하지는 않으므로 개별 SSH 계정/session
+기록과의 귀속 절차가 필요합니다. 자동 검증 결과의 외부 보존 위치, 독립 alert 연결, 검토
+담당자와 검토 증빙은 `[AUDIT_REVIEW_PROCEDURE]`로 확정해야 합니다.
 
 ## 5. Backup·WAL·snapshot 대장
 

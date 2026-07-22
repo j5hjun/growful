@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it } from "vitest"
 import { type AppOptions, createApp } from "../src/http/app.js"
 import { InstalledAppIdSchema, type StoredTokens } from "../src/oauth/contracts.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
+import { allowAllGrowfulAbuseControl } from "./fixtures/abuse-control.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore, memoryStoreGrowfulToken } from "./fixtures/memory-oauth-store.js"
 import { privateBetaOAuthAccess } from "./fixtures/oauth-access.js"
+import { readyProbe } from "./fixtures/readiness.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const authorizationOrigin = "https://api.smartthings.test"
@@ -40,8 +42,10 @@ function createFixture(oauthAccess: AppOptions["oauthAccess"]) {
     store,
   })
   const app = createApp({
+    abuseControl: allowAllGrowfulAbuseControl,
     authorizationOrigin,
     oauthAccess,
+    readinessProbe: readyProbe,
     redirectOrigin,
     service,
     smartThingsAppId: "growful-app",
@@ -96,6 +100,8 @@ describe("Private-beta OAuth access HTTP surface", () => {
     expect(unauthenticatedGet.headers["www-authenticate"]).toBe(
       'Basic realm="Growful private beta", charset="UTF-8"',
     )
+    expect(unauthenticatedGet.headers["cache-control"]).toBe("no-store")
+    expect(unauthenticatedGet.json()).toEqual({ error: "private_beta_access_required" })
     expect(unauthenticatedPost.statusCode).toBe(401)
     expect(fixture.store.states.size).toBe(1)
     expect(authenticatedGet.statusCode).toBe(200)
@@ -164,8 +170,46 @@ describe("Private-beta OAuth access HTTP surface", () => {
     expect(responses.slice(0, 5).map((response) => response.statusCode)).toEqual(Array(5).fill(401))
     expect(responses[5]?.statusCode).toBe(429)
     expect(responses[5]?.headers["retry-after"]).toBe("60")
+    expect(responses[5]?.headers["cache-control"]).toBe("no-store")
     expect(responses[5]?.json()).toEqual({ error: "private_beta_access_rate_limited" })
     expect(otherClient.statusCode).toBe(401)
+  })
+
+  it("clears the client failure bucket after valid private beta credentials", async () => {
+    // Given
+    const fixture = createFixture(
+      privateBetaOAuthAccess([
+        {
+          passwordHash: "dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42",
+          username: "private-user",
+        },
+      ]),
+    )
+    const validAuthorization = `Basic ${Buffer.from("private-user:private-password").toString("base64")}`
+    const invalidAuthorization = `Basic ${Buffer.from("private-user:wrong-password").toString("base64")}`
+    const forwardedFor = "192.0.2.12"
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await fixture.app.inject({
+        headers: { authorization: invalidAuthorization, "x-forwarded-for": forwardedFor },
+        method: "GET",
+        url: "/oauth/start",
+      })
+    }
+    await fixture.app.inject({
+      headers: { authorization: validAuthorization, "x-forwarded-for": forwardedFor },
+      method: "GET",
+      url: "/oauth/start",
+    })
+
+    // When
+    const response = await fixture.app.inject({
+      headers: { authorization: invalidAuthorization, "x-forwarded-for": forwardedFor },
+      method: "GET",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.statusCode).toBe(401)
   })
 
   it("rejects an existing Growful token that is not bound to an active invitation", async () => {

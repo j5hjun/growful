@@ -1,124 +1,11 @@
-import { runInNewContext } from "node:vm"
 import { describe, expect, it } from "vitest"
-import { portalClientScript } from "../src/http/portal-client.js"
-
-type PortalEvent = {
-  preventDefault?: () => void
-  submitter?: PortalElement
-}
-
-type PortalListener = (event: PortalEvent) => unknown
-
-class PortalElement {
-  readonly attributes = new Map<string, string>()
-  readonly listeners = new Map<string, PortalListener>()
-  disabled = false
-  focusCount = 0
-  hidden = false
-  open = false
-  textContent = ""
-  type = "password"
-  value = ""
-
-  addEventListener(name: string, listener: PortalListener): void {
-    this.listeners.set(name, listener)
-  }
-
-  async dispatch(name: string, event: PortalEvent = {}): Promise<void> {
-    if (name === "click" && this.disabled) return
-    await this.listeners.get(name)?.(event)
-  }
-
-  setAttribute(name: string, value: string): void {
-    this.attributes.set(name, value)
-  }
-
-  removeAttribute(name: string): void {
-    this.attributes.delete(name)
-  }
-
-  checkValidity(): boolean {
-    return true
-  }
-
-  close(): void {
-    this.open = false
-  }
-
-  focus(): void {
-    this.focusCount += 1
-  }
-
-  replaceChildren(..._children: unknown[]): void {}
-
-  reportValidity(): void {}
-
-  showModal(): void {
-    this.open = true
-  }
-}
-
-function deferred<T>() {
-  let resolve: ((value: T) => void) | undefined
-  const promise = new Promise<T>((complete) => {
-    resolve = complete
-  })
-  return {
-    promise,
-    resolve(value: T) {
-      resolve?.(value)
-    },
-  }
-}
-
-function response(status: number, body?: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    async json() {
-      return body
-    },
-  }
-}
-
-function createElements() {
-  const selectors = new Map([
-    ["#growful-token", "input"],
-    ["[data-portal-token-form]", "form"],
-    ["[data-token-submit]", "submit"],
-    ["[data-token-visibility]", "visibility"],
-    ["[data-portal-feedback]", "feedback"],
-    ["[data-portal-error]", "error"],
-    ["[data-portal-error-message]", "errorMessage"],
-    ["[data-reconnect]", "reconnect"],
-    ["[data-portal-status]", "status"],
-    ["[data-expires-at]", "expires"],
-    ["[data-refreshed-at]", "refreshed"],
-    ["[data-scope-list]", "scopes"],
-    ["[data-forget-token]", "forget"],
-    ["[data-rotate-token]", "rotate"],
-    ["[data-rotated-token-section]", "rotatedSection"],
-    ["[data-rotated-token]", "rotatedOutput"],
-    ["[data-copy-token]", "copy"],
-    ["[data-disconnect]", "disconnect"],
-    ["[data-disconnect-dialog]", "dialog"],
-    ["[data-disconnect-form]", "disconnectForm"],
-    ["[data-disconnect-confirm]", "confirm"],
-  ])
-  const elements = new Map(
-    [...new Set(selectors.values())].map((name) => [name, new PortalElement()]),
-  )
-  elements.set("input", new PortalElement())
-  getElement(elements, "status").hidden = true
-  getElement(elements, "rotatedSection").hidden = true
-  return { elements, selectors }
-}
-
-function getElement(elements: Map<string, PortalElement>, name: string): PortalElement {
-  const element = elements.get(name)
-  if (element === undefined) throw new Error(`Missing portal element: ${name}`)
-  return element
-}
+import {
+  createPortalBrowserFixture,
+  deferred,
+  getPortalElement,
+  response,
+  runPortalClient,
+} from "./fixtures/portal-browser.js"
 
 describe("Growful portal token mutations", () => {
   it("serializes rotation and disconnect in both orderings", async () => {
@@ -126,16 +13,17 @@ describe("Growful portal token mutations", () => {
     const tokenA = `grw_st_${"A".repeat(43)}`
     const tokenB = `grw_st_${"B".repeat(43)}`
     const rotationResponse = deferred<ReturnType<typeof response>>()
-    const { elements, selectors } = createElements()
-    const confirm = getElement(elements, "confirm")
-    const dialog = getElement(elements, "dialog")
-    const disconnect = getElement(elements, "disconnect")
-    const disconnectForm = getElement(elements, "disconnectForm")
-    const forget = getElement(elements, "forget")
-    const form = getElement(elements, "form")
-    const input = getElement(elements, "input")
-    const rotate = getElement(elements, "rotate")
-    const status = getElement(elements, "status")
+    const fixture = createPortalBrowserFixture()
+    const { elements } = fixture
+    const confirm = getPortalElement(elements, "confirm")
+    const dialog = getPortalElement(elements, "dialog")
+    const disconnect = getPortalElement(elements, "disconnect")
+    const disconnectForm = getPortalElement(elements, "disconnectForm")
+    const forget = getPortalElement(elements, "forget")
+    const form = getPortalElement(elements, "form")
+    const input = getPortalElement(elements, "input")
+    const rotate = getPortalElement(elements, "rotate")
+    const status = getPortalElement(elements, "status")
     let serverToken: string | null = tokenA
     let deleteGate: ReturnType<typeof deferred<void>> | undefined
     let rotationRequests = 0
@@ -151,6 +39,8 @@ describe("Growful portal token mutations", () => {
           expiresAt: "2026-07-23T00:00:00.000Z",
           grantedScopes: [],
           lastRefreshedAt: null,
+          serviceAccess: { status: "active" },
+          supportReference: "c".repeat(64),
         })
       }
       if (path === "/token/rotate") {
@@ -165,16 +55,7 @@ describe("Growful portal token mutations", () => {
       serverToken = null
       return response(204)
     }
-    runInNewContext(portalClientScript, {
-      document: {
-        createElement: () => new PortalElement(),
-        getElementById: (id: string) => elements.get(id === "growful-token" ? "input" : id),
-        querySelector: (selector: string) => elements.get(selectors.get(selector) ?? ""),
-      },
-      fetch,
-      Intl,
-      navigator: { clipboard: { writeText: async () => {} } },
-    })
+    runPortalClient(fixture, fetch)
     input.value = tokenA
     await form.dispatch("submit", { preventDefault() {} })
     await new Promise<void>((resolve) => setImmediate(resolve))

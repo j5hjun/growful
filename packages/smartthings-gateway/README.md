@@ -13,6 +13,7 @@ SmartThings 서면 확인을 요청할 때는
 ## HTTP API
 
 - `GET /healthz`: 프로세스 상태
+- `GET /readyz`: PostgreSQL 조회와 마지막 전체 감사 체인 검증이 모두 정상인 서비스 준비 상태
 - `GET /`: SmartThings 연결 흐름과 보안 경계를 설명하는 공개 포털
 - `GET /manage`: Growful 토큰으로 연결을 확인·교체·해제하는 관리 화면
 - `GET /portal.js`: 관리 화면의 자체 호스팅 브라우저 클라이언트
@@ -44,6 +45,27 @@ TEST_DATABASE_URL=postgresql://gateway:password@127.0.0.1:5432/gateway_test \
   pnpm test:integration
 ```
 
+## 감사 체인 검증
+
+마이그레이션 이후 운영 데이터베이스의 감사 체인을 읽기 전용으로 검증합니다.
+
+```bash
+DATABASE_URL=postgresql://gateway:password@127.0.0.1:5432/gateway \
+  node dist/verify-audit.js
+```
+
+정상이면 가명 이벤트 수와 마지막 해시만 포함한 `status=valid` JSON을 출력하고 종료코드 0을
+반환합니다. 이벤트 형식, 순서, 이전 해시 또는 이벤트 해시가 맞지 않으면 원문 데이터 없이
+실패 이유와 sequence만 포함한 `status=invalid` JSON을 출력하고 종료코드 1을 반환합니다.
+검증 결과는 외부 운영 증빙 저장소에 보관해야 하며, 이 명령 자체가 같은 DB 소유자의 DDL 변경을
+막거나 외부 불변 보존을 제공하지는 않습니다.
+
+Gateway도 시작 시 전체 체인을 한 번 검증하고, 이후 `REFRESH_CHECK_INTERVAL_SECONDS` 주기마다
+재검증합니다. 손상 또는 읽기 실패를 탐지하면 `/healthz`는 프로세스 생존 확인을 위해 `200`을
+유지하지만 `/readyz`는 `503 {"status":"unavailable"}`을 반환합니다. 검증 로그에는 이벤트 원문,
+연결 식별자, token, 데이터베이스 URL을 넣지 않고 실패 종류와 오류 클래스만 기록합니다. 이
+자동 검증은 탐지 통제이며 외부 불변 보존이나 독립 alert 전송을 대신하지 않습니다.
+
 ## 보안 경계
 
 - OAuth `state`는 SHA-256 해시만 저장하고 콜백에서 한 번 소비합니다. 생성 10분 뒤 만료되며,
@@ -68,6 +90,30 @@ TEST_DATABASE_URL=postgresql://gateway:password@127.0.0.1:5432/gateway_test \
   멱등 삭제합니다. 재전송되거나 이미 삭제된 연결도 `200 OK`로 확인합니다.
 - SmartThings 응답은 리다이렉트를 따라가지 않고 상태 코드, 본문 바이트, 재구성이 필요한
   전송 헤더를 제외한 응답 헤더를 변환 없이 반환합니다.
+- Growful proxy는 인증된 연결마다 고정 60초 창에서 최대 60건을 허용합니다. 창 시작 시각과
+  허용 건수를 PostgreSQL에서 원자적으로 갱신하므로 모든 Gateway 인스턴스가 같은 quota를
+  공유합니다. 61번째 요청은 upstream으로 보내지 않고 `429`, `Retry-After`,
+  `{"error":"growful_rate_limited"}`를 반환합니다.
+- SmartThings가 `429`와 유효한 `Retry-After`를 반환하면 해당 연결의 대기 마감을 PostgreSQL에
+  기록하고 후속 요청을 upstream으로 보내지 않습니다. 모든 Gateway 인스턴스가 이 마감을
+  공유하며 다른 연결은 영향을 받지 않습니다. Growful quota는 SmartThings 공식 문서의
+  [Installed Apps API 분당 60건 기준](https://developer.smartthings.com/docs/getting-started/rate-limits)을
+  공정 사용 상한의 근거로 삼은 별도 통제이며, 더 낮거나 다른 endpoint별 제한을 대체하지 않습니다.
+- quota 거부 횟수와 마지막 거부 시각은 연결 행에 누적되어 인스턴스 간 공유됩니다. 사용자는
+  `GET /connection`의 `supportReference`로 대상을 식별할 수 있고, 운영자는 원시
+  `installedAppId` 없이 다음 CLI로 검토·차단·해제할 수 있습니다.
+
+  ```sh
+  DATABASE_URL=postgresql://... node dist/manage-abuse.js list
+  DATABASE_URL=postgresql://... node dist/manage-abuse.js block SUPPORT_REFERENCE quota_abuse OPERATOR_ID TICKET_ID
+  DATABASE_URL=postgresql://... node dist/manage-abuse.js unblock SUPPORT_REFERENCE OPERATOR_ID TICKET_ID
+  ```
+
+  차단 사유는 `quota_abuse`, `security_incident`, `terms_violation` 중 하나입니다. 차단된 연결의
+  `/v1/*` 요청은 SmartThings로 전달되지 않고 `403 growful_access_blocked`를 반환하지만,
+  `/connection` 확인과 사용자 직접 연결 해제는 유지됩니다. 운영자 ID와 승인 ticket은 CLI
+  경계에서 SHA-256 처리되어 append-only 감사 체인에 기록됩니다. CLI 입력값 자체는
+  self-asserted이므로 실제 운영자 귀속은 개별 SSH 계정과 session audit로 별도 증명해야 합니다.
 - 각 SmartThings 요청의 응답 수신 제한시간은 기본 15초이며, 메모리 보호를 위해 응답
   본문은 10 MiB로 제한합니다.
 

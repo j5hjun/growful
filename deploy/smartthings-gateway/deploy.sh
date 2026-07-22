@@ -139,17 +139,21 @@ wait_for_gateway() {
 }
 
 verify_local_http() {
+  local path="$1"
+  local expected_response="$2"
   local response
-  response="$(curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8100/healthz)" || return 1
-  [[ "$response" == '{"status":"ok"}' ]]
+  response="$(curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:8100$path")" || return 1
+  [[ "$response" == "$expected_response" ]]
 }
 
 verify_public_http() {
+  local path="$1"
+  local expected_response="$2"
   local attempt response
   [[ -n "$public_base_url" ]] || return 0
   for ((attempt = 1; attempt <= public_healthcheck_attempts; attempt += 1)); do
-    response="$(curl --fail --silent --show-error --max-time 10 "$public_base_url/healthz" 2>/dev/null || true)"
-    if [[ "$response" == '{"status":"ok"}' ]]; then
+    response="$(curl --fail --silent --show-error --max-time 10 "$public_base_url$path" 2>/dev/null || true)"
+    if [[ "$response" == "$expected_response" ]]; then
       return 0
     fi
     if ((attempt < public_healthcheck_attempts)); then
@@ -171,8 +175,8 @@ deploy_release() {
   candidate_migrations_completed=1
   "${compose[@]}" up -d --no-deps gateway || return 1
   wait_for_gateway || return 1
-  verify_local_http || return 1
-  verify_public_http || return 1
+  verify_local_http '/readyz' '{"status":"ready"}' || return 1
+  verify_public_http '/readyz' '{"status":"ready"}' || return 1
 }
 
 rollback_release() {
@@ -220,8 +224,8 @@ rollback_release() {
   fi
   "${compose[@]}" up -d --no-deps gateway || return 1
   wait_for_gateway || return 1
-  verify_local_http || return 1
-  verify_public_http || return 1
+  verify_local_http '/healthz' '{"status":"ok"}' || return 1
+  verify_public_http '/healthz' '{"status":"ok"}' || return 1
   printf 'rolled back to image digest %s\n' "$previous_image_reference" >&2
 }
 
@@ -238,7 +242,9 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
     printf 'release ID already exists with a different image digest; existing gateway was left unchanged\n' >&2
     exit 1
   fi
-  if wait_for_gateway && verify_local_http && verify_public_http; then
+  if wait_for_gateway &&
+    verify_local_http '/readyz' '{"status":"ready"}' &&
+    verify_public_http '/readyz' '{"status":"ready"}'; then
     if ((10#$deployment_sequence > 10#$highest_deployment_sequence)); then
       commit_deployment_sequence
       state_temp="$(mktemp "${release_state_file}.XXXXXX")"

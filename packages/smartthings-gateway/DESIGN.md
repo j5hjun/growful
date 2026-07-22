@@ -154,9 +154,23 @@ offset은 `--focus-ring` (`3px`)을 사용한다.
 ### Connection status
 
 - Structure: 상태 요약과 `dl`, scope 목록, 교체·해제 행동
-- States: 미인증, 로딩, 연결됨, 교체 완료, 연결 해제됨, API 오류
+- States: 미인증, 로딩, 연결됨·API 사용 가능, 연결됨·API 접근 차단, 교체 완료, 연결 해제됨,
+  API 오류
+- Support identity: 연결 상태가 확인되면 가명 `supportReference`를 항상 표시하고 긴 hash는
+  monospace와 안전한 줄바꿈을 사용한다. 원시 `installedAppId`는 표시하지 않는다.
 - Accessibility: 상태 변경은 `role=status`, 날짜는 `time`, 긴 scope는 줄바꿈
 - Responsive: 행동은 좁은 화면에서 세로로 쌓이고 44px 높이를 유지
+
+### Restricted access notice
+
+- Structure: 차단 상태 레이블, 제목, 고정 사유의 한국어 설명, 지원 참조, `mailto:` 지원 링크
+- Color: `--error`는 차단 레이블과 제목에만 사용하고 본문·참조값은 기본 text 대비를 유지한다.
+- States: `quota_abuse`, `security_incident`, `terms_violation`; 자동 차단이나 해제 약속을 암시하지 않음
+- Accessibility: `role="alert"`로 상태를 알리고 enum 코드가 아니라 사용자가 이해할 수 있는 문장으로
+  사유를 제공한다. 지원 링크에는 문의 시 지원 참조를 함께 전달하라는 목적을 명시한다.
+- Security: Growful token, SmartThings token, `installedAppId`를 안내문·메일 URL·DOM attribute에 넣지 않는다.
+- Responsive: 375px과 200% 확대에서 64자리 참조값이 패널 밖으로 넘치지 않는다.
+- Motion: 없음
 
 ### Confirmation dialog
 

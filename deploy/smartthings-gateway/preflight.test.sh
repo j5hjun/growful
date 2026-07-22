@@ -37,7 +37,16 @@ printf '%s\n' \
   'fi' \
   'printf "00000000000000000000000000000000"' >"$fake_bin/base64"
 
-printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/curl"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  "url=\"\${!#}\"" \
+  "if [[ \"\$url\" == *\"\${FAKE_CURL_FAIL_SUFFIX:-__never__}\" ]]; then" \
+  '  exit 22' \
+  'fi' \
+  "content_type=\"\${FAKE_CURL_CONTENT_TYPE:-text/html; charset=utf-8}\"" \
+  "effective_url=\"\${FAKE_CURL_EFFECTIVE_URL:-\$url}\"" \
+  "printf \"200\\t%s\\t%s\" \"\$content_type\" \"\$effective_url\"" >"$fake_bin/curl"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/flock"
 chmod +x "$fake_bin/base64" "$fake_bin/curl" "$fake_bin/docker" "$fake_bin/flock"
 export PATH="$fake_bin:$PATH"
@@ -72,6 +81,31 @@ write_environment() {
 valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
 write_environment "$valid_key" 8100
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
+
+if FAKE_CURL_FAIL_SUFFIX=/privacy DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'unreachable privacy policy unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+if FAKE_CURL_FAIL_SUFFIX=/terms DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'unreachable terms document unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+if FAKE_CURL_CONTENT_TYPE=application/json DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'non-HTML policy document unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+if FAKE_CURL_EFFECTIVE_URL=http://smartthings.growful.click/privacy \
+  DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'policy redirect to HTTP unexpectedly passed preflight\n' >&2
+  exit 1
+fi
 
 write_environment "$valid_key" 8100
 sed -i.bak '/^PUBLIC_PRIVACY_POLICY_URL=/d' "$deployment_root/.env"
