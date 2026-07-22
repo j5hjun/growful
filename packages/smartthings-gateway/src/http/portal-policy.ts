@@ -42,7 +42,7 @@ function renderPrivacySections(mode: OAuthAccessPolicy["mode"]): string {
       <ul>
         <li>OAuth 상태는 10분 동안 유효하고 한 번 사용하면 즉시 소비됩니다. 정상 실행 중 만료된 행은 최대 5분 안에 정리되므로 생성 후 데이터베이스에 남는 시간은 최대 15분입니다.</li>
         <li>연결 정보는 사용자가 연결을 해제하거나, ${revokedAccess}이 회수되거나, SmartThings 설치 삭제 알림을 받을 때 활성 데이터베이스에서 삭제됩니다.</li>
-        <li>활성 데이터베이스에서 삭제하더라도 백업·WAL·운영 로그에서 즉시 영구 삭제된다는 의미는 아닙니다.</li>
+        <li>활성 데이터베이스에서 삭제하더라도 <span class="phrase">백업·WAL·운영 로그</span>에서 즉시 영구 삭제된다는 의미는 아닙니다.</li>
       </ul>
       <p>${retentionBoundary}</p>
     </section>
