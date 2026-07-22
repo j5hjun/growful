@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto"
 import { promisify } from "node:util"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { hashAuditValue } from "../src/audit/audit-event.js"
+import {
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditPrivateBetaUsername,
+  hashAuditTicketIdentity,
+} from "../src/audit/audit-event.js"
 import { createApp } from "../src/http/app.js"
 import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
@@ -46,7 +52,9 @@ const execFileAsync = promisify(execFile)
 const scenarioId = randomUUID()
 const username = `dynamic-flow-${scenarioId}`
 const installedAppId = InstalledAppIdSchema.parse(`dynamic-private-beta-${scenarioId}`)
-const operatorId = "operator@example.test"
+const operatorId = AuditOperatorIdSchema.parse(randomUUID())
+const issueTicketId = AuditTicketIdSchema.parse("BETA-3001")
+const revokeTicketId = AuditTicketIdSchema.parse("BETA-3002")
 
 async function runCli(arguments_: readonly string[]) {
   return execFileAsync("pnpm", ["exec", "tsx", "src/manage-invites.ts", ...arguments_], {
@@ -79,7 +87,7 @@ describe("dynamic private beta invitation lifecycle", () => {
   it("rejects both Basic credentials and the issued Growful token immediately after revocation", async () => {
     // Given
     const issue = issueOutputSchema.parse(
-      JSON.parse((await runCli(["issue", username, operatorId, "BETA-3001"])).stdout),
+      JSON.parse((await runCli(["issue", username, operatorId, issueTicketId])).stdout),
     )
     const inviteAccess = new PostgresPrivateBetaInviteAccess({ configuredInvites: [], database })
     const client = new FakeSmartThingsClient()
@@ -148,7 +156,7 @@ describe("dynamic private beta invitation lifecycle", () => {
 
     // When
     const revoke = revokeOutputSchema.parse(
-      JSON.parse((await runCli(["revoke", username, operatorId, "BETA-3002"])).stdout),
+      JSON.parse((await runCli(["revoke", username, operatorId, revokeTicketId])).stdout),
     )
 
     // Then
@@ -166,7 +174,7 @@ describe("dynamic private beta invitation lifecycle", () => {
     const auditEvents = await database
       .selectFrom("auditEvents")
       .select(["action", "actorIdHash", "subjectHash", "ticketHash"])
-      .where("subjectHash", "=", hashAuditValue(username))
+      .where("subjectHash", "=", hashAuditPrivateBetaUsername({ username }))
       .orderBy("sequence")
       .execute()
     await app.close()
@@ -181,15 +189,15 @@ describe("dynamic private beta invitation lifecycle", () => {
     expect(auditEvents).toEqual([
       {
         action: "invite.issue",
-        actorIdHash: hashAuditValue(operatorId),
-        subjectHash: hashAuditValue(username),
-        ticketHash: hashAuditValue("BETA-3001"),
+        actorIdHash: hashAuditOperatorIdentity({ operatorId }),
+        subjectHash: hashAuditPrivateBetaUsername({ username }),
+        ticketHash: hashAuditTicketIdentity({ ticketId: issueTicketId }),
       },
       {
         action: "invite.revoke",
-        actorIdHash: hashAuditValue(operatorId),
-        subjectHash: hashAuditValue(username),
-        ticketHash: hashAuditValue("BETA-3002"),
+        actorIdHash: hashAuditOperatorIdentity({ operatorId }),
+        subjectHash: hashAuditPrivateBetaUsername({ username }),
+        ticketHash: hashAuditTicketIdentity({ ticketId: revokeTicketId }),
       },
     ])
     expect(JSON.stringify(auditEvents)).not.toContain(issue.credentialSecret)

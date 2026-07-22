@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { hashAuditValue } from "../src/audit/audit-event.js"
+import {
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditTicketIdentity,
+} from "../src/audit/audit-event.js"
 import { InstalledAppIdSchema, RefreshClaimIdSchema } from "../src/oauth/contracts.js"
 import { InvalidOAuthStateError, OAuthService } from "../src/oauth/oauth-service.js"
 import {
@@ -24,6 +29,13 @@ const reissueUsername = `revocation-reissue-${scenarioId}`
 const rotatedUsername = `configured-rotation-${scenarioId}`
 const previousConfiguredInvite = { passwordHash: "e".repeat(64), username: rotatedUsername }
 const activeConfiguredInvite = { passwordHash: "f".repeat(64), username: rotatedUsername }
+const actorIdHash = hashAuditOperatorIdentity({
+  operatorId: AuditOperatorIdSchema.parse(randomUUID()),
+})
+
+function ticketHash(): ReturnType<typeof hashAuditTicketIdentity> {
+  return hashAuditTicketIdentity({ ticketId: AuditTicketIdSchema.parse(randomUUID()) })
+}
 
 function deferred<T>() {
   let resolvePromise: (value: T | PromiseLike<T>) => void = () => undefined
@@ -164,9 +176,9 @@ describe("private beta OAuth invitation generations", () => {
     const manager = new PostgresPrivateBetaInviteManager({ configuredInvites: [], database })
     expect(
       await manager.issue({
-        actorIdHash: hashAuditValue("pool-test-operator"),
+        actorIdHash,
         passwordHash: "b".repeat(64),
-        ticketHash: hashAuditValue("POOL-ISSUE"),
+        ticketHash: ticketHash(),
         username: poolUsername,
       }),
     ).toBe(true)
@@ -231,9 +243,9 @@ describe("private beta OAuth invitation generations", () => {
   it("rejects an OAuth state created before the same username is revoked and reissued", async () => {
     const manager = new PostgresPrivateBetaInviteManager({ configuredInvites: [], database })
     await manager.issue({
-      actorIdHash: hashAuditValue("reissue-test-operator"),
+      actorIdHash,
       passwordHash: "c".repeat(64),
-      ticketHash: hashAuditValue("REISSUE-OLD"),
+      ticketHash: ticketHash(),
       username: reissueUsername,
     })
     const client = new FakeSmartThingsClient()
@@ -252,14 +264,14 @@ describe("private beta OAuth invitation generations", () => {
       requestedScopes: ["r:devices:*"],
     })
     await manager.revoke({
-      actorIdHash: hashAuditValue("reissue-test-operator"),
-      ticketHash: hashAuditValue("REISSUE-REVOKE"),
+      actorIdHash,
+      ticketHash: ticketHash(),
       username: reissueUsername,
     })
     await manager.issue({
-      actorIdHash: hashAuditValue("reissue-test-operator"),
+      actorIdHash,
       passwordHash: "d".repeat(64),
-      ticketHash: hashAuditValue("REISSUE-NEW"),
+      ticketHash: ticketHash(),
       username: reissueUsername,
     })
 

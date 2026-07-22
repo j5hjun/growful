@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { type Kysely, sql } from "kysely"
-import type { AuditEventHash } from "../audit/audit-event.js"
-import { hashAuditValue } from "../audit/audit-event.js"
+import { type AuditEventHash, hashAuditPrivateBetaUsername } from "../audit/audit-event.js"
 import { appendPostgresAuditEvent } from "../audit/postgres-audit-sink.js"
 import type { GatewayDatabase } from "../storage/database.js"
 import type { PrivateBetaInvite } from "./invite.js"
@@ -124,7 +123,7 @@ export class PostgresPrivateBetaInviteManager {
         affectedCount: 1,
         occurredAt: issued.issuedAt,
         outcome: "succeeded",
-        subjectHash: hashAuditValue(command.username),
+        subjectHash: hashAuditPrivateBetaUsername({ username: command.username }),
         ticketHash: command.ticketHash,
       })
       return true
@@ -186,7 +185,7 @@ export class PostgresPrivateBetaInviteManager {
         affectedCount: 1 + revokedStates + revokedConnections,
         occurredAt: revoked.occurredAt,
         outcome: "succeeded",
-        subjectHash: hashAuditValue(command.username),
+        subjectHash: hashAuditPrivateBetaUsername({ username: command.username }),
         ticketHash: command.ticketHash,
       })
       return { changed: true, revokedConnections, revokedStates }

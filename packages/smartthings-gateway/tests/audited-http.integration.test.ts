@@ -92,7 +92,7 @@ describe("audited HTTP access", () => {
       method: "GET",
       url: "/connection",
     })
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
     const events = await database
       .selectFrom("auditEvents")
       .select(["action", "subjectHash"])

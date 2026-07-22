@@ -117,7 +117,7 @@ export function registerSmartThingsProxy(
           return reply.status(403).send({
             error: "growful_access_blocked" as const,
             reason: block.reason,
-            supportReference: hashAuditSubject(installedAppId),
+            supportReference: hashAuditSubject({ installedAppId }),
           })
         }
         const retryAfterSeconds =

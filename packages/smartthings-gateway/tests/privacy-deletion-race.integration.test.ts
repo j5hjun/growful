@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { hashAuditSubject, hashAuditValue } from "../src/audit/audit-event.js"
+import {
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditSubject,
+  hashAuditTicketIdentity,
+} from "../src/audit/audit-event.js"
 import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
 import { InvalidOAuthStateError, OAuthService } from "../src/oauth/oauth-service.js"
 import { PostgresPrivacyDeletion } from "../src/privacy/postgres-privacy-deletion.js"
@@ -15,8 +21,15 @@ const testEnvironmentSchema = z.object({ TEST_DATABASE_URL: z.url() })
 const { TEST_DATABASE_URL } = testEnvironmentSchema.parse(process.env)
 const database = createDatabase(TEST_DATABASE_URL)
 const installedAppId = InstalledAppIdSchema.parse(`privacy-race-${randomUUID()}`)
-const postDeletionInstalledAppId = InstalledAppIdSchema.parse(`privacy-new-oauth-${randomUUID()}`)
-const supportReference = hashAuditSubject(installedAppId)
+const postDeletionInstalledAppId = InstalledAppIdSchema.parse(`privacy-new-flow-${randomUUID()}`)
+const supportReference = hashAuditSubject({ installedAppId })
+const actorIdHash = hashAuditOperatorIdentity({
+  operatorId: AuditOperatorIdSchema.parse(randomUUID()),
+})
+
+function ticketHash(): ReturnType<typeof hashAuditTicketIdentity> {
+  return hashAuditTicketIdentity({ ticketId: AuditTicketIdSchema.parse(randomUUID()) })
+}
 const oauthStore = new PostgresOAuthStore({
   database,
   encryptionKeyBase64: Buffer.alloc(32, 73).toString("base64"),
@@ -42,7 +55,10 @@ afterAll(async () => {
     .execute()
   await database
     .deleteFrom("privacyDeletionEpochs")
-    .where("subjectHash", "in", [supportReference, hashAuditSubject(postDeletionInstalledAppId)])
+    .where("subjectHash", "in", [
+      supportReference,
+      hashAuditSubject({ installedAppId: postDeletionInstalledAppId }),
+    ])
     .execute()
   await database.destroy()
 })
@@ -104,9 +120,9 @@ describe("privacy deletion and OAuth completion concurrency", () => {
 
     // When
     const deletionResult = await privacyDeletion.delete({
-      actorIdHash: hashAuditValue("privacy-race-operator"),
+      actorIdHash,
       supportReference,
-      ticketHash: hashAuditValue("PRIVACY-RACE-DELETE"),
+      ticketHash: ticketHash(),
     })
     releaseExchange.resolve()
     const outcome = await completionOutcome
@@ -145,9 +161,9 @@ describe("privacy deletion and OAuth completion concurrency", () => {
       source: "authorization",
     })
     const deletionResult = await privacyDeletion.delete({
-      actorIdHash: hashAuditValue("privacy-new-oauth-operator"),
-      supportReference: hashAuditSubject(postDeletionInstalledAppId),
-      ticketHash: hashAuditValue("PRIVACY-NEW-OAUTH-DELETE"),
+      actorIdHash,
+      supportReference: hashAuditSubject({ installedAppId: postDeletionInstalledAppId }),
+      ticketHash: ticketHash(),
     })
     expect(deletionResult).toEqual({ affectedCount: 1, outcome: "succeeded" })
     const client = new FakeSmartThingsClient()

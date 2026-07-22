@@ -156,7 +156,7 @@ export function createApp(options: AppOptions): FastifyInstance {
                 reason: block.reason,
                 status: "blocked" as const,
               },
-        supportReference: hashAuditSubject(installedAppId),
+        supportReference: hashAuditSubject({ installedAppId }),
       })
     },
   )

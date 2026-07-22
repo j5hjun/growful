@@ -79,7 +79,7 @@ describe("privacy deletion operator CLI", () => {
   it("deletes the primary connection and records hashed operator approval atomically", async () => {
     // Given
     const installedAppId = await seedConnection()
-    const supportReference = hashAuditSubject(installedAppId)
+    const supportReference = hashAuditSubject({ installedAppId })
 
     // When
     const result = await runCli(["delete", supportReference, operatorId, ticketId])
@@ -147,7 +147,7 @@ describe("privacy deletion operator CLI", () => {
   it("rolls back primary deletion when the operator audit cannot append", async () => {
     // Given
     const installedAppId = await seedConnection()
-    const supportReference = hashAuditSubject(installedAppId)
+    const supportReference = hashAuditSubject({ installedAppId })
     await sql`
       create or replace function reject_privacy_deletion_audit()
       returns trigger

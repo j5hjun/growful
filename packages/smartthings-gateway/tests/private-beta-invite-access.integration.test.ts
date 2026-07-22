@@ -1,6 +1,12 @@
+import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { hashAuditValue } from "../src/audit/audit-event.js"
+import {
+  AuditOperatorIdSchema,
+  AuditTicketIdSchema,
+  hashAuditOperatorIdentity,
+  hashAuditTicketIdentity,
+} from "../src/audit/audit-event.js"
 import {
   generatePrivateBetaInviteCredential,
   hashPrivateBetaCredentialSecret,
@@ -13,6 +19,13 @@ const testEnvironmentSchema = z.object({ TEST_DATABASE_URL: z.url() })
 const { TEST_DATABASE_URL } = testEnvironmentSchema.parse(process.env)
 const database = createDatabase(TEST_DATABASE_URL)
 const usernames = ["database-access-user", "configured-access-user"] as const
+const actorIdHash = hashAuditOperatorIdentity({
+  operatorId: AuditOperatorIdSchema.parse(randomUUID()),
+})
+
+function ticketHash(): ReturnType<typeof hashAuditTicketIdentity> {
+  return hashAuditTicketIdentity({ ticketId: AuditTicketIdSchema.parse(randomUUID()) })
+}
 
 function basicAuthorization(username: string, credentialSecret: string): string {
   return `Basic ${Buffer.from(`${username}:${credentialSecret}`).toString("base64")}`
@@ -39,9 +52,9 @@ describe("PostgreSQL private beta invitation access", () => {
     const manager = new PostgresPrivateBetaInviteManager({ configuredInvites: [], database })
     const access = new PostgresPrivateBetaInviteAccess({ configuredInvites: [], database })
     await manager.issue({
-      actorIdHash: hashAuditValue("operator@example.test"),
+      actorIdHash,
       passwordHash: credential.passwordHash,
-      ticketHash: hashAuditValue("BETA-2001"),
+      ticketHash: ticketHash(),
       username,
     })
     const authorization = basicAuthorization(username, credential.secret)
@@ -52,8 +65,8 @@ describe("PostgreSQL private beta invitation access", () => {
 
     // When
     await manager.revoke({
-      actorIdHash: hashAuditValue("operator@example.test"),
-      ticketHash: hashAuditValue("BETA-2002"),
+      actorIdHash,
+      ticketHash: ticketHash(),
       username,
     })
 
@@ -79,8 +92,8 @@ describe("PostgreSQL private beta invitation access", () => {
 
     // When
     await manager.revoke({
-      actorIdHash: hashAuditValue("operator@example.test"),
-      ticketHash: hashAuditValue("BETA-2003"),
+      actorIdHash,
+      ticketHash: ticketHash(),
       username,
     })
 

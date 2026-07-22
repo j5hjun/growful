@@ -33,7 +33,7 @@ export async function persistPostgresAuthorizationIfActive(
       if (!active) return null
     }
 
-    const subjectHash = hashAuditSubject(options.input.grant.installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId: options.input.grant.installedAppId })
     await sql`select pg_advisory_xact_lock(hashtextextended(${subjectHash}, 0))`.execute(
       transaction,
     )

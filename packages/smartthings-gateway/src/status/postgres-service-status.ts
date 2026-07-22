@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { type Kysely, sql } from "kysely"
 import { z } from "zod"
 import type { AuditEventHash } from "../audit/audit-event.js"
-import { hashAuditValue } from "../audit/audit-event.js"
+import { hashAuditServiceIncident } from "../audit/audit-event.js"
 import { appendPostgresAuditEvent } from "../audit/postgres-audit-sink.js"
 import type { GatewayDatabase } from "../storage/database.js"
 import {
@@ -115,7 +115,7 @@ export class PostgresServiceStatusManager implements ServiceStatusSource {
         affectedCount: 1,
         occurredAt: inserted.startedAt,
         outcome: "succeeded",
-        subjectHash: hashAuditValue(incidentId),
+        subjectHash: hashAuditServiceIncident({ incidentId }),
         ticketHash: command.ticketHash,
       })
       return incidentId
@@ -180,7 +180,7 @@ export class PostgresServiceStatusManager implements ServiceStatusSource {
         affectedCount: 1,
         occurredAt: occurredAt.value,
         outcome: "succeeded",
-        subjectHash: hashAuditValue(command.incidentId),
+        subjectHash: hashAuditServiceIncident({ incidentId: command.incidentId }),
         ticketHash: command.ticketHash,
       })
       return true

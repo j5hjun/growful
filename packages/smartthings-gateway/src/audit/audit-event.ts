@@ -1,15 +1,27 @@
 import { createHash } from "node:crypto"
 import { z } from "zod"
-import type { InstalledAppId } from "../oauth/contracts.js"
+import { type InstalledAppId, InstalledAppIdSchema } from "../oauth/contracts.js"
 
 export const AuditEventHashSchema = z
   .string()
   .regex(/^[a-f0-9]{64}$/)
   .brand("AuditEventHash")
 export const AuditEventIdSchema = z.uuid().brand("AuditEventId")
+export const AuditOperatorIdSchema = z.string().trim().min(1).max(200).brand("AuditOperatorId")
+export const AuditTicketIdSchema = z.string().trim().min(1).max(200).brand("AuditTicketId")
 
 export type AuditEventHash = z.infer<typeof AuditEventHashSchema>
 export type AuditEventId = z.infer<typeof AuditEventIdSchema>
+export type AuditOperatorId = z.infer<typeof AuditOperatorIdSchema>
+export type AuditTicketId = z.infer<typeof AuditTicketIdSchema>
+
+const auditOperatorIdentitySchema = z.object({ operatorId: AuditOperatorIdSchema }).strict()
+const auditTicketIdentitySchema = z.object({ ticketId: AuditTicketIdSchema }).strict()
+const auditSubjectIdentitySchema = z.object({ installedAppId: InstalledAppIdSchema }).strict()
+const auditPrivateBetaUsernameIdentitySchema = z
+  .object({ username: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/) })
+  .strict()
+const auditServiceIncidentIdentitySchema = z.object({ incidentId: z.uuid() }).strict()
 
 export const auditActions = [
   "connection.access",
@@ -117,12 +129,34 @@ export type AuditChainSegmentStart = {
   readonly previousSequence: string | null
 }
 
-export function hashAuditSubject(installedAppId: InstalledAppId): AuditEventHash {
-  return hashAuditValue(installedAppId)
+export function hashAuditOperatorIdentity(input: {
+  readonly operatorId: AuditOperatorId
+}): AuditEventHash {
+  return hashAuditIdentifier(auditOperatorIdentitySchema.parse(input).operatorId)
 }
 
-export function hashAuditValue(value: string): AuditEventHash {
-  return AuditEventHashSchema.parse(createHash("sha256").update(value).digest("hex"))
+export function hashAuditTicketIdentity(input: {
+  readonly ticketId: AuditTicketId
+}): AuditEventHash {
+  return hashAuditIdentifier(auditTicketIdentitySchema.parse(input).ticketId)
+}
+
+export function hashAuditSubject(input: {
+  readonly installedAppId: InstalledAppId
+}): AuditEventHash {
+  return hashAuditIdentifier(auditSubjectIdentitySchema.parse(input).installedAppId)
+}
+
+export function hashAuditPrivateBetaUsername(input: { readonly username: string }): AuditEventHash {
+  return hashAuditIdentifier(auditPrivateBetaUsernameIdentitySchema.parse(input).username)
+}
+
+export function hashAuditServiceIncident(input: { readonly incidentId: string }): AuditEventHash {
+  return hashAuditIdentifier(auditServiceIncidentIdentitySchema.parse(input).incidentId)
+}
+
+function hashAuditIdentifier(identifier: string): AuditEventHash {
+  return AuditEventHashSchema.parse(createHash("sha256").update(identifier).digest("hex"))
 }
 
 export function createAuditEvent(

@@ -104,7 +104,7 @@ export class AuditedOAuthStore implements OAuthStore {
       affectedCount: 1,
       occurredAt: this.options.now?.() ?? new Date(),
       outcome: "succeeded",
-      subjectHash: hashAuditSubject(installedAppId),
+      subjectHash: hashAuditSubject({ installedAppId }),
       ticketHash: null,
     })
   }

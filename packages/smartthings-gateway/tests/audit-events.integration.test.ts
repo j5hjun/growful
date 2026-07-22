@@ -70,7 +70,7 @@ describe("audit event storage", () => {
   it("appends hash-chained events without storing the raw connection identifier", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-chain-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
     const occurredAt = new Date("2026-07-22T01:00:00.000Z")
 
     // When
@@ -110,7 +110,7 @@ describe("audit event storage", () => {
   it("uses the shared canonical hash for trigger-generated events", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-canonical-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
 
     // When
     await oauthStore.saveTokens({
@@ -174,7 +174,9 @@ describe("audit event storage", () => {
 
   it("rejects mutation of an existing audit event", async () => {
     // Given
-    const subjectHash = hashAuditSubject(InstalledAppIdSchema.parse("audit-mutation-installed-app"))
+    const subjectHash = hashAuditSubject({
+      installedAppId: InstalledAppIdSchema.parse("audit-mutation-installed-app"),
+    })
     await sink.append({
       action: "connection.disconnect",
       actorIdHash: null,
@@ -200,7 +202,7 @@ describe("audit event storage", () => {
   it("audits connection authorization, token rotation, and disconnection atomically", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-lifecycle-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
     const firstToken = GrowfulTokenSchema.parse(
       `grw_st_${Buffer.alloc(32, 31).toString("base64url")}`,
     )
@@ -248,7 +250,7 @@ describe("audit event storage", () => {
   it("audits a refresh failure in the same transaction as its failure state", async () => {
     // Given
     const installedAppId = InstalledAppIdSchema.parse(`audit-refresh-${randomUUID()}`)
-    const subjectHash = hashAuditSubject(installedAppId)
+    const subjectHash = hashAuditSubject({ installedAppId })
     const claimId = RefreshClaimIdSchema.parse(randomUUID())
     await oauthStore.saveTokens({
       authorization: oauthAuthorization(["r:devices:*"]),

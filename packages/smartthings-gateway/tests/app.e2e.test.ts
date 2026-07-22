@@ -53,7 +53,9 @@ describe("SmartThings Gateway HTTP API", () => {
       grantedScopes: ["r:devices:$", "x:devices:$", "r:locations:*"],
       lastRefreshedAt: null,
       serviceAccess: { status: "active" },
-      supportReference: hashAuditSubject(fixture.client.exchangeGrant.installedAppId),
+      supportReference: hashAuditSubject({
+        installedAppId: fixture.client.exchangeGrant.installedAppId,
+      }),
     })
     expect(authenticatedStatus.body).not.toContain("initial-access-token")
     expect(authenticatedStatus.body).not.toContain("initial-refresh-token")
