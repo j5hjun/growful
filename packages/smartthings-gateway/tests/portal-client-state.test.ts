@@ -183,6 +183,8 @@ describe("Growful portal connection states", () => {
     const form = getPortalElement(fixture.elements, "form")
     const input = getPortalElement(fixture.elements, "input")
     const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
     const rotatedOutput = getPortalElement(fixture.elements, "rotatedOutput")
     let statusRequestCount = 0
     runPortalClient(fixture, async (path) => {
@@ -194,12 +196,74 @@ describe("Growful portal connection states", () => {
     await form.dispatch("submit", { preventDefault() {} })
     await new Promise<void>((resolve) => setImmediate(resolve))
 
-    const rotationRequest = rotate.dispatch("click")
+    await rotate.dispatch("click")
+    const rotationRequest = rotateForm.dispatch("submit", {
+      preventDefault() {},
+      submitter: rotateConfirm,
+    })
     await form.dispatch("submit", { preventDefault() {} })
     rotation.resolve(response(200, { growfulToken: `grw_st_${"B".repeat(43)}` }))
     await rotationRequest
 
     expect(statusRequestCount).toBe(1)
     expect(rotatedOutput.textContent).toBe(`grw_st_${"B".repeat(43)}`)
+  })
+
+  it("clears the one-time token when the visible status action restores status", async () => {
+    const refreshedConnection = deferred<ReturnType<typeof response>>()
+    const fixture = createPortalBrowserFixture()
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+    const rotatedOutput = getPortalElement(fixture.elements, "rotatedOutput")
+    const rotatedSection = getPortalElement(fixture.elements, "rotatedSection")
+    const status = getPortalElement(fixture.elements, "status")
+    let statusRequests = 0
+    runPortalClient(fixture, async (path) => {
+      if (path === "/token/rotate") {
+        return response(200, { growfulToken: `grw_st_${"B".repeat(43)}` })
+      }
+      statusRequests += 1
+      return statusRequests === 1 ? response(200, activeConnection()) : refreshedConnection.promise
+    })
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await rotate.dispatch("click")
+    await rotateForm.dispatch("submit", { preventDefault() {}, submitter: rotateConfirm })
+    expect(rotatedSection.hidden).toBe(false)
+
+    const statusRefresh = form.dispatch("submit", { preventDefault() {} })
+
+    expect(rotatedSection.hidden).toBe(true)
+    expect(rotatedOutput.textContent).toBe("")
+    refreshedConnection.resolve(response(200, activeConnection()))
+    await statusRefresh
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(status.hidden).toBe(false)
+  })
+
+  it("restores the rotation trigger focus after a recoverable rotation error", async () => {
+    const fixture = createPortalBrowserFixture()
+    const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+    runPortalClient(fixture, async (path) =>
+      path === "/token/rotate" ? response(429) : response(200, activeConnection()),
+    )
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    await rotate.dispatch("click")
+    await rotateForm.dispatch("submit", { preventDefault() {}, submitter: rotateConfirm })
+
+    expect(errorMessage.textContent).toBe("요청이 너무 많습니다. 잠시 후 다시 확인하세요.")
+    expect(rotate.focusCount).toBe(1)
   })
 })

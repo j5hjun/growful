@@ -10,6 +10,7 @@ import {
   parseOAuthScopeSelection,
   renderOAuthScopeSelection,
 } from "./oauth-scope-selection.js"
+import { tokenSafetyClientScript } from "./token-safety.js"
 
 const callbackQuerySchema = z.union([
   z.object({ code: z.string().min(1), state: z.string().min(1) }),
@@ -67,6 +68,14 @@ function sendOAuthScopeSelectionPage(
 
 export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOptions): void {
   const privateBetaAccess = new PrivateBetaAccessGate(options.oauthAccess)
+  app.get("/token-safety.js", async (_request, reply) =>
+    reply
+      .header("Cache-Control", "no-store")
+      .header("Cross-Origin-Resource-Policy", "same-origin")
+      .header("X-Content-Type-Options", "nosniff")
+      .type("application/javascript; charset=utf-8")
+      .send(tokenSafetyClientScript),
+  )
   app.get(
     "/oauth/start",
     {
@@ -131,7 +140,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
       .header("Cache-Control", "no-store")
       .header(
         "Content-Security-Policy",
-        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
       )
       .header("Referrer-Policy", "no-referrer")
       .header("X-Frame-Options", "DENY")

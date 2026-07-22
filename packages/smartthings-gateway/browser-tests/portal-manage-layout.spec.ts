@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test"
+import { renderOAuthCompletion } from "../src/http/oauth-completion.js"
+import { portalClientScript } from "../src/http/portal-client.js"
 import { renderPortalManagement } from "../src/http/portal-manage.js"
+import { tokenSafetyClientScript } from "../src/http/token-safety.js"
+import { GrowfulTokenSchema } from "../src/security/growful-token.js"
 
 function portalAccess() {
   return {
@@ -106,4 +110,149 @@ test("management states share a flexible three-row frame and fixed action slot",
   expect(successFrame.width).toBeCloseTo(initialFrame.width, 2)
   expect(revealBox.y).toBeCloseTo(inputBox.y, 2)
   expect(revealBox.width).toBeLessThan(initialFrame.width / 2)
+})
+
+test("one-time token flows confirm rotation and keep recovery navigation available", async ({
+  page,
+}) => {
+  // Given
+  const tokenA = `grw_st_${"A".repeat(43)}`
+  const tokenB = `grw_st_${"B".repeat(43)}`
+  let rotationRequests = 0
+  let holdStatusRefresh = false
+  let releaseStatusRefresh: (() => void) | undefined
+  const statusRefreshGate = new Promise<void>((resolve) => {
+    releaseStatusRefresh = resolve
+  })
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        async writeText() {
+          if ((globalThis as typeof globalThis & { clipboardFailure?: boolean }).clipboardFailure) {
+            throw new Error("clipboard unavailable")
+          }
+        },
+      },
+    })
+  })
+  await page.route("https://growful.test/**", async (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (pathname === "/oauth") {
+      await route.fulfill({
+        body: renderOAuthCompletion(GrowfulTokenSchema.parse(tokenA)),
+        contentType: "text/html",
+      })
+      return
+    }
+    if (pathname === "/manage") {
+      await route.fulfill({
+        body: renderPortalManagement(portalAccess()),
+        contentType: "text/html",
+      })
+      return
+    }
+    if (pathname === "/portal.js") {
+      await route.fulfill({ body: portalClientScript, contentType: "text/javascript" })
+      return
+    }
+    if (pathname === "/token-safety.js") {
+      await route.fulfill({ body: tokenSafetyClientScript, contentType: "text/javascript" })
+      return
+    }
+    if (pathname === "/connection") {
+      if (holdStatusRefresh) await statusRefreshGate
+      await route.fulfill({
+        json: {
+          connected: true,
+          expiresAt: "2026-07-23T00:00:00.000Z",
+          grantedScopes: [],
+          lastRefreshedAt: null,
+          serviceAccess: { status: "active" },
+          supportReference: "c".repeat(64),
+        },
+      })
+      return
+    }
+    if (pathname === "/token/rotate") {
+      rotationRequests += 1
+      await route.fulfill({ json: { growfulToken: tokenB } })
+      return
+    }
+    await route.abort()
+  })
+  await page.goto("https://growful.test/manage")
+  await page.locator("#growful-token").fill(tokenA)
+  await page.locator("[data-token-submit]").click()
+  await expect(page.locator("[data-portal-status]")).toBeVisible()
+
+  // When
+  await page.locator("[data-rotate-token]").click()
+
+  // Then
+  const dialog = page.locator("[data-rotate-token-dialog]")
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText("현재 토큰은 즉시 무효화됩니다")
+  await expect(dialog).toContainText("모든 소비자 설정을 새 토큰으로 변경해야 합니다")
+  expect(rotationRequests).toBe(0)
+
+  // When
+  await page.locator("[data-rotate-token-confirm]").click()
+
+  // Then
+  const result = page.locator("[data-rotated-token-section]")
+  await expect(result).toBeVisible()
+  await expect(page.locator("[data-portal-status]")).toBeHidden()
+  await expect(page.locator("[data-rotated-token]")).toHaveText(tokenB)
+  expect(rotationRequests).toBe(1)
+  await expect(result.locator("[data-copy-token]")).toHaveClass(/primary/)
+  await expect(result.locator("[data-return-status]")).toHaveClass(/secondary/)
+
+  // When
+  await page.locator("[data-return-status]").click()
+
+  // Then
+  await expect(result).toBeHidden()
+  await expect(page.locator("[data-rotated-token]")).toHaveText("")
+  await expect(page.locator("[data-portal-status]")).toBeFocused()
+
+  // When
+  await page.locator("[data-rotate-token]").click()
+  await page.locator("[data-rotate-token-confirm]").click()
+  await expect(result).toBeVisible()
+  holdStatusRefresh = true
+  await page.locator("[data-token-submit]").click()
+
+  // Then
+  await expect(result).toBeHidden()
+  await expect(page.locator("[data-rotated-token]")).toHaveText("")
+  releaseStatusRefresh?.()
+  await expect(page.locator("[data-portal-status]")).toBeVisible()
+  expect(rotationRequests).toBe(2)
+
+  // When
+  await page.goto("https://growful.test/oauth")
+  await page.keyboard.press("Tab")
+
+  // Then
+  const oauthCopy = page.locator("[data-copy-token]")
+  const manageAction = page.locator("[data-action=manage-issued-token]")
+  await expect(oauthCopy).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(manageAction).toBeFocused()
+  await oauthCopy.click()
+  await expect(page.locator("[data-token-copy-feedback]")).toBeVisible()
+
+  // When
+  await page.evaluate(() => {
+    ;(globalThis as typeof globalThis & { clipboardFailure?: boolean }).clipboardFailure = true
+  })
+  await oauthCopy.click()
+
+  // Then
+  await expect(page.locator("[data-token-copy-error]")).toBeVisible()
+  await expect(page.locator("[data-token-value]")).toBeFocused()
+  await expect(page.locator("[data-token-value]")).toHaveCSS("outline-style", "solid")
+  await manageAction.click()
+  await expect(page).toHaveURL("https://growful.test/manage")
 })

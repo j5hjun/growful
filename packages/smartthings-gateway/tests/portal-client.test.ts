@@ -23,6 +23,12 @@ describe("Growful portal token mutations", () => {
     const form = getPortalElement(elements, "form")
     const input = getPortalElement(elements, "input")
     const rotate = getPortalElement(elements, "rotate")
+    const rotateConfirm = getPortalElement(elements, "rotateConfirm")
+    const rotateDialog = getPortalElement(elements, "rotateDialog")
+    const rotateForm = getPortalElement(elements, "rotateForm")
+    const rotatedOutput = getPortalElement(elements, "rotatedOutput")
+    const rotatedSection = getPortalElement(elements, "rotatedSection")
+    const returnStatus = getPortalElement(elements, "returnStatus")
     const status = getPortalElement(elements, "status")
     let serverToken: string | null = tokenA
     let deleteGate: ReturnType<typeof deferred<void>> | undefined
@@ -62,19 +68,36 @@ describe("Growful portal token mutations", () => {
     expect(status.focusCount).toBe(1)
 
     // When
-    const pendingRotation = rotate.dispatch("click")
+    const openingRotationDialog = rotate.dispatch("click")
     await Promise.resolve()
-    await disconnect.dispatch("click")
 
     // Then
+    expect(serverToken).toBe(tokenA)
+    expect(rotationRequests).toBe(0)
+    expect(rotateDialog.open).toBe(true)
+    expect(forget.disabled).toBe(false)
+    expect(disconnect.disabled).toBe(false)
+    expect(deleteAuthorizations).toEqual([])
+    await openingRotationDialog
+
+    const pendingRotation = rotateForm.dispatch("submit", {
+      preventDefault() {},
+      submitter: rotateConfirm,
+    })
+    await Promise.resolve()
     expect(serverToken).toBe(tokenB)
     expect(forget.disabled).toBe(true)
     expect(disconnect.disabled).toBe(true)
-    expect(dialog.open).toBe(false)
-    expect(deleteAuthorizations).toEqual([])
 
     rotationResponse.resolve(response(200, { growfulToken: tokenB }))
     await pendingRotation
+    expect(rotatedSection.hidden).toBe(false)
+    expect(status.hidden).toBe(true)
+    await returnStatus.dispatch("click")
+    expect(rotatedSection.hidden).toBe(true)
+    expect(rotatedOutput.textContent).toBe("")
+    expect(status.hidden).toBe(false)
+    expect(status.focusCount).toBe(2)
     await disconnect.dispatch("click")
     await disconnectForm.dispatch("submit", {
       preventDefault() {},
