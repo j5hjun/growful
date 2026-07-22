@@ -209,6 +209,44 @@ describe("SmartThings webhook observability", () => {
     expect(logs.raw()).not.toContain("api.smartthings.com")
   })
 
+  it("sanitizes an unexpected lifecycle failure as an internal 500 result", async () => {
+    // Given
+    const logs = captureWebhookLogs()
+    const fixture = createSmartThingsWebhookFixture(apps, undefined, logs.logger)
+    vi.spyOn(fixture.store, "deleteConnection").mockRejectedValueOnce(
+      new Error("unexpected-storage-error-secret"),
+    )
+    const body = lifecycleEventBody("DELETE")
+
+    // When
+    const response = await fixture.app.inject({
+      headers: signedHeaders(body),
+      method: "POST",
+      payload: body,
+      url: webhookPath,
+    })
+
+    // Then
+    expect(response.statusCode).toBe(500)
+    expect(logs.webhook()).toEqual([
+      expect.objectContaining({ level: 30, msg: "smartthings.webhook.received" }),
+      expect.objectContaining({
+        level: 30,
+        messageType: "EVENT",
+        msg: "smartthings.webhook.validated",
+      }),
+      expect.objectContaining({
+        errorClass: "internal_error",
+        level: 50,
+        msg: "smartthings.webhook.failed",
+        statusCode: 500,
+      }),
+    ])
+    expect(logs.raw()).not.toContain("unexpected-storage-error-secret")
+    expect(logs.raw()).not.toContain("request.failed")
+    expect(logs.raw()).not.toContain("webhook-installed-app")
+  })
+
   it.each([
     ["DELETE", "connection_deleted"],
     ["UPDATE", "acknowledged"],
