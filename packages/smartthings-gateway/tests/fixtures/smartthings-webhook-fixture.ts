@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto"
 import type { FastifyInstance } from "fastify"
 import { vi } from "vitest"
-import { createApp } from "../../src/http/app.js"
+import { type AppOptions, createApp } from "../../src/http/app.js"
 import { InstalledAppIdSchema, type StoredTokens } from "../../src/oauth/contracts.js"
 import { OAuthService } from "../../src/oauth/oauth-service.js"
 import { emptyServiceStatusSource } from "../../src/status/service-status.js"
@@ -72,6 +72,7 @@ export function signedHeaders(
 export function createSmartThingsWebhookFixture(
   apps: FastifyInstance[],
   confirmationRequester = vi.fn(async (_url: URL) => {}),
+  logger?: AppOptions["logger"],
 ) {
   const store = new MemoryOAuthStore()
   const service = new OAuthService({
@@ -85,6 +86,7 @@ export function createSmartThingsWebhookFixture(
   const app = createApp({
     abuseControl: allowAllGrowfulAbuseControl,
     authorizationOrigin: "https://api.smartthings.test",
+    logger,
     oauthAccess: publicOAuthAccess,
     readinessProbe: readyProbe,
     redirectOrigin: "https://smartthings.growful.click",

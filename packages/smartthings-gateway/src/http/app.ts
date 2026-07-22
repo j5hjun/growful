@@ -235,7 +235,9 @@ export function createApp(options: AppOptions): FastifyInstance {
     ) {
       return reply.status(413).send({ error: "request_body_too_large" as const })
     }
-    request.log.error({ err: error }, "request.failed")
+    if (request.routeOptions.url !== "/smartthings/webhook") {
+      request.log.error({ err: error }, "request.failed")
+    }
     return reply.status(500).send({ error: "internal_server_error" as const })
   })
 

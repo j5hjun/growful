@@ -37,13 +37,18 @@ const installedAppLifecycleSchema = z.object({
     lifecycle: z.enum(["CREATE", "INSTALL", "UPDATE", "DELETE", "OTHER"]),
   }),
 })
-const messageTypeSchema = z.object({
-  messageType: z.enum(["CONFIRMATION", "EVENT"]),
-})
+const messageTypeSchema = z.object({ messageType: z.enum(["CONFIRMATION", "EVENT"]) })
 const rawBodySchema = z.instanceof(Buffer)
 const confirmationRetryIntervalMs = 60_000
 const confirmationCacheLifetimeMs = 10 * 60_000
 const maximumCachedConfirmations = 32
+const webhookFailureClasses = new Map<number, string>([
+  [400, "invalid_request"],
+  [401, "invalid_signature"],
+  [413, "request_body_too_large"],
+  [429, "rate_limited"],
+  [502, "confirmation_request_failed"],
+])
 
 export type SmartThingsConfirmationRequester = (url: URL) => Promise<void>
 
@@ -201,7 +206,17 @@ export function registerSmartThingsWebhookRoute(
 
   app.post(
     "/smartthings/webhook",
-    { config: { rateLimit: httpRateLimitPolicies.smartThingsWebhook } },
+    {
+      config: { rateLimit: httpRateLimitPolicies.smartThingsWebhook },
+      onRequest: async (request) => request.log.info("smartthings.webhook.received"),
+      onResponse: async (request, reply) => {
+        if (reply.statusCode < 400) return
+        const errorClass = webhookFailureClasses.get(reply.statusCode) ?? "internal_error"
+        const fields = { errorClass, statusCode: reply.statusCode }
+        if (reply.statusCode >= 500) request.log.error(fields, "smartthings.webhook.failed")
+        else request.log.warn(fields, "smartthings.webhook.failed")
+      },
+    },
     async (request, reply) => {
       const body = rawBodySchema.parse(request.body)
       const parsedJson = parseJson(body)
@@ -214,7 +229,12 @@ export function registerSmartThingsWebhookRoute(
             message.confirmationData.appId,
             message.confirmationData.confirmationUrl,
           )
+          request.log.info({ messageType }, "smartthings.webhook.validated")
           await confirmationGate.confirm(confirmationUrl, now(), confirmationRequester)
+          request.log.info(
+            { messageType, result: "confirmation_completed" },
+            "smartthings.webhook.completed",
+          )
           return reply.header("Cache-Control", "no-store").send({})
         }
         case "EVENT": {
@@ -227,10 +247,19 @@ export function registerSmartThingsWebhookRoute(
             rawUrl: request.raw.url ?? "/smartthings/webhook",
           })
           const message = eventEnvelopeSchema.parse(parsedJson)
+          const installedAppIds = deleteLifecycleConnectionIds(message, options.smartThingsAppId)
+          request.log.info({ messageType }, "smartthings.webhook.validated")
           await Promise.all(
-            deleteLifecycleConnectionIds(message, options.smartThingsAppId).map((installedAppId) =>
+            installedAppIds.map((installedAppId) =>
               options.service.forgetConnection(installedAppId),
             ),
+          )
+          request.log.info(
+            {
+              messageType,
+              result: installedAppIds.length > 0 ? "connection_deleted" : "acknowledged",
+            },
+            "smartthings.webhook.completed",
           )
           return reply.header("Cache-Control", "no-store").send({})
         }
