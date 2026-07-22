@@ -209,6 +209,36 @@ describe("Growful portal connection states", () => {
     expect(rotatedOutput.textContent).toBe(`grw_st_${"B".repeat(43)}`)
   })
 
+  it("clears the one-time token when the visible status action restores status", async () => {
+    const fixture = createPortalBrowserFixture()
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+    const rotatedOutput = getPortalElement(fixture.elements, "rotatedOutput")
+    const rotatedSection = getPortalElement(fixture.elements, "rotatedSection")
+    const status = getPortalElement(fixture.elements, "status")
+    runPortalClient(fixture, async (path) =>
+      path === "/token/rotate"
+        ? response(200, { growfulToken: `grw_st_${"B".repeat(43)}` })
+        : response(200, activeConnection()),
+    )
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await rotate.dispatch("click")
+    await rotateForm.dispatch("submit", { preventDefault() {}, submitter: rotateConfirm })
+    expect(rotatedSection.hidden).toBe(false)
+
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(rotatedSection.hidden).toBe(true)
+    expect(rotatedOutput.textContent).toBe("")
+    expect(status.hidden).toBe(false)
+  })
+
   it("restores the rotation trigger focus after a recoverable rotation error", async () => {
     const fixture = createPortalBrowserFixture()
     const errorMessage = getPortalElement(fixture.elements, "errorMessage")

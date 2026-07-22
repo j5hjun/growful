@@ -211,6 +211,18 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   await expect(page.locator("[data-portal-status]")).toBeFocused()
 
   // When
+  await page.locator("[data-rotate-token]").click()
+  await page.locator("[data-rotate-token-confirm]").click()
+  await expect(result).toBeVisible()
+  await page.locator("[data-token-submit]").click()
+
+  // Then
+  await expect(result).toBeHidden()
+  await expect(page.locator("[data-rotated-token]")).toHaveText("")
+  await expect(page.locator("[data-portal-status]")).toBeVisible()
+  expect(rotationRequests).toBe(2)
+
+  // When
   await page.goto("https://growful.test/oauth")
   await page.keyboard.press("Tab")
 

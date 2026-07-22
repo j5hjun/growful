@@ -6,6 +6,7 @@ type Listener = () => unknown
 
 class TokenElement {
   readonly listeners = new Map<string, Listener>()
+  disabled = false
   focusCount = 0
   hidden = true
   textContent = ""
@@ -20,6 +21,24 @@ class TokenElement {
 
   focus(): void {
     this.focusCount += 1
+  }
+}
+
+function deferred() {
+  let resolve: (() => void) | undefined
+  let reject: ((error: Error) => void) | undefined
+  const promise = new Promise<void>((complete, fail) => {
+    resolve = complete
+    reject = fail
+  })
+  return {
+    promise,
+    reject(error: Error) {
+      reject?.(error)
+    },
+    resolve() {
+      resolve?.()
+    },
   }
 }
 
@@ -86,5 +105,38 @@ describe("one-time token copy safety", () => {
     expect(fixture.feedback.hidden).toBe(true)
     expect(fixture.error.hidden).toBe(false)
     expect(fixture.output.focusCount).toBe(1)
+  })
+
+  it("ignores stale clipboard results when attempts settle out of order", async () => {
+    // Given
+    const fixture = createFixture()
+    const olderAttempt = deferred()
+    const latestAttempt = deferred()
+    const attempts = [olderAttempt, latestAttempt]
+    runTokenSafety(fixture, async () => {
+      const attempt = attempts.shift()
+      if (attempt === undefined) throw new Error("Unexpected clipboard attempt")
+      await attempt.promise
+    })
+
+    // When
+    const olderClick = fixture.copy.click()
+    const latestClick = fixture.copy.click()
+    latestAttempt.resolve()
+    await latestClick
+
+    // Then
+    expect(fixture.feedback.hidden).toBe(false)
+    expect(fixture.error.hidden).toBe(true)
+    expect(fixture.copy.disabled).toBe(false)
+
+    // When
+    olderAttempt.reject(new Error("late clipboard failure"))
+    await olderClick
+
+    // Then
+    expect(fixture.feedback.hidden).toBe(false)
+    expect(fixture.error.hidden).toBe(true)
+    expect(fixture.output.focusCount).toBe(0)
   })
 })

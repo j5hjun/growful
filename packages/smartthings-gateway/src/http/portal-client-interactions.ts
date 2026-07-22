@@ -110,6 +110,7 @@ export function bindPortalInteractions(
       }
       if (requestGeneration !== tokenGeneration) return
       elements.tokenInput.value = ""
+      clearRotatedToken()
       view.renderStatus(connection)
       view.showFeedback("연결 상태를 확인했습니다.")
     } catch (error) {

@@ -8,17 +8,24 @@ export function bindTokenSafetyActions(): void {
     const feedback = region.querySelector<HTMLElement>("[data-token-copy-feedback]")
     const output = region.querySelector<HTMLOutputElement>("[data-token-value]")
     if (copyButton === null || error === null || feedback === null || output === null) continue
+    let copyGeneration = 0
 
     copyButton.addEventListener("click", async () => {
+      const requestGeneration = ++copyGeneration
+      copyButton.disabled = true
       try {
         await navigator.clipboard.writeText(output.textContent)
+        if (requestGeneration !== copyGeneration) return
         error.hidden = true
         feedback.hidden = false
       } catch (copyError) {
         if (!(copyError instanceof Error)) throw copyError
+        if (requestGeneration !== copyGeneration) return
         feedback.hidden = true
         error.hidden = false
         output.focus()
+      } finally {
+        if (requestGeneration === copyGeneration) copyButton.disabled = false
       }
     })
   }
