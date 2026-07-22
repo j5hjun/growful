@@ -8,6 +8,9 @@
 이 디렉터리는 `100.72.144.111`에서 사용자가 한 번 초기화하고 이후 GitHub Actions가
 커밋 SHA별 릴리스로 갱신하는 배포 단위입니다. 서버의 기존 Cloudflare Tunnel은
 `smartthings.growful.click`을 `http://localhost:8100`으로 전달합니다.
+OAuth callback 요청 제한은 Cloudflare가 origin 요청에 설정하는 단일
+`CF-Connecting-IP` 주소를 사용합니다. Tunnel의 loopback 경계를 유지하고
+`CF-Connecting-IP`를 제거하는 Managed Transform을 활성화하지 않아야 합니다.
 
 최초 설정:
 

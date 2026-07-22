@@ -1,8 +1,18 @@
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { z } from "zod"
-import type { OAuthService } from "../oauth/oauth-service.js"
+import {
+  InvalidOAuthStateError,
+  OAuthScopeMismatchError,
+  type OAuthService,
+} from "../oauth/oauth-service.js"
 import { type OAuthAccessPolicy, PrivateBetaAccessGate } from "../private-beta/http-access.js"
-import { httpRateLimitPolicies } from "./http-rate-limit.js"
+import { SmartThingsTokenRequestError } from "../smartthings/smartthings-client.js"
+import { HttpRequestRateLimitError, httpRateLimitPolicies } from "./http-rate-limit.js"
+import {
+  type OAuthCallbackResultKind,
+  oauthCallbackResultKinds,
+  renderOAuthCallbackResult,
+} from "./oauth-callback-result.js"
 import { renderOAuthCompletion } from "./oauth-completion.js"
 import {
   type OAuthDeviceRange,
@@ -13,8 +23,12 @@ import {
 import { tokenSafetyClientScript } from "./token-safety.js"
 
 const callbackQuerySchema = z.union([
-  z.object({ code: z.string().min(1), state: z.string().min(1) }),
-  z.object({ error: z.literal("access_denied"), state: z.string().min(1) }),
+  z.object({ code: z.string().min(1), error: z.never().optional(), state: z.string().min(1) }),
+  z.object({
+    code: z.never().optional(),
+    error: z.literal("access_denied"),
+    state: z.string().min(1),
+  }),
 ])
 
 export type { OAuthAccessPolicy } from "../private-beta/http-access.js"
@@ -64,6 +78,25 @@ function sendOAuthScopeSelectionPage(
         showSelectionError: options.showSelectionError,
       }),
     )
+}
+
+function sendOAuthCallbackResultPage(
+  reply: FastifyReply,
+  result: OAuthCallbackResultKind,
+  statusCode: 400 | 429 | 500 | 502,
+) {
+  return reply
+    .header("Cache-Control", "no-store")
+    .header(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src 'none'; font-src 'none'; connect-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+    )
+    .header("Referrer-Policy", "no-referrer")
+    .header("X-Content-Type-Options", "nosniff")
+    .header("X-Frame-Options", "DENY")
+    .type("text/html; charset=utf-8")
+    .status(statusCode)
+    .send(renderOAuthCallbackResult(result))
 }
 
 export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOptions): void {
@@ -129,22 +162,56 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
     },
   )
 
-  app.get("/oauth/callback", async (request, reply) => {
-    const query = callbackQuerySchema.parse(request.query)
-    if ("error" in query) {
-      await options.service.cancelAuthorization(query.state)
-      return reply.status(400).send({ error: "authorization_denied" as const })
-    }
-    const completion = await options.service.completeAuthorization(query.code, query.state)
-    return reply
-      .header("Cache-Control", "no-store")
-      .header(
-        "Content-Security-Policy",
-        "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
-      )
-      .header("Referrer-Policy", "no-referrer")
-      .header("X-Frame-Options", "DENY")
-      .type("text/html; charset=utf-8")
-      .send(renderOAuthCompletion(completion.growfulToken))
-  })
+  app.get(
+    "/oauth/callback",
+    {
+      config: { rateLimit: httpRateLimitPolicies.oauthCallback },
+      errorHandler: (error, _request, reply) => {
+        if (error instanceof HttpRequestRateLimitError) {
+          sendOAuthCallbackResultPage(reply, oauthCallbackResultKinds.rateLimited, 429)
+          return
+        }
+        throw error
+      },
+    },
+    async (request, reply) => {
+      try {
+        const query = callbackQuerySchema.parse(request.query)
+        if ("error" in query) {
+          await options.service.cancelAuthorization(query.state)
+          return sendOAuthCallbackResultPage(reply, oauthCallbackResultKinds.cancelled, 400)
+        }
+        const completion = await options.service.completeAuthorization(query.code, query.state)
+        return reply
+          .header("Cache-Control", "no-store")
+          .header(
+            "Content-Security-Policy",
+            "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+          )
+          .header("Referrer-Policy", "no-referrer")
+          .header("X-Frame-Options", "DENY")
+          .type("text/html; charset=utf-8")
+          .send(renderOAuthCompletion(completion.growfulToken))
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return sendOAuthCallbackResultPage(reply, oauthCallbackResultKinds.invalidRequest, 400)
+        }
+        if (error instanceof InvalidOAuthStateError) {
+          return sendOAuthCallbackResultPage(reply, oauthCallbackResultKinds.invalidState, 400)
+        }
+        if (error instanceof OAuthScopeMismatchError) {
+          return sendOAuthCallbackResultPage(reply, oauthCallbackResultKinds.scopeMismatch, 502)
+        }
+        if (error instanceof SmartThingsTokenRequestError) {
+          return sendOAuthCallbackResultPage(
+            reply,
+            oauthCallbackResultKinds.tokenExchangeFailed,
+            502,
+          )
+        }
+        app.log.error("oauth.callback.failed")
+        return sendOAuthCallbackResultPage(reply, oauthCallbackResultKinds.unexpected, 500)
+      }
+    },
+  )
 }

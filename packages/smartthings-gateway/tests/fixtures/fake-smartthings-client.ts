@@ -10,6 +10,8 @@ export class FakeSmartThingsClient implements SmartThingsClient {
   readonly refreshGrants = new Map<string, TokenGrant>()
   readonly refreshedTokens: string[] = []
 
+  exchangeError: Error | null = null
+
   exchangeGrant: TokenGrant = {
     accessToken: "initial-access-token",
     expiresInSeconds: 86_400,
@@ -37,6 +39,9 @@ export class FakeSmartThingsClient implements SmartThingsClient {
 
   async exchangeCode(code: string): Promise<TokenGrant> {
     this.exchangedCodes.push(code)
+    if (this.exchangeError !== null) {
+      throw this.exchangeError
+    }
     return this.exchangeGrant
   }
 

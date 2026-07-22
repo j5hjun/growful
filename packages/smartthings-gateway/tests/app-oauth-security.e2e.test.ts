@@ -107,7 +107,10 @@ describe("SmartThings Gateway HTTP API", () => {
 
     // Then
     expect(denied.statusCode).toBe(400)
-    expect(replay.json()).toEqual({ error: "invalid_oauth_state" })
+    expect(denied.headers["content-type"]).toContain("text/html")
+    expect(replay.statusCode).toBe(400)
+    expect(replay.headers["content-type"]).toContain("text/html")
+    expect(replay.body).toContain("연결 요청을 다시 시작해 주세요")
     expect(fixture.client.exchangedCodes).toHaveLength(0)
   })
 })
