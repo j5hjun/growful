@@ -56,6 +56,8 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://gateway:gateway-test-password@127.0.0.1:5432/gateway_test
       - run: pnpm build
+      - name: Test rollback OAuth callback contract
+        run: node --test ../../deploy/smartthings-gateway/verify-rollback-oauth-callback.test.mjs
       - name: Test deployment rollback
         run: bash ../../deploy/smartthings-gateway/deploy.test.sh
       - name: Test production preflight
