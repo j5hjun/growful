@@ -94,6 +94,25 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body).toContain('<script src="/portal.js" defer></script>')
   })
 
+  it("renders a token-safe native fallback when the interaction script is unavailable", async () => {
+    // Given
+    const app = createFixture()
+
+    // When
+    const response = await app.inject({ method: "GET", url: "/manage" })
+
+    // Then
+    expect(response.statusCode).toBe(200)
+    expect(response.headers["cache-control"]).toBe("no-store")
+    expect(response.headers["content-security-policy"]).toContain("form-action 'self'")
+    expect(response.body).toContain(
+      '<form class="token-form" action="/manage#javascript-required" method="get"',
+    )
+    expect(response.body).toContain('id="growful-token" type="password"')
+    expect(response.body).not.toContain('name="growfulToken"')
+    expect(response.body).toContain('id="javascript-required" data-no-js-fallback')
+  })
+
   it("serves first-party privacy and terms documents", async () => {
     // Given
     const app = createFixture()
