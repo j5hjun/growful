@@ -7,8 +7,8 @@ const configuredSecret = z
   .min(1)
   .refine((value) => !value.startsWith("replace-with-"), "replace placeholder secrets")
 
-const httpsUrl = z.url().refine((value) => new URL(value).protocol === "https:", "use HTTPS")
 const smartThingsApiUrl = "https://api.smartthings.com"
+export const servicePolicyRevision = "2026-07-22"
 const smartThingsAuthorizationUrls = [
   "https://api.smartthings.com/oauth/authorize",
   "https://api.smartthings.com/v1/oauth/authorize",
@@ -31,9 +31,7 @@ const environmentSchema = z.object({
   PRIVATE_BETA_INVITES_JSON: z.string().optional(),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8_100),
   PUBLIC_OPERATOR_NAME: z.string().optional(),
-  PUBLIC_PRIVACY_POLICY_URL: z.string().optional(),
   PUBLIC_SUPPORT_EMAIL: z.string().optional(),
-  PUBLIC_TERMS_URL: z.string().optional(),
   REFRESH_BEFORE_EXPIRY_SECONDS: z.coerce.number().int().positive().default(3_600),
   REFRESH_CHECK_INTERVAL_SECONDS: z.coerce.number().int().min(1).max(300).default(300),
   REFRESH_LEASE_SECONDS: z.coerce.number().int().min(120).default(120),
@@ -56,9 +54,7 @@ const privateBetaAccessSchema = z.object({
 
 const disclosureSchema = z.object({
   PUBLIC_OPERATOR_NAME: z.string().trim().min(1).max(200),
-  PUBLIC_PRIVACY_POLICY_URL: httpsUrl,
   PUBLIC_SUPPORT_EMAIL: z.email(),
-  PUBLIC_TERMS_URL: httpsUrl,
 })
 
 const publicAccessSchema = z.object({
@@ -110,26 +106,30 @@ export type AppConfig = {
 export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
   const parsed = environmentSchema.parse(environment)
   const disclosure = disclosureSchema.parse(parsed)
+  const redirectUri = new URL(parsed.OAUTH_REDIRECT_URI)
+  const privacyPolicyUrl = new URL("/privacy", redirectUri)
+  const termsUrl = new URL("/terms", redirectUri)
   const disclosures: ServiceDisclosures = {
     operatorName: disclosure.PUBLIC_OPERATOR_NAME,
     policyVersion: createHash("sha256")
       .update(
         JSON.stringify({
           operatorName: disclosure.PUBLIC_OPERATOR_NAME,
-          privacyPolicyUrl: disclosure.PUBLIC_PRIVACY_POLICY_URL,
+          policyRevision: servicePolicyRevision,
+          privacyPolicyUrl: privacyPolicyUrl.toString(),
           serviceAccessMode: parsed.SERVICE_ACCESS_MODE,
           smartThingsApprovalReference: parsed.SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE ?? null,
           smartThingsApprovedAt: parsed.SMARTTHINGS_PUBLIC_USE_APPROVED_AT ?? null,
           supportEmail: disclosure.PUBLIC_SUPPORT_EMAIL,
-          termsUrl: disclosure.PUBLIC_TERMS_URL,
+          termsUrl: termsUrl.toString(),
           userConsentStatement: smartThingsPolicyConsentStatement,
         }),
         "utf8",
       )
       .digest("hex"),
-    privacyPolicyUrl: new URL(disclosure.PUBLIC_PRIVACY_POLICY_URL),
+    privacyPolicyUrl,
     supportEmail: disclosure.PUBLIC_SUPPORT_EMAIL,
-    termsUrl: new URL(disclosure.PUBLIC_TERMS_URL),
+    termsUrl,
   }
   const serviceAccess: ServiceAccess =
     parsed.SERVICE_ACCESS_MODE === "private_beta"
@@ -161,7 +161,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv): AppConfig {
     host: parsed.HOST,
     logLevel: parsed.LOG_LEVEL,
     port: parsed.PORT,
-    redirectUri: new URL(parsed.OAUTH_REDIRECT_URI),
+    redirectUri,
     refreshBeforeExpiryMs: parsed.REFRESH_BEFORE_EXPIRY_SECONDS * 1_000,
     refreshCheckIntervalMs: parsed.REFRESH_CHECK_INTERVAL_SECONDS * 1_000,
     refreshLeaseMs: parsed.REFRESH_LEASE_SECONDS * 1_000,

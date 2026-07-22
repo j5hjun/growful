@@ -21,6 +21,9 @@ export const auditActions = [
   "connection.unblock",
   "invite.issue",
   "invite.revoke",
+  "status.incident_open",
+  "status.incident_resolve",
+  "status.incident_update",
   "token.read",
   "token.refresh",
 ] as const

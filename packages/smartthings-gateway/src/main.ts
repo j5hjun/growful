@@ -18,8 +18,10 @@ import {
 } from "./http/smartthings-rate-limit-backoff.js"
 import { OAuthService } from "./oauth/oauth-service.js"
 import { startRefreshWorker } from "./oauth/refresh-worker.js"
+import { PostgresPrivateBetaInviteAccess } from "./private-beta/invite-access.js"
 import { startGatewayRuntime } from "./runtime.js"
 import { HttpSmartThingsClient } from "./smartthings/smartthings-client.js"
+import { PostgresServiceStatusManager } from "./status/postgres-service-status.js"
 import { createDatabase, runMigrations } from "./storage/database.js"
 import { PostgresOAuthStore } from "./storage/postgres-oauth-store.js"
 
@@ -41,6 +43,8 @@ async function main(): Promise<void> {
     const store = new AuditedOAuthStore({
       auditSink: new PostgresAuditSink({ database }),
       store: new PostgresOAuthStore({
+        configuredPrivateBetaInvites:
+          config.serviceAccess.mode === "private_beta" ? config.serviceAccess.invites : [],
         database,
         encryptionKeyBase64: config.encryptionKeyBase64,
       }),
@@ -52,13 +56,31 @@ async function main(): Promise<void> {
       redirectUri: config.redirectUri,
       tokenUrl: config.tokenUrl,
     })
+    const runtimeAccess =
+      config.serviceAccess.mode === "private_beta"
+        ? (() => {
+            const inviteAccess = new PostgresPrivateBetaInviteAccess({
+              configuredInvites: config.serviceAccess.invites,
+              database,
+            })
+            return {
+              oauthAccess: {
+                inviteAccess,
+                mode: config.serviceAccess.mode,
+                operatorName: config.serviceAccess.operatorName,
+                policyVersion: config.serviceAccess.policyVersion,
+                privacyPolicyUrl: config.serviceAccess.privacyPolicyUrl,
+                supportEmail: config.serviceAccess.supportEmail,
+                termsUrl: config.serviceAccess.termsUrl,
+              },
+              privateBetaAccess: inviteAccess,
+            }
+          })()
+        : { oauthAccess: config.serviceAccess, privateBetaAccess: null }
     const service = new OAuthService({
       accessPolicy: {
         policyVersion: config.serviceAccess.policyVersion,
-        privateBetaUsernames:
-          config.serviceAccess.mode === "private_beta"
-            ? config.serviceAccess.invites.map((invite) => invite.username)
-            : null,
+        privateBetaAccess: runtimeAccess.privateBetaAccess,
       },
       client,
       refreshBeforeExpiryMs: config.refreshBeforeExpiryMs,
@@ -77,12 +99,13 @@ async function main(): Promise<void> {
         level: config.logLevel,
         redact: ["req.headers.authorization", "req.headers.cookie"],
       },
-      oauthAccess: config.serviceAccess,
+      oauthAccess: runtimeAccess.oauthAccess,
       readinessProbe: new PostgresReadinessProbe({
         auditIntegrityProbe: auditIntegrityMonitor,
         database,
       }),
       redirectOrigin: config.redirectUri.origin,
+      serviceStatusSource: new PostgresServiceStatusManager(database),
       service,
       smartThingsAppId: config.smartThingsAppId,
     })

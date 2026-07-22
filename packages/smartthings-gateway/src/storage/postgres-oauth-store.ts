@@ -1,5 +1,6 @@
-import type { Kysely } from "kysely"
+import { type Kysely, sql } from "kysely"
 import {
+  type AuthorizationSaveTokensInput,
   type ConnectionAccessPolicy,
   type ConnectionAuthentication,
   InstalledAppIdSchema,
@@ -12,12 +13,16 @@ import {
   StaleRefreshClaimError,
   type StoredTokens,
 } from "../oauth/contracts.js"
+import type { PrivateBetaInvite } from "../private-beta/invite.js"
+import { getConfiguredPrivateBetaInviteGeneration } from "../private-beta/invite-access.js"
 import type { GrowfulTokenHash } from "../security/growful-token.js"
 import type { GatewayDatabase } from "./database.js"
+import { revokePostgresUnauthorizedConnections } from "./postgres-connection-access-policy.js"
 import { PostgresOAuthStateStore } from "./postgres-oauth-state-store.js"
 import { PostgresTokenCodec } from "./postgres-token-codec.js"
 
 export type PostgresOAuthStoreOptions = {
+  readonly configuredPrivateBetaInvites?: readonly PrivateBetaInvite[]
   readonly database: Kysely<GatewayDatabase>
   readonly encryptionKeyBase64: string
 }
@@ -31,11 +36,18 @@ export class UnexpectedTokenSourceError extends Error {
 }
 
 export class PostgresOAuthStore implements OAuthStore {
+  private readonly configuredPrivateBetaGenerations: ReadonlyMap<string, string>
   private readonly database: Kysely<GatewayDatabase>
   private readonly stateStore: PostgresOAuthStateStore
   private readonly tokenCodec: PostgresTokenCodec
 
   constructor(options: PostgresOAuthStoreOptions) {
+    this.configuredPrivateBetaGenerations = new Map(
+      options.configuredPrivateBetaInvites?.map((invite) => [
+        invite.username,
+        getConfiguredPrivateBetaInviteGeneration(invite),
+      ]),
+    )
     this.database = options.database
     this.stateStore = new PostgresOAuthStateStore(options.database)
     this.tokenCodec = new PostgresTokenCodec(options.encryptionKeyBase64)
@@ -44,7 +56,12 @@ export class PostgresOAuthStore implements OAuthStore {
   async authenticate(growfulTokenHash: GrowfulTokenHash) {
     const row = await this.database
       .selectFrom("smartThingsConnections")
-      .select(["installedAppId", "policyVersion", "privateBetaUsername"])
+      .select([
+        "installedAppId",
+        "policyVersion",
+        "privateBetaInviteGeneration",
+        "privateBetaUsername",
+      ])
       .where("growfulTokenHash", "=", growfulTokenHash)
       .executeTakeFirst()
     if (row === undefined || row.policyVersion === null) {
@@ -53,6 +70,7 @@ export class PostgresOAuthStore implements OAuthStore {
     return {
       installedAppId: InstalledAppIdSchema.parse(row.installedAppId),
       policyVersion: row.policyVersion,
+      privateBetaInviteGeneration: row.privateBetaInviteGeneration,
       privateBetaUsername: row.privateBetaUsername,
     } satisfies ConnectionAuthentication
   }
@@ -141,29 +159,7 @@ export class PostgresOAuthStore implements OAuthStore {
   }
 
   async revokeUnauthorizedConnections(accessPolicy: ConnectionAccessPolicy): Promise<number> {
-    const invalidConsent = await this.database
-      .deleteFrom("smartThingsConnections")
-      .where((expression) =>
-        expression.or([
-          expression("consentedAt", "is", null),
-          expression("policyVersion", "is", null),
-          expression("policyVersion", "!=", accessPolicy.policyVersion),
-        ]),
-      )
-      .executeTakeFirst()
-    if (accessPolicy.privateBetaUsernames === null) {
-      return Number(invalidConsent.numDeletedRows)
-    }
-    const inactiveInvite = await this.database
-      .deleteFrom("smartThingsConnections")
-      .where((expression) =>
-        expression.or([
-          expression("privateBetaUsername", "is", null),
-          expression("privateBetaUsername", "not in", accessPolicy.privateBetaUsernames),
-        ]),
-      )
-      .executeTakeFirst()
-    return Number(invalidConsent.numDeletedRows + inactiveInvite.numDeletedRows)
+    return revokePostgresUnauthorizedConnections(this.database, accessPolicy)
   }
 
   async replaceGrowfulToken(
@@ -188,6 +184,32 @@ export class PostgresOAuthStore implements OAuthStore {
     await this.stateStore.save(stateHash, expiresAt, authorization)
   }
 
+  async saveAuthorizationTokensIfAccessActive(
+    input: AuthorizationSaveTokensInput,
+  ): Promise<StoredTokens | null> {
+    const username = input.authorization.privateBetaUsername
+    if (username === null) {
+      return input.authorization.privateBetaInviteGeneration === null
+        ? this.saveAuthorizationTokens(input, this.database)
+        : null
+    }
+    const expectedGeneration = input.authorization.privateBetaInviteGeneration
+    if (expectedGeneration === null) return null
+    return this.database.transaction().execute(async (transaction) => {
+      await sql`select pg_advisory_xact_lock(hashtextextended(${username}, 0))`.execute(transaction)
+      const storedInvite = await transaction
+        .selectFrom("privateBetaInvites")
+        .select(["generationId", "revokedAt"])
+        .where("username", "=", username)
+        .executeTakeFirst()
+      const active =
+        storedInvite === undefined
+          ? this.configuredPrivateBetaGenerations.get(username) === expectedGeneration
+          : storedInvite.revokedAt === null && storedInvite.generationId === expectedGeneration
+      return active ? this.saveAuthorizationTokens(input, transaction) : null
+    })
+  }
+
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {
     switch (input.source) {
       case "authorization":
@@ -200,7 +222,8 @@ export class PostgresOAuthStore implements OAuthStore {
   }
 
   private async saveAuthorizationTokens(
-    input: Extract<SaveTokensInput, { readonly source: "authorization" }>,
+    input: AuthorizationSaveTokensInput,
+    database: Kysely<GatewayDatabase> = this.database,
   ): Promise<StoredTokens> {
     const row = {
       ...this.tokenCodec.createTokenRow(input, null),
@@ -208,9 +231,10 @@ export class PostgresOAuthStore implements OAuthStore {
       growfulTokenCreatedAt: input.growfulTokenCreatedAt,
       growfulTokenHash: input.growfulTokenHash,
       policyVersion: input.authorization.policyVersion,
+      privateBetaInviteGeneration: input.authorization.privateBetaInviteGeneration,
       privateBetaUsername: input.authorization.privateBetaUsername,
     }
-    const saved = await this.database
+    const saved = await database
       .insertInto("smartThingsConnections")
       .values(row)
       .onConflict((conflict) => conflict.column("installedAppId").doUpdateSet(row))

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto"
+import type { PrivateBetaInviteAccess } from "../private-beta/invite-access.js"
 import {
   type GrowfulToken,
   generateGrowfulToken,
@@ -44,7 +45,7 @@ export type AuthorizationCompletion = {
 }
 
 export type OAuthServiceOptions = {
-  readonly accessPolicy?: ConnectionAccessPolicy
+  readonly accessPolicy?: OAuthServiceAccessPolicy
   readonly client: SmartThingsClient
   readonly growfulTokenGenerator?: () => GrowfulToken
   readonly now?: () => Date
@@ -54,8 +55,13 @@ export type OAuthServiceOptions = {
   readonly store: OAuthStore
 }
 
+export type OAuthServiceAccessPolicy = {
+  readonly policyVersion: string
+  readonly privateBetaAccess: PrivateBetaInviteAccess | null
+}
+
 export class OAuthService {
-  private readonly accessPolicy: ConnectionAccessPolicy
+  private readonly accessPolicy: OAuthServiceAccessPolicy
   private readonly growfulTokenGenerator: () => GrowfulToken
   private readonly now: () => Date
   private readonly refreshService: OAuthRefreshService
@@ -64,7 +70,7 @@ export class OAuthService {
   constructor(private readonly options: OAuthServiceOptions) {
     this.accessPolicy = options.accessPolicy ?? {
       policyVersion: "test-policy",
-      privateBetaUsernames: null,
+      privateBetaAccess: null,
     }
     this.growfulTokenGenerator = options.growfulTokenGenerator ?? generateGrowfulToken
     this.now = options.now ?? (() => new Date())
@@ -80,25 +86,22 @@ export class OAuthService {
 
   async authenticate(growfulToken: GrowfulToken): Promise<InstalledAppId | null> {
     const authentication = await this.options.store.authenticate(hashGrowfulToken(growfulToken))
-    if (
-      authentication === null ||
-      authentication.policyVersion !== this.accessPolicy.policyVersion ||
-      (this.accessPolicy.privateBetaUsernames !== null &&
-        (authentication.privateBetaUsername === null ||
-          !this.accessPolicy.privateBetaUsernames.includes(authentication.privateBetaUsername)))
-    ) {
+    if (authentication === null || !(await this.isAuthorizationActive(authentication))) {
       return null
     }
     return authentication.installedAppId
   }
 
   async startAuthorization(authorization: Omit<OAuthAuthorization, "consentedAt">): Promise<URL> {
-    if (!this.isAuthorizationActive(authorization)) {
+    if (!(await this.isAuthorizationActive(authorization))) {
       throw new InvalidOAuthStateError()
     }
     const state = this.stateGenerator()
     const now = this.now()
-    const storedAuthorization: OAuthAuthorization = { ...authorization, consentedAt: now }
+    const storedAuthorization: OAuthAuthorization = {
+      ...authorization,
+      consentedAt: now,
+    }
     await this.options.store.saveState(
       this.hashState(state),
       new Date(now.getTime() + oauthStateLifetimeMs),
@@ -109,14 +112,14 @@ export class OAuthService {
 
   async completeAuthorization(code: string, state: string): Promise<AuthorizationCompletion> {
     const authorization = await this.consumeState(state)
-    if (!this.isAuthorizationActive(authorization)) {
+    if (!(await this.isAuthorizationActive(authorization))) {
       throw new InvalidOAuthStateError()
     }
     const grant = await this.options.client.exchangeCode(code)
     ensureOAuthScopesWithin(grant.scopes, authorization.requestedScopes)
     const issuedAt = this.now()
     const growfulToken = this.growfulTokenGenerator()
-    const tokens = await this.options.store.saveTokens({
+    const tokens = await this.options.store.saveAuthorizationTokensIfAccessActive({
       grant,
       growfulTokenCreatedAt: issuedAt,
       growfulTokenHash: hashGrowfulToken(growfulToken),
@@ -124,6 +127,9 @@ export class OAuthService {
       authorization,
       source: "authorization",
     })
+    if (tokens === null) {
+      throw new InvalidOAuthStateError()
+    }
     return { connection: this.toConnectionStatus(tokens), growfulToken }
   }
 
@@ -140,7 +146,14 @@ export class OAuthService {
   }
 
   async revokeUnauthorizedConnections(): Promise<number> {
-    return this.options.store.revokeUnauthorizedConnections(this.accessPolicy)
+    const accessPolicy: ConnectionAccessPolicy = {
+      policyVersion: this.accessPolicy.policyVersion,
+      privateBetaUsernames:
+        this.accessPolicy.privateBetaAccess === null
+          ? null
+          : await this.accessPolicy.privateBetaAccess.listActiveUsernames(),
+    }
+    return this.options.store.revokeUnauthorizedConnections(accessPolicy)
   }
 
   async rotateGrowfulToken(installedAppId: InstalledAppId): Promise<GrowfulToken> {
@@ -198,19 +211,35 @@ export class OAuthService {
     return consumed
   }
 
-  private isAuthorizationActive(
-    authorization: Pick<OAuthAuthorization, "policyVersion" | "privateBetaUsername">,
-  ): boolean {
-    if (authorization.policyVersion !== this.accessPolicy.policyVersion) {
-      return false
-    }
-    if (this.accessPolicy.privateBetaUsernames === null) {
-      return authorization.privateBetaUsername === null
-    }
+  private async isAuthorizationActive(
+    authorization: Pick<
+      OAuthAuthorization,
+      "policyVersion" | "privateBetaInviteGeneration" | "privateBetaUsername"
+    >,
+  ): Promise<boolean> {
+    const access = await this.resolveAuthorizationAccess(authorization)
     return (
-      authorization.privateBetaUsername !== null &&
-      this.accessPolicy.privateBetaUsernames.includes(authorization.privateBetaUsername)
+      access !== null &&
+      access.privateBetaInviteGeneration === authorization.privateBetaInviteGeneration
     )
+  }
+
+  private async resolveAuthorizationAccess(
+    authorization: Pick<OAuthAuthorization, "policyVersion" | "privateBetaUsername">,
+  ): Promise<{ readonly privateBetaInviteGeneration: string | null } | null> {
+    if (authorization.policyVersion !== this.accessPolicy.policyVersion) {
+      return null
+    }
+    if (this.accessPolicy.privateBetaAccess === null) {
+      return authorization.privateBetaUsername === null
+        ? { privateBetaInviteGeneration: null }
+        : null
+    }
+    if (authorization.privateBetaUsername === null) return null
+    const invite = await this.accessPolicy.privateBetaAccess.resolveActiveInvite(
+      authorization.privateBetaUsername,
+    )
+    return invite === null ? null : { privateBetaInviteGeneration: invite.generation }
   }
 
   private hashState(state: string) {

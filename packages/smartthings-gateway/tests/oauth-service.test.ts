@@ -6,6 +6,10 @@ import {
   OAuthScopeMismatchError,
   OAuthService,
 } from "../src/oauth/oauth-service.js"
+import {
+  ConfiguredPrivateBetaInviteAccess,
+  getConfiguredPrivateBetaInviteGeneration,
+} from "../src/private-beta/invite-access.js"
 import { hashGrowfulToken } from "../src/security/growful-token.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
@@ -41,6 +45,7 @@ describe("OAuthService", () => {
       consentedAt: now,
       expiresAt: new Date(now.getTime() - 1),
       policyVersion: "test-policy",
+      privateBetaInviteGeneration: null,
       privateBetaUsername: null,
       requestedScopes: ["r:devices:$"],
     })
@@ -48,6 +53,7 @@ describe("OAuthService", () => {
       consentedAt: now,
       expiresAt: new Date(now.getTime() + 1),
       policyVersion: "test-policy",
+      privateBetaInviteGeneration: null,
       privateBetaUsername: null,
       requestedScopes: ["r:devices:$"],
     })
@@ -88,9 +94,15 @@ describe("OAuthService", () => {
     const client = new FakeSmartThingsClient()
     client.exchangeGrant = { ...client.exchangeGrant, scopes: ["r:devices:*"] }
     const store = new MemoryOAuthStore()
+    const configuredInvite = { passwordHash: "0".repeat(64), username: "private-user" }
     const createPrivateService = (privateBetaUsernames: readonly string[]) =>
       new OAuthService({
-        accessPolicy: { policyVersion: "test-policy", privateBetaUsernames },
+        accessPolicy: {
+          policyVersion: "test-policy",
+          privateBetaAccess: new ConfiguredPrivateBetaInviteAccess(
+            privateBetaUsernames.map((username) => ({ passwordHash: "0".repeat(64), username })),
+          ),
+        },
         client,
         growfulTokenGenerator: () => testGrowfulToken(1),
         now: () => now,
@@ -101,7 +113,11 @@ describe("OAuthService", () => {
       })
     const activeService = createPrivateService(["private-user"])
     const authorizationUrl = await activeService.startAuthorization(
-      oauthAuthorization(["r:devices:*"], "private-user"),
+      oauthAuthorization(
+        ["r:devices:*"],
+        "private-user",
+        getConfiguredPrivateBetaInviteGeneration(configuredInvite),
+      ),
     )
     await activeService.completeAuthorization(
       "authorization-code",
@@ -123,9 +139,15 @@ describe("OAuthService", () => {
     const client = new FakeSmartThingsClient()
     client.exchangeGrant = { ...client.exchangeGrant, scopes: ["r:devices:*"] }
     const store = new MemoryOAuthStore()
+    const configuredInvite = { passwordHash: "0".repeat(64), username: "private-user" }
     const createPrivateService = (privateBetaUsernames: readonly string[]) =>
       new OAuthService({
-        accessPolicy: { policyVersion: "test-policy", privateBetaUsernames },
+        accessPolicy: {
+          policyVersion: "test-policy",
+          privateBetaAccess: new ConfiguredPrivateBetaInviteAccess(
+            privateBetaUsernames.map((username) => ({ passwordHash: "0".repeat(64), username })),
+          ),
+        },
         client,
         now: () => now,
         refreshBeforeExpiryMs: 60 * 60 * 1_000,
@@ -134,7 +156,11 @@ describe("OAuthService", () => {
         store,
       })
     const authorizationUrl = await createPrivateService(["private-user"]).startAuthorization(
-      oauthAuthorization(["r:devices:*"], "private-user"),
+      oauthAuthorization(
+        ["r:devices:*"],
+        "private-user",
+        getConfiguredPrivateBetaInviteGeneration(configuredInvite),
+      ),
     )
 
     // When
@@ -147,6 +173,32 @@ describe("OAuthService", () => {
     await expect(completion).rejects.toBeInstanceOf(InvalidOAuthStateError)
     expect(client.exchangedCodes).toEqual([])
     await expect(store.getTokens(client.exchangeGrant.installedAppId)).resolves.toBeNull()
+  })
+
+  it("rejects authorization start when the authenticated invitation generation is stale", async () => {
+    // Given
+    const client = new FakeSmartThingsClient()
+    const store = new MemoryOAuthStore()
+    const service = new OAuthService({
+      accessPolicy: {
+        policyVersion: "test-policy",
+        privateBetaAccess: new ConfiguredPrivateBetaInviteAccess([
+          { passwordHash: "0".repeat(64), username: "private-user" },
+        ]),
+      },
+      client,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+      refreshLeaseMs: 60_000,
+      store,
+    })
+    const staleAuthorization = oauthAuthorization(["r:devices:*"], "private-user")
+
+    // When
+    const start = service.startAuthorization(staleAuthorization)
+
+    // Then
+    await expect(start).rejects.toBeInstanceOf(InvalidOAuthStateError)
+    expect(store.states.size).toBe(0)
   })
 
   it("reauthorizes the same connection and invalidates its previous Growful token", async () => {

@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify"
 import type { ServiceDisclosures } from "../config.js"
-import { getPrivateBetaInviteUsername, type PrivateBetaInvite } from "./invite.js"
+import type { OAuthAuthorization } from "../oauth/contracts.js"
+import type { PrivateBetaInviteAccess } from "./invite-access.js"
 
 const maximumPrivateBetaFailures = 5
 const privateBetaFailureWindowMs = 60_000
@@ -15,10 +16,15 @@ export type OAuthAccessPolicy = ServiceDisclosures &
   (
     | { readonly mode: "public" }
     | {
-        readonly invites: readonly PrivateBetaInvite[]
+        readonly inviteAccess: PrivateBetaInviteAccess
         readonly mode: "private_beta"
       }
   )
+
+type OAuthRequestAccess = Pick<
+  OAuthAuthorization,
+  "privateBetaInviteGeneration" | "privateBetaUsername"
+>
 
 class PrivateBetaAccessRateLimiter {
   private readonly buckets = new Map<string, PrivateBetaFailureBucket>()
@@ -59,18 +65,31 @@ class PrivateBetaAccessRateLimiter {
 }
 
 export class PrivateBetaAccessGate {
+  private readonly authenticatedRequests = new WeakMap<FastifyRequest, OAuthRequestAccess>()
   private readonly rateLimiter = new PrivateBetaAccessRateLimiter()
 
   constructor(private readonly access: OAuthAccessPolicy) {}
 
-  getUsername(request: FastifyRequest): string | null | undefined {
-    return this.access.mode === "public"
-      ? null
-      : (getPrivateBetaInviteUsername(request.headers.authorization, this.access.invites) ??
-          undefined)
+  async getAuthorizationAccess(request: FastifyRequest): Promise<OAuthRequestAccess | undefined> {
+    const cachedAccess = this.authenticatedRequests.get(request)
+    if (cachedAccess !== undefined) return cachedAccess
+    const requestAccess =
+      this.access.mode === "public"
+        ? { privateBetaInviteGeneration: null, privateBetaUsername: null }
+        : await this.access.inviteAccess.authenticate(request.headers.authorization)
+    if (requestAccess === null) return undefined
+    const authorizationAccess =
+      "username" in requestAccess
+        ? {
+            privateBetaInviteGeneration: requestAccess.generation,
+            privateBetaUsername: requestAccess.username,
+          }
+        : requestAccess
+    this.authenticatedRequests.set(request, authorizationAccess)
+    return authorizationAccess
   }
 
-  require(request: FastifyRequest, reply: FastifyReply) {
+  async require(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | undefined> {
     if (this.access.mode === "public") {
       return undefined
     }
@@ -83,7 +102,7 @@ export class PrivateBetaAccessGate {
         .status(429)
         .send({ error: "private_beta_access_rate_limited" as const })
     }
-    if (this.getUsername(request) !== undefined) {
+    if ((await this.getAuthorizationAccess(request)) !== undefined) {
       this.rateLimiter.recordSuccess(rateLimitKey)
       return undefined
     }

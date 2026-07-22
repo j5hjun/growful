@@ -119,6 +119,22 @@ Items still under investigation: [UNKNOWN ITEMS]
 규제기관/사용자 통지 결정, 법률 근거, 결정자와 시각을 남깁니다. 이 문서는 법률 자문을 대신하지
 않으며 실제 관할·연락망 placeholder가 채워져야 합니다.
 
+### 공개 상태 공지
+
+서비스 가용성 공지는 승인 ticket과 운영자 ID를 사용해 `manage-status` CLI로 열고, 조사·관찰
+상태를 갱신한 뒤 해결합니다. 제목과 메시지는 즉시 `/status`에 공개되므로 token, secret,
+사용자 식별자와 공격자가 악용할 수 있는 내부 인프라 상세를 넣지 않습니다. 게시 전 사고
+지휘자와 사용자 공지 담당자가 확인 가능한 사실, 사용자 영향과 다음 조치만 검토합니다.
+
+```sh
+node dist/manage-status.js open degraded "TITLE" "MESSAGE" OPERATOR_ID TICKET_ID
+node dist/manage-status.js update INCIDENT_ID monitoring "MESSAGE" OPERATOR_ID TICKET_ID
+node dist/manage-status.js resolve INCIDENT_ID "MESSAGE" OPERATOR_ID TICKET_ID
+```
+
+이 기능은 공개 이력과 운영자 감사기록을 제공하지만 이메일·푸시 같은 개별 사용자 통지,
+SmartThings·규제기관 통지, 자동 장애 탐지 또는 접수 증빙을 대신하지 않습니다.
+
 ## 7. 시나리오별 조치
 
 ### Growful token 노출

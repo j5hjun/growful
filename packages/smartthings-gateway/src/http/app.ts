@@ -14,6 +14,7 @@ import {
   InvalidSmartThingsWebhookSignatureError,
   type SmartThingsWebhookKeyProvider,
 } from "../smartthings/webhook-verifier.js"
+import type { ServiceStatusSource } from "../status/service-status.js"
 import {
   getGrowfulConnectionId,
   registerGrowfulAuthentication,
@@ -57,6 +58,7 @@ export type AppOptions = {
   readonly oauthAccess: OAuthAccessPolicy
   readonly readinessProbe: ReadinessProbe
   readonly redirectOrigin: string
+  readonly serviceStatusSource: ServiceStatusSource
   readonly service: OAuthService
   readonly smartThingsAppId: string
   readonly smartThingsConfirmationRequester?: SmartThingsConfirmationRequester
@@ -110,7 +112,12 @@ export function createApp(options: AppOptions): FastifyInstance {
       }
     }
   })
-  registerPortalRoutes(app, options.oauthAccess)
+  registerPortalRoutes(
+    app,
+    options.oauthAccess,
+    options.readinessProbe,
+    options.serviceStatusSource,
+  )
   app.register(async (rateLimitedApp) => {
     await registerHttpRateLimiting(rateLimitedApp)
     registerOAuthRoutes(rateLimitedApp, {

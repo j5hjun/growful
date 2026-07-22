@@ -1,0 +1,99 @@
+import { z } from "zod"
+import { hashAuditValue } from "./audit/audit-event.js"
+import {
+  generatePrivateBetaInviteCredential,
+  PrivateBetaUsernameSchema,
+  parsePrivateBetaInvites,
+} from "./private-beta/invite.js"
+import { PostgresPrivateBetaInviteManager } from "./private-beta/invite-management.js"
+import { createDatabase, runMigrations } from "./storage/database.js"
+
+const environmentSchema = z.object({
+  DATABASE_URL: z.url(),
+  PRIVATE_BETA_INVITES_JSON: z.string().min(1).optional(),
+})
+const operatorIdentitySchema = z.string().trim().min(1).max(200)
+const ticketIdentitySchema = z.string().trim().min(1).max(200)
+const commandSchema = z.union([
+  z.tuple([z.literal("list")]),
+  z.tuple([
+    z.literal("issue"),
+    PrivateBetaUsernameSchema,
+    operatorIdentitySchema,
+    ticketIdentitySchema,
+  ]),
+  z.tuple([
+    z.literal("revoke"),
+    PrivateBetaUsernameSchema,
+    operatorIdentitySchema,
+    ticketIdentitySchema,
+  ]),
+])
+
+async function main(): Promise<void> {
+  const environment = environmentSchema.parse(process.env)
+  const command = commandSchema.parse(process.argv.slice(2))
+  const database = createDatabase(environment.DATABASE_URL)
+  try {
+    await runMigrations(database)
+    const manager = new PostgresPrivateBetaInviteManager({
+      configuredInvites:
+        environment.PRIVATE_BETA_INVITES_JSON === undefined
+          ? []
+          : parsePrivateBetaInvites(environment.PRIVATE_BETA_INVITES_JSON),
+      database,
+    })
+    switch (command[0]) {
+      case "list": {
+        console.log(JSON.stringify({ reviews: await manager.listReviews() }))
+        return
+      }
+      case "issue": {
+        const [, username, operatorId, ticketId] = command
+        const credential = generatePrivateBetaInviteCredential()
+        const changed = await manager.issue({
+          actorIdHash: hashAuditValue(operatorId),
+          passwordHash: credential.passwordHash,
+          ticketHash: hashAuditValue(ticketId),
+          username,
+        })
+        console.log(
+          JSON.stringify({
+            action: "issue",
+            changed,
+            ...(changed ? { credentialSecret: credential.secret } : {}),
+            username,
+          }),
+        )
+        return
+      }
+      case "revoke": {
+        const [, username, operatorId, ticketId] = command
+        const result = await manager.revoke({
+          actorIdHash: hashAuditValue(operatorId),
+          ticketHash: hashAuditValue(ticketId),
+          username,
+        })
+        console.log(JSON.stringify({ action: "revoke", ...result, username }))
+        return
+      }
+      default: {
+        const unreachable: never = command
+        return unreachable
+      }
+    }
+  } finally {
+    await database.destroy()
+  }
+}
+
+// no-excuse-ok: catch — process boundary emits only the error class to avoid secret leakage.
+main().catch((error: unknown) => {
+  console.error(
+    JSON.stringify({
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      event: "invite.management.failed",
+    }),
+  )
+  process.exitCode = 1
+})

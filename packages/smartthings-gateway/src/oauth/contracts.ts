@@ -52,12 +52,14 @@ export type ConnectionAccessPolicy = {
 export type ConnectionAuthentication = {
   readonly installedAppId: InstalledAppId
   readonly policyVersion: string
+  readonly privateBetaInviteGeneration: string | null
   readonly privateBetaUsername: string | null
 }
 
 export type OAuthAuthorization = {
   readonly consentedAt: Date
   readonly policyVersion: string
+  readonly privateBetaInviteGeneration: string | null
   readonly privateBetaUsername: string | null
   readonly requestedScopes: readonly SmartThingsScope[]
 }
@@ -95,6 +97,11 @@ export type SaveTokensInput =
       readonly source: "refresh"
     }
 
+export type AuthorizationSaveTokensInput = Extract<
+  SaveTokensInput,
+  { readonly source: "authorization" }
+>
+
 export type RefreshFailure = {
   readonly claimId: RefreshClaimId
   readonly installedAppId: InstalledAppId
@@ -121,6 +128,9 @@ export interface OAuthStore {
     expiresAt: Date,
     authorization: OAuthAuthorization,
   ): Promise<void>
+  saveAuthorizationTokensIfAccessActive(
+    input: AuthorizationSaveTokensInput,
+  ): Promise<StoredTokens | null>
   saveTokens(input: SaveTokensInput): Promise<StoredTokens>
 }
 

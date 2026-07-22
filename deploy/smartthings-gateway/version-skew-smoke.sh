@@ -22,6 +22,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The rollback image still requires its legacy policy URL inputs. The candidate
+# environment below removes them before the new image starts.
 printf '%s\n' \
   'DATABASE_URL=postgresql://gateway:gateway-version-skew-password@postgres:5432/smartthings_gateway' \
   'GATEWAY_API_TOKEN=gateway-version-skew-api-token-32-characters' \
@@ -32,6 +34,12 @@ printf '%s\n' \
   'OAUTH_CLIENT_ID=gateway-version-skew-client' \
   'OAUTH_CLIENT_SECRET=gateway-version-skew-secret' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
+  'SERVICE_ACCESS_MODE=private_beta' \
+  'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-version-skew-beta","passwordHash":"5ddf8b91211dce99eacd9d5923f5a6fa47c4943630855c921a50c47f111aa2ee"}]' \
+  'PUBLIC_OPERATOR_NAME=Growful version skew' \
+  'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
+  'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
+  'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
   'SMARTTHINGS_API_URL=https://api.smartthings.com' \
   'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
   'SMARTTHINGS_APP_ID=gateway-version-skew-app' \
@@ -100,27 +108,21 @@ docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
   --command "insert into oauth_tokens (installed_app_id, access_token_ciphertext, refresh_token_ciphertext, expires_at, scope, token_type, updated_at) values ('legacy-installed-app', 'legacy-access', 'legacy-refresh', now() + interval '1 day', 'r:devices:*', 'bearer', now())" \
   >/dev/null
 grep --extended-regexp --invert-match \
-  '^(SMARTTHINGS_SCOPES|GATEWAY_API_TOKEN|OAUTH_ADMIN_TOKEN)=' \
+  '^(SMARTTHINGS_SCOPES|GATEWAY_API_TOKEN|OAUTH_ADMIN_TOKEN|PUBLIC_PRIVACY_POLICY_URL|PUBLIC_TERMS_URL)=' \
   "$environment_file" >"$candidate_environment_file"
-cp "$candidate_environment_file" "$rollback_environment_file"
-printf '\n%s\n' \
-  'SERVICE_ACCESS_MODE=private_beta' \
-  'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-version-skew-beta","passwordHash":"5ddf8b91211dce99eacd9d5923f5a6fa47c4943630855c921a50c47f111aa2ee"}]' \
-  'PUBLIC_OPERATOR_NAME=Growful version skew' \
-  'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
-  'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
-  'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
-  >>"$candidate_environment_file"
-printf '\n%s\n' \
-  'SMARTTHINGS_SCOPES=r:devices:$' \
-  'GATEWAY_API_TOKEN=gateway-version-skew-api-token-32-characters' \
-  'OAUTH_ADMIN_TOKEN=gateway-version-skew-admin-token-32-characters' \
+grep --extended-regexp --invert-match '^SMARTTHINGS_SCOPES=' \
+  "$environment_file" >"$rollback_environment_file"
+printf '\n%s\n' 'SMARTTHINGS_SCOPES=r:devices:$' \
   >>"$rollback_environment_file"
 test "$(grep --count '^SMARTTHINGS_SCOPES=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^GATEWAY_API_TOKEN=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^OAUTH_ADMIN_TOKEN=' "$candidate_environment_file" || true)" = "0"
+test "$(grep --count '^PUBLIC_PRIVACY_POLICY_URL=' "$candidate_environment_file" || true)" = "0"
+test "$(grep --count '^PUBLIC_TERMS_URL=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$candidate_environment_file" || true)" = "1"
-test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$rollback_environment_file" || true)" = "0"
+test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$rollback_environment_file" || true)" = "1"
+test "$(grep --count '^PUBLIC_PRIVACY_POLICY_URL=' "$rollback_environment_file" || true)" = "1"
+test "$(grep --count '^PUBLIC_TERMS_URL=' "$rollback_environment_file" || true)" = "1"
 test "$(grep --fixed-strings --line-regexp --count 'SMARTTHINGS_SCOPES=r:devices:$' "$rollback_environment_file")" = "1"
 
 run_migrations "$candidate_image" "$candidate_environment_file"

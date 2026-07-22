@@ -1,4 +1,5 @@
 import {
+  type AuthorizationSaveTokensInput,
   type ConnectionAccessPolicy,
   type ConnectionAuthentication,
   type InstalledAppId,
@@ -23,6 +24,7 @@ type StoredOAuthState = {
   readonly consentedAt: Date
   readonly expiresAt: Date
   readonly policyVersion: string
+  readonly privateBetaInviteGeneration: string | null
   readonly privateBetaUsername: string | null
   readonly requestedScopes: readonly SmartThingsScope[]
 }
@@ -31,6 +33,7 @@ type MemoryConnection = {
   growfulTokenCreatedAt: Date
   growfulTokenHash: GrowfulTokenHash
   policyVersion: string
+  privateBetaInviteGeneration: string | null
   privateBetaUsername: string | null
   refreshClaimedUntil: Date | null
   refreshClaimId: RefreshClaimId | null
@@ -52,6 +55,7 @@ export class MemoryOAuthStore implements OAuthStore {
         return {
           installedAppId,
           policyVersion: connection.policyVersion,
+          privateBetaInviteGeneration: connection.privateBetaInviteGeneration,
           privateBetaUsername: connection.privateBetaUsername,
         }
       }
@@ -157,6 +161,12 @@ export class MemoryOAuthStore implements OAuthStore {
     this.states.set(stateHash, { ...authorization, expiresAt })
   }
 
+  async saveAuthorizationTokensIfAccessActive(
+    input: AuthorizationSaveTokensInput,
+  ): Promise<StoredTokens> {
+    return this.saveTokens(input)
+  }
+
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {
     const existing = this.connections.get(input.grant.installedAppId)
     if (input.source === "refresh" && existing?.refreshClaimId !== input.claimId) {
@@ -186,6 +196,10 @@ export class MemoryOAuthStore implements OAuthStore {
         input.source === "authorization"
           ? input.authorization.policyVersion
           : (existing?.policyVersion ?? "test-policy"),
+      privateBetaInviteGeneration:
+        input.source === "authorization"
+          ? input.authorization.privateBetaInviteGeneration
+          : (existing?.privateBetaInviteGeneration ?? null),
       privateBetaUsername:
         input.source === "authorization"
           ? input.authorization.privateBetaUsername
@@ -200,7 +214,11 @@ export class MemoryOAuthStore implements OAuthStore {
   seedTokens(
     tokens: StoredTokens,
     growfulTokenHash: GrowfulTokenHash = hashGrowfulToken(memoryStoreGrowfulToken),
-    identity: { readonly policyVersion: string; readonly privateBetaUsername: string | null } = {
+    identity: {
+      readonly policyVersion: string
+      readonly privateBetaInviteGeneration?: string | null
+      readonly privateBetaUsername: string | null
+    } = {
       policyVersion: "test-policy",
       privateBetaUsername: null,
     },
@@ -209,6 +227,7 @@ export class MemoryOAuthStore implements OAuthStore {
       growfulTokenCreatedAt: new Date("2026-07-19T00:00:00.000Z"),
       growfulTokenHash,
       policyVersion: identity.policyVersion,
+      privateBetaInviteGeneration: identity.privateBetaInviteGeneration ?? null,
       privateBetaUsername: identity.privateBetaUsername,
       refreshClaimedUntil: null,
       refreshClaimId: null,

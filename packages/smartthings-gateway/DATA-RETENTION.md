@@ -76,6 +76,7 @@ SmartThings 측 credential의 확실한 회수가 필요한 경우 공식 설치
 | 관리자 audit | 해시된 주체·승인 ticket, 고정 목적 사유, 가명 대상, 차단·해제, 결과, UTC 시각 | token/secret/원시 운영자 ID·원시 ticket·`installedAppId` | 1/2년 법적 검토, 권한 변경 3년 목표 | `[AUDIT_PROVIDER]` | 차단·해제 append-only 기록 구현; 중앙 신원 귀속·외부 불변 보존 미구현 |
 | CI/registry | actor, workflow, commit, digest, 결과 | secret 출력 | `[CI_LOG_RETENTION]` | GitHub/`[OWNER]` | 실제 설정 미검증 |
 | incident evidence | 최소 forensic 자료, hash, chain of custody | 불필요한 원문 확산 | `[LEGAL_RETENTION]` | `[SECURITY_OWNER]` | 미확정 |
+| 공개 서비스 공지 | 사건 제목·영향·공개 메시지·시작/갱신/해결 시각 | token, secret, 사용자 식별자, 내부 인프라 상세 | `[STATUS_HISTORY_RETENTION]` | `[COMMS_OWNER/DB_OWNER]` | PostgreSQL 공지·해결 이력과 공개 페이지 구현, 보존기간 미확정 |
 
 보존기간을 길게 설정하는 것만으로 적법·안전하지 않습니다. 목적 종료 시 삭제하고, 법적 보존
 필요가 있는 경우 접근 제한과 보존 중지 사유·해제일을 기록합니다.

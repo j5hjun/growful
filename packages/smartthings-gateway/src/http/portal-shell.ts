@@ -1,4 +1,4 @@
-const portalPageNames = ["home", "manage"] as const
+const portalPageNames = ["home", "status", "manage", "support", "privacy", "terms"] as const
 
 export type PortalPageName = (typeof portalPageNames)[number]
 
@@ -32,12 +32,20 @@ export const portalSharedStyles = `
 
 export function renderPortalNavigation(currentPage: PortalPageName): string {
   const homeCurrent = currentPage === "home" ? ' aria-current="page"' : ""
+  const statusCurrent = currentPage === "status" ? ' aria-current="page"' : ""
   const manageCurrent = currentPage === "manage" ? ' aria-current="page"' : ""
+  const supportCurrent = currentPage === "support" ? ' aria-current="page"' : ""
+  const privacyCurrent = currentPage === "privacy" ? ' aria-current="page"' : ""
+  const termsCurrent = currentPage === "terms" ? ' aria-current="page"' : ""
   return `<nav class="site-nav" aria-label="주요 메뉴">
       <a class="brand" href="/">Growful <span>SmartThings Gateway</span></a>
       <ul class="nav-list">
         <li><a href="/"${homeCurrent}>서비스 안내</a></li>
+        <li><a href="/status"${statusCurrent}>상태</a></li>
         <li><a href="/manage"${manageCurrent}>연결 관리</a></li>
+        <li><a href="/support"${supportCurrent}>지원 안내</a></li>
+        <li><a href="/privacy"${privacyCurrent}>개인정보 처리방침</a></li>
+        <li><a href="/terms"${termsCurrent}>이용약관</a></li>
       </ul>
     </nav>`
 }

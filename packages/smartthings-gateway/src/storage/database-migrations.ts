@@ -1,6 +1,7 @@
 import { type Kysely, sql } from "kysely"
 import { type Migration, type MigrationProvider, Migrator } from "kysely/migration"
 import { ensurePrivateBetaInviteStorage } from "../private-beta/invite-schema.js"
+import { ensureServiceStatusStorage } from "../status/service-status-schema.js"
 import { ensureAuditEventStorage } from "./audit-schema.js"
 import type { GatewayDatabase } from "./database.js"
 
@@ -65,6 +66,9 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   await sql`alter table oauth_states add column if not exists private_beta_username text`.execute(
     database,
   )
+  await sql`alter table oauth_states add column if not exists private_beta_invite_generation text`.execute(
+    database,
+  )
   await sql`create index if not exists oauth_states_expires_at_index on oauth_states (expires_at)`.execute(
     database,
   )
@@ -77,6 +81,7 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
       growful_token_created_at timestamptz not null,
       consented_at timestamptz,
       policy_version varchar(64),
+      private_beta_invite_generation text,
       private_beta_username text,
       growful_quota_window_started_at timestamptz,
       growful_quota_accepted_count integer not null default 0,
@@ -106,6 +111,9 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
   await sql`alter table smart_things_connections add column if not exists private_beta_username text`.execute(
     database,
   )
+  await sql`alter table smart_things_connections add column if not exists private_beta_invite_generation text`.execute(
+    database,
+  )
   await sql`alter table smart_things_connections add column if not exists growful_quota_window_started_at timestamptz`.execute(
     database,
   )
@@ -128,6 +136,7 @@ export async function runMigrations(database: Kysely<GatewayDatabase>): Promise<
     database,
   )
   await ensurePrivateBetaInviteStorage(database)
+  await ensureServiceStatusStorage(database)
   await ensureAuditEventStorage(database)
   await database.deleteFrom("oauthTokens").execute()
 }

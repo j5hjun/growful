@@ -14,7 +14,7 @@ fi
 image_name="${image_reference%@sha256:*}"
 image_digest="sha256:${image_reference##*@sha256:}"
 
-for command_name in base64 curl docker flock head stat tr; do
+for command_name in base64 cp curl docker flock head rm sleep stat tr; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'required command is missing: %s\n' "$command_name" >&2
     exit 1
@@ -84,9 +84,7 @@ done
 service_access_mode="$(sed -n 's/^SERVICE_ACCESS_MODE=//p' "$environment_file")"
 access_keys=(
   PUBLIC_OPERATOR_NAME
-  PUBLIC_PRIVACY_POLICY_URL
   PUBLIC_SUPPORT_EMAIL
-  PUBLIC_TERMS_URL
 )
 case "$service_access_mode" in
   private_beta)
@@ -111,53 +109,11 @@ for key in "${access_keys[@]}"; do
   fi
 done
 
-privacy_policy_url="$(sed -n 's/^PUBLIC_PRIVACY_POLICY_URL=//p' "$environment_file")"
-terms_url="$(sed -n 's/^PUBLIC_TERMS_URL=//p' "$environment_file")"
 support_email="$(sed -n 's/^PUBLIC_SUPPORT_EMAIL=//p' "$environment_file")"
-if [[ ! "$privacy_policy_url" =~ ^https:// ]] || [[ ! "$terms_url" =~ ^https:// ]]; then
-  printf 'service policy URLs must use HTTPS\n' >&2
-  exit 1
-fi
 if [[ ! "$support_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
   printf 'PUBLIC_SUPPORT_EMAIL must be an email address\n' >&2
   exit 1
 fi
-
-verify_policy_document() {
-  local document_name="$1"
-  local document_url="$2"
-  local probe_result http_code content_type effective_url
-  if ! probe_result="$(curl \
-    --fail \
-    --silent \
-    --show-error \
-    --location \
-    --max-time 10 \
-    --proto '=https' \
-    --proto-redir '=https' \
-    --output /dev/null \
-    --write-out $'%{http_code}\t%{content_type}\t%{url_effective}' \
-    "$document_url")"; then
-    printf '%s policy document is not reachable over HTTPS\n' "$document_name" >&2
-    exit 1
-  fi
-  IFS=$'\t' read -r http_code content_type effective_url <<<"$probe_result"
-  if [[ ! "$http_code" =~ ^2[0-9]{2}$ ]] || [[ ! "$effective_url" =~ ^https:// ]]; then
-    printf '%s policy document did not resolve to an HTTPS success response\n' \
-      "$document_name" >&2
-    exit 1
-  fi
-  case "$content_type" in
-    text/html* | application/xhtml+xml*) ;;
-    *)
-      printf '%s policy document must return HTML\n' "$document_name" >&2
-      exit 1
-      ;;
-  esac
-}
-
-verify_policy_document privacy "$privacy_policy_url"
-verify_policy_document terms "$terms_url"
 
 if [[ "$service_access_mode" == 'public' ]]; then
   approved_at="$(sed -n 's/^SMARTTHINGS_PUBLIC_USE_APPROVED_AT=//p' "$environment_file")"

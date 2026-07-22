@@ -13,9 +13,7 @@ const requiredEnvironment = {
     },
   ]),
   PUBLIC_OPERATOR_NAME: "Growful",
-  PUBLIC_PRIVACY_POLICY_URL: "https://smartthings.growful.click/privacy",
   PUBLIC_SUPPORT_EMAIL: "support@growful.click",
-  PUBLIC_TERMS_URL: "https://smartthings.growful.click/terms",
   SMARTTHINGS_APP_ID: "smartthings-app-id",
   TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
 }
@@ -105,11 +103,9 @@ describe("loadConfig", () => {
     ).toThrow()
   })
 
-  it("rejects private beta mode without operator and policy disclosures", () => {
+  it("rejects private beta mode without operator and support disclosures", () => {
     expect(() => loadConfig({ ...requiredEnvironment, PUBLIC_OPERATOR_NAME: undefined })).toThrow()
-    expect(() =>
-      loadConfig({ ...requiredEnvironment, PUBLIC_PRIVACY_POLICY_URL: undefined }),
-    ).toThrow()
+    expect(() => loadConfig({ ...requiredEnvironment, PUBLIC_SUPPORT_EMAIL: undefined })).toThrow()
   })
 
   it("rejects duplicate private beta usernames", () => {
@@ -140,9 +136,7 @@ describe("loadConfig", () => {
       ...requiredEnvironment,
       PRIVATE_BETA_INVITES_JSON: undefined,
       PUBLIC_OPERATOR_NAME: "Growful",
-      PUBLIC_PRIVACY_POLICY_URL: "https://smartthings.growful.click/privacy",
       PUBLIC_SUPPORT_EMAIL: "support@growful.click",
-      PUBLIC_TERMS_URL: "https://smartthings.growful.click/terms",
       SERVICE_ACCESS_MODE: "public",
       SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: "smartthings-case-123",
       SMARTTHINGS_PUBLIC_USE_APPROVED_AT: "2026-07-22",
@@ -160,25 +154,17 @@ describe("loadConfig", () => {
     })
   })
 
-  it("rejects public mode when approval or HTTPS policy facts are missing", () => {
+  it("rejects public mode when approval facts are missing", () => {
     const publicEnvironment = {
       ...requiredEnvironment,
       PUBLIC_OPERATOR_NAME: "Growful",
-      PUBLIC_PRIVACY_POLICY_URL: "https://smartthings.growful.click/privacy",
       PUBLIC_SUPPORT_EMAIL: "support@growful.click",
-      PUBLIC_TERMS_URL: "https://smartthings.growful.click/terms",
       SERVICE_ACCESS_MODE: "public",
       SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: "smartthings-case-123",
       SMARTTHINGS_PUBLIC_USE_APPROVED_AT: "2026-07-22",
     }
     expect(() =>
       loadConfig({ ...publicEnvironment, SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: undefined }),
-    ).toThrow()
-    expect(() =>
-      loadConfig({
-        ...publicEnvironment,
-        PUBLIC_PRIVACY_POLICY_URL: "http://example.test/privacy",
-      }),
     ).toThrow()
   })
 })

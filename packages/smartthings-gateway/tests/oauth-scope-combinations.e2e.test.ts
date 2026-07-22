@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { createApp } from "../src/http/app.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import type { SmartThingsScope } from "../src/oauth/smartthings-scope.js"
+import { emptyServiceStatusSource } from "../src/status/service-status.js"
 import { allowAllGrowfulAbuseControl } from "./fixtures/abuse-control.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
@@ -141,6 +142,7 @@ function createFixture() {
     oauthAccess: publicOAuthAccess,
     readinessProbe: readyProbe,
     redirectOrigin,
+    serviceStatusSource: emptyServiceStatusSource,
     service,
     smartThingsAppId: "growful-app",
   })

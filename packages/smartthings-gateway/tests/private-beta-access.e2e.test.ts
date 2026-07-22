@@ -2,15 +2,26 @@ import { afterEach, describe, expect, it } from "vitest"
 import { type AppOptions, createApp } from "../src/http/app.js"
 import { InstalledAppIdSchema, type StoredTokens } from "../src/oauth/contracts.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
+import { ConfiguredPrivateBetaInviteAccess } from "../src/private-beta/invite-access.js"
+import { emptyServiceStatusSource } from "../src/status/service-status.js"
 import { allowAllGrowfulAbuseControl } from "./fixtures/abuse-control.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore, memoryStoreGrowfulToken } from "./fixtures/memory-oauth-store.js"
-import { privateBetaOAuthAccess } from "./fixtures/oauth-access.js"
+import { privateBetaOAuthAccess, testDisclosures } from "./fixtures/oauth-access.js"
 import { readyProbe } from "./fixtures/readiness.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const authorizationOrigin = "https://api.smartthings.test"
 const redirectOrigin = "https://smartthings.growful.click"
+
+class CountingConfiguredPrivateBetaInviteAccess extends ConfiguredPrivateBetaInviteAccess {
+  authenticateCalls = 0
+
+  override async authenticate(authorization: string | undefined) {
+    this.authenticateCalls += 1
+    return super.authenticate(authorization)
+  }
+}
 
 function storedTokens(): StoredTokens {
   return {
@@ -29,10 +40,7 @@ function createFixture(oauthAccess: AppOptions["oauthAccess"]) {
   const service = new OAuthService({
     accessPolicy: {
       policyVersion: oauthAccess.policyVersion,
-      privateBetaUsernames:
-        oauthAccess.mode === "private_beta"
-          ? oauthAccess.invites.map((invite) => invite.username)
-          : null,
+      privateBetaAccess: oauthAccess.mode === "private_beta" ? oauthAccess.inviteAccess : null,
     },
     client: new FakeSmartThingsClient(),
     now: () => new Date("2026-07-19T00:00:00.000Z"),
@@ -47,6 +55,7 @@ function createFixture(oauthAccess: AppOptions["oauthAccess"]) {
     oauthAccess,
     readinessProbe: readyProbe,
     redirectOrigin,
+    serviceStatusSource: emptyServiceStatusSource,
     service,
     smartThingsAppId: "growful-app",
   })
@@ -106,6 +115,38 @@ describe("Private-beta OAuth access HTTP surface", () => {
     expect(fixture.store.states.size).toBe(1)
     expect(authenticatedGet.statusCode).toBe(200)
     expect(authenticatedPost.statusCode).toBe(302)
+  })
+
+  it("authenticates a private beta OAuth POST only once", async () => {
+    // Given
+    const inviteAccess = new CountingConfiguredPrivateBetaInviteAccess([
+      {
+        passwordHash: "dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42",
+        username: "private-user",
+      },
+    ])
+    const fixture = createFixture({
+      ...testDisclosures,
+      inviteAccess,
+      mode: "private_beta",
+    })
+    const authorization = `Basic ${Buffer.from("private-user:private-password").toString("base64")}`
+
+    // When
+    const response = await fixture.app.inject({
+      headers: {
+        authorization,
+        "content-type": "application/x-www-form-urlencoded",
+        origin: redirectOrigin,
+      },
+      method: "POST",
+      payload: "deviceRange=all&devicePermissions=read&policyConsent=accepted",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.statusCode).toBe(302)
+    expect(inviteAccess.authenticateCalls).toBe(1)
   })
 
   it("rejects a private beta user removed from the invitation list", async () => {

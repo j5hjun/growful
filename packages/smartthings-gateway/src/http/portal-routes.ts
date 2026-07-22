@@ -1,8 +1,13 @@
 import type { FastifyInstance, FastifyReply } from "fastify"
+import type { ReadinessProbe } from "../health/readiness.js"
+import type { ServiceStatusSource } from "../status/service-status.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
 import { portalClientScript } from "./portal-client.js"
 import { renderPortalHome } from "./portal-home.js"
 import { renderPortalManagement } from "./portal-manage.js"
+import { renderPortalPolicy } from "./portal-policy.js"
+import { renderPortalStatus } from "./portal-status.js"
+import { renderPortalSupport } from "./portal-support.js"
 
 const sharedContentSecurityPolicy =
   "default-src 'none'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
@@ -21,7 +26,12 @@ function sendPortalPage(reply: FastifyReply, html: string, contentSecurityPolicy
     .send(html)
 }
 
-export function registerPortalRoutes(app: FastifyInstance, access: OAuthAccessPolicy): void {
+export function registerPortalRoutes(
+  app: FastifyInstance,
+  access: OAuthAccessPolicy,
+  readinessProbe: ReadinessProbe,
+  serviceStatusSource: ServiceStatusSource,
+): void {
   const isPublic = access.mode === "public"
   app.get("/robots.txt", async (_request, reply) =>
     reply
@@ -39,6 +49,25 @@ export function registerPortalRoutes(app: FastifyInstance, access: OAuthAccessPo
       renderPortalManagement(access),
       `${sharedContentSecurityPolicy}; script-src 'self'`,
     ),
+  )
+  app.get("/status", async (_request, reply) => {
+    const readinessStatus = await readinessProbe.check()
+    const incidents =
+      readinessStatus === "ready" ? await serviceStatusSource.listPublicIncidents() : null
+    return sendPortalPage(
+      reply,
+      renderPortalStatus(readinessStatus, incidents, access),
+      sharedContentSecurityPolicy,
+    )
+  })
+  app.get("/privacy", async (_request, reply) =>
+    sendPortalPage(reply, renderPortalPolicy("privacy", access), sharedContentSecurityPolicy),
+  )
+  app.get("/terms", async (_request, reply) =>
+    sendPortalPage(reply, renderPortalPolicy("terms", access), sharedContentSecurityPolicy),
+  )
+  app.get("/support", async (_request, reply) =>
+    sendPortalPage(reply, renderPortalSupport(access), sharedContentSecurityPolicy),
   )
   app.get("/portal.js", async (_request, reply) =>
     reply

@@ -17,6 +17,7 @@ export class PostgresOAuthStateStore {
         "consentedAt",
         "expiresAt",
         "policyVersion",
+        "privateBetaInviteGeneration",
         "privateBetaUsername",
         "requestedScopes",
       ])
@@ -33,6 +34,7 @@ export class PostgresOAuthStateStore {
     return {
       consentedAt: state.consentedAt,
       policyVersion: state.policyVersion,
+      privateBetaInviteGeneration: state.privateBetaInviteGeneration,
       privateBetaUsername: state.privateBetaUsername,
       requestedScopes: SmartThingsScopeStringSchema.parse(state.requestedScopes),
     }
@@ -58,6 +60,7 @@ export class PostgresOAuthStateStore {
         consentedAt: authorization.consentedAt,
         expiresAt,
         policyVersion: authorization.policyVersion,
+        privateBetaInviteGeneration: authorization.privateBetaInviteGeneration,
         privateBetaUsername: authorization.privateBetaUsername,
         requestedScopes,
         stateHash,
@@ -67,6 +70,7 @@ export class PostgresOAuthStateStore {
           consentedAt: authorization.consentedAt,
           expiresAt,
           policyVersion: authorization.policyVersion,
+          privateBetaInviteGeneration: authorization.privateBetaInviteGeneration,
           privateBetaUsername: authorization.privateBetaUsername,
           requestedScopes,
         }),
