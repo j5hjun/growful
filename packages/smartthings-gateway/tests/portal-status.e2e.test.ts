@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { ServiceIncidentIdSchema } from "../src/status/service-status.js"
 import { createGatewayAppFixture } from "./fixtures/gateway-app-fixture.js"
 import { publicOAuthAccess } from "./fixtures/oauth-access.js"
@@ -7,6 +7,7 @@ import { publicOAuthAccess } from "./fixtures/oauth-access.js"
 const apps: FastifyInstance[] = []
 
 afterEach(async () => {
+  vi.useRealTimers()
   await Promise.all(apps.splice(0).map((app) => app.close()))
 })
 
@@ -103,6 +104,74 @@ describe("Growful portal status document", () => {
     expect(response.body).toContain('data-service-status="unavailable"')
     expect(response.body).toContain("현재 일반 요청을 처리할 준비가 되지 않았습니다")
     expect(response.body).not.toContain('data-service-status="ready"')
+  })
+
+  it("records the check time before the asynchronous readiness probe", async () => {
+    // Given
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-22T01:00:00.000Z"))
+    const { app } = createGatewayAppFixture({
+      apps,
+      readinessProbe: {
+        check: async () => {
+          vi.setSystemTime(new Date("2026-07-22T01:30:00.000Z"))
+          return "ready"
+        },
+      },
+    })
+
+    // When
+    const response = await app.inject({ method: "GET", url: "/status" })
+
+    // Then
+    expect(response.body).toContain('<time datetime="2026-07-22T01:00:00.000Z">')
+    expect(response.body).not.toContain('<time datetime="2026-07-22T01:30:00.000Z">')
+  })
+
+  it("separates active incidents from resolved history", async () => {
+    // Given
+    const startedAt = new Date("2026-07-22T01:00:00.000Z")
+    const { app } = createGatewayAppFixture({
+      apps,
+      serviceStatusSource: {
+        listPublicIncidents: async () => [
+          {
+            id: ServiceIncidentIdSchema.parse("00000000-0000-4000-8000-000000000001"),
+            impact: "degraded",
+            message: "Active incident message",
+            resolvedAt: null,
+            startedAt,
+            status: "monitoring",
+            title: "Active incident title",
+            updatedAt: startedAt,
+          },
+          {
+            id: ServiceIncidentIdSchema.parse("00000000-0000-4000-8000-000000000002"),
+            impact: "outage",
+            message: "Resolved incident message",
+            resolvedAt: startedAt,
+            startedAt,
+            status: "resolved",
+            title: "Resolved incident title",
+            updatedAt: startedAt,
+          },
+        ],
+      },
+    })
+
+    // When
+    const response = await app.inject({ method: "GET", url: "/status" })
+
+    // Then
+    const activeStart = response.body.indexOf('data-status-section="active-incidents"')
+    const resolvedStart = response.body.indexOf('data-status-section="resolved-incidents"')
+    const scopeStart = response.body.indexOf('data-status-section="scope"')
+    const activeSection = response.body.slice(activeStart, resolvedStart)
+    const resolvedSection = response.body.slice(resolvedStart, scopeStart)
+    expect(activeSection).toContain("Active incident title")
+    expect(activeSection).not.toContain("Resolved incident title")
+    expect(resolvedSection).toContain("Resolved incident title")
+    expect(resolvedSection).not.toContain("Active incident title")
   })
 
   it("renders operator-published incidents without interpreting their HTML", async () => {

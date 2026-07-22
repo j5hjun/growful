@@ -13,6 +13,33 @@ import { renderPortalSupport } from "./portal-support.js"
 
 const sharedContentSecurityPolicy =
   "default-src 'none'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+const machinePathPrefixes = [
+  "/connection",
+  "/healthz",
+  "/readyz",
+  "/smartthings/webhook",
+  "/token/rotate",
+  "/v1",
+] as const
+
+function isMachinePath(rawUrl: string): boolean {
+  const pathname = new URL(rawUrl, "http://localhost").pathname
+  return machinePathPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  )
+}
+
+function acceptsHtml(accept: string | undefined): boolean {
+  if (accept === undefined) return false
+  return accept.split(",").some((mediaRange) => {
+    const [mediaType, ...parameters] = mediaRange
+      .split(";")
+      .map((part) => part.trim().toLowerCase())
+    if (mediaType !== "text/html" && mediaType !== "application/xhtml+xml") return false
+    const quality = parameters.find((parameter) => parameter.startsWith("q="))
+    return quality === undefined || Number(quality.slice(2)) > 0
+  })
+}
 
 function decoratePortalPage(
   html: string,
@@ -76,12 +103,13 @@ export function registerPortalRoutes(
     ),
   )
   app.get("/status", async (_request, reply) => {
+    const checkedAt = new Date()
     const readinessStatus = await readinessProbe.check()
     const incidents =
       readinessStatus === "ready" ? await serviceStatusSource.listPublicIncidents() : null
     return sendPortalPage(
       reply,
-      renderPortalStatus(readinessStatus, incidents, access),
+      renderPortalStatus(readinessStatus, incidents, access, checkedAt),
       sharedContentSecurityPolicy,
       "status",
       access,
@@ -123,7 +151,12 @@ export function registerPortalRoutes(
       .send(portalClientScript),
   )
   app.setNotFoundHandler((request, reply) => {
-    if (request.method === "GET" && request.headers.accept?.includes("text/html") === true) {
+    reply.header("Vary", "Accept")
+    if (
+      request.method === "GET" &&
+      !isMachinePath(request.url) &&
+      acceptsHtml(request.headers.accept)
+    ) {
       return sendPortalPage(
         reply.status(404),
         renderPortalNotFound(),

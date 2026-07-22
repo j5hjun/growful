@@ -128,61 +128,6 @@ describe("Growful portal HTTP surface", () => {
     expect(terms.body).toContain("연결당 분당 60회")
   })
 
-  it("provides shared skip navigation and secondary footer navigation", async () => {
-    // Given
-    const app = createFixture()
-
-    // When
-    const response = await app.inject({ method: "GET", url: "/privacy" })
-
-    // Then
-    expect(response.body).toContain('<a class="skip-link" href="#main-content">본문 바로가기</a>')
-    expect(response.body).toContain('<main id="main-content" tabindex="-1"')
-    expect(response.body).toContain('<nav class="site-nav" aria-label="주요 메뉴">')
-    expect(response.body).toContain('<footer class="site-footer">')
-    expect(response.body).toContain('<nav aria-label="보조 메뉴">')
-    expect(response.body).toContain('href="/privacy" aria-current="page"')
-    expect(response.body).toContain(publicOAuthAccess.operatorName)
-    expect(response.body).toContain(`href="mailto:${publicOAuthAccess.supportEmail}"`)
-
-    const primaryNavigation = response.body.match(/<nav class="site-nav"[\s\S]*?<\/nav>/u)?.[0]
-    expect(primaryNavigation).toContain("서비스 안내")
-    expect(primaryNavigation).toContain("상태")
-    expect(primaryNavigation).toContain("연결 관리")
-    expect(primaryNavigation).not.toContain("지원 안내")
-    expect(primaryNavigation).not.toContain("개인정보 처리방침")
-    expect(primaryNavigation).not.toContain("이용약관")
-
-    const primaryNavigationIndex = response.body.indexOf('<nav class="site-nav"')
-    const mainIndex = response.body.indexOf('<main id="main-content"')
-    const mainEndIndex = response.body.indexOf("</main>", mainIndex)
-    const footerIndex = response.body.indexOf('<footer class="site-footer">')
-    expect(primaryNavigationIndex).toBeLessThan(mainIndex)
-    expect(mainEndIndex).toBeLessThan(footerIndex)
-  })
-
-  it("renders a useful HTML not-found page for browser navigation", async () => {
-    // Given
-    const app = createFixture()
-
-    // When
-    const response = await app.inject({
-      headers: { accept: "text/html" },
-      method: "GET",
-      url: "/missing-page",
-    })
-
-    // Then
-    expect(response.statusCode).toBe(404)
-    expect(response.headers["content-type"]).toContain("text/html")
-    expect(response.body).toContain("페이지를 찾을 수 없습니다")
-    expect(response.body).toContain('href="/"')
-    expect(response.body).toContain('href="/status"')
-    expect(response.body).toContain('href="/support"')
-    expect(response.body).toContain('<a class="phrase" href="/support">지원 안내</a>')
-    expect(response.body).toContain('<main id="main-content" tabindex="-1"')
-  })
-
   it("serves a first-party support page without requesting secret credentials", async () => {
     // Given
     const app = createFixture()

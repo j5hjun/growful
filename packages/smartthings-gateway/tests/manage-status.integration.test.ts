@@ -4,6 +4,7 @@ import { promisify } from "node:util"
 import { sql } from "kysely"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { z } from "zod"
+import { PostgresServiceStatusManager } from "../src/status/postgres-service-status.js"
 import { ServiceIncidentIdSchema } from "../src/status/service-status.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 
@@ -55,6 +56,59 @@ async function openSyntheticIncident(suffix: string) {
 }
 
 describe("Service status operator CLI", () => {
+  it("returns the newest fifty resolved incidents", async () => {
+    // Given
+    const rollbackSignal = new Error("rollback service status ordering fixture")
+    let didRollback = false
+
+    // When
+    try {
+      await database.transaction().execute(async (transaction) => {
+        await transaction.deleteFrom("serviceIncidentUpdates").execute()
+        await transaction.deleteFrom("serviceIncidents").execute()
+        const incidents = Array.from({ length: 51 }, (_, index) => {
+          const occurredAt = new Date(Date.UTC(2026, 6, 1, 0, 0, index))
+          return {
+            impact: "degraded" as const,
+            incidentId: randomUUID(),
+            resolvedAt: occurredAt,
+            startedAt: occurredAt,
+            title: `Resolved ordering incident ${index.toString().padStart(2, "0")}`,
+          }
+        })
+        await transaction.insertInto("serviceIncidents").values(incidents).execute()
+        await transaction
+          .insertInto("serviceIncidentUpdates")
+          .values(
+            incidents.map((incident) => ({
+              incidentId: incident.incidentId,
+              message: `Resolved ordering update ${incident.title}`,
+              occurredAt: incident.resolvedAt,
+              status: "resolved" as const,
+            })),
+          )
+          .execute()
+
+        const publicIncidents = await new PostgresServiceStatusManager(
+          transaction,
+        ).listPublicIncidents()
+        expect(publicIncidents).toHaveLength(50)
+        expect(publicIncidents[0]?.title).toBe("Resolved ordering incident 50")
+        expect(publicIncidents.at(-1)?.title).toBe("Resolved ordering incident 01")
+        expect(publicIncidents.map((incident) => incident.title)).not.toContain(
+          "Resolved ordering incident 00",
+        )
+        throw rollbackSignal
+      })
+    } catch (error) {
+      if (error !== rollbackSignal) throw error
+      didRollback = true
+    }
+
+    // Then
+    expect(didRollback).toBe(true)
+  })
+
   it("opens a public incident while hashing operator evidence", async () => {
     // Given
     const suffix = randomUUID()

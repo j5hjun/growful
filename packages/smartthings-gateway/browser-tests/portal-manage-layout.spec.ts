@@ -88,6 +88,7 @@ test("management states share a flexible three-row frame and fixed action slot",
     element.removeAttribute("hidden")
   })
   const successFrame = await form.boundingBox()
+  const successAction = await submit.boundingBox()
 
   // Then
   expect(grid.rows).toHaveLength(3)
@@ -99,12 +100,14 @@ test("management states share a flexible three-row frame and fixed action slot",
     errorAction === null ||
     inputBox === null ||
     revealBox === null ||
-    successFrame === null
+    successFrame === null ||
+    successAction === null
   ) {
     throw new Error("Management frame has a missing browser layout box")
   }
   expect(Math.abs(loadingAction.y - initialAction.y)).toBeLessThanOrEqual(8)
   expect(Math.abs(errorAction.y - initialAction.y)).toBeLessThanOrEqual(8)
+  expect(Math.abs(successAction.y - initialAction.y)).toBeLessThanOrEqual(8)
   expect(successFrame.x).toBeCloseTo(initialFrame.x, 2)
   expect(successFrame.y).toBeCloseTo(initialFrame.y, 2)
   expect(successFrame.width).toBeCloseTo(initialFrame.width, 2)
