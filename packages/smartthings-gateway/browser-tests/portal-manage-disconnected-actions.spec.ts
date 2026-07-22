@@ -77,6 +77,7 @@ for (const viewport of managementViewports) {
       const input = page.locator("#growful-token")
       const submit = page.locator("[data-token-submit]")
       const initialAction = await submit.boundingBox()
+      const initialScroll = await page.evaluate(() => scrollY)
       await input.fill(firstToken)
       await submit.click()
       await expect(page.locator("[data-portal-status]")).toBeVisible()
@@ -94,6 +95,7 @@ for (const viewport of managementViewports) {
       await expect(submit).toHaveText("연결 상태 확인")
       await expect(page.locator("[data-reconnect]")).toBeVisible()
       const disconnectedAction = await submit.boundingBox()
+      const disconnectedScroll = await page.evaluate(() => scrollY)
       const hasHorizontalOverflow = await page.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       )
@@ -101,8 +103,8 @@ for (const viewport of managementViewports) {
         throw new Error("Management status action has a missing browser layout box")
       }
       expect(
-        Math.abs(disconnectedAction.y - initialAction.y),
-        `initial action y=${initialAction.y}, disconnected action y=${disconnectedAction.y}`,
+        Math.abs(disconnectedAction.y + disconnectedScroll - initialAction.y - initialScroll),
+        `initial document y=${initialAction.y + initialScroll}, disconnected document y=${disconnectedAction.y + disconnectedScroll}`,
       ).toBeLessThanOrEqual(8)
       expect(hasHorizontalOverflow).toBe(false)
 

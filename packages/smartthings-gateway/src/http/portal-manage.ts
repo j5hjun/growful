@@ -112,7 +112,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .manage-header { padding: var(--space-8) 0 var(--space-4); }
     .manage-header p:last-child { margin-bottom: 0; }
     .connection-panel { margin-top: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); word-break: keep-all; overflow-wrap: normal; }
-    .token-form { display: grid; grid-template-rows: auto 1fr auto; min-block-size: calc(24rem + var(--space-4)); padding: var(--space-6); }
+    .token-form { display: grid; grid-template-rows: auto 1fr auto; min-block-size: calc(24rem + var(--space-12)); padding: var(--space-6); }
     .token-entry-region > label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-bold); }
     .token-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
     input { width: 100%; min-height: var(--action-height); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); background: var(--surface); color: var(--text); font: inherit; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
