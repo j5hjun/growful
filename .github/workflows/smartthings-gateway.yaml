@@ -49,6 +49,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: packages/smartthings-gateway/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm check
       - run: pnpm test:integration
         env:

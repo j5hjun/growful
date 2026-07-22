@@ -21,43 +21,50 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       <h1><span class="phrase">Growful 토큰으로</span> <span class="phrase">연결 확인</span></h1>
       <p>토큰은 이 탭을 닫거나 새로고침하면 사라집니다. 브라우저 저장소에는 보관하지 않습니다.</p>
     </header>
-    <form class="token-form" action="/manage" method="post" data-portal-token-form>
-      <label for="growful-token">Growful 토큰</label>
-      <div class="token-entry">
-        <input id="growful-token" name="growfulToken" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="grw_st_[A-Za-z0-9_\\-]{43}" minlength="50" maxlength="50" aria-describedby="token-hint" required>
-        <button class="secondary reveal" type="button" data-token-visibility aria-controls="growful-token" aria-pressed="false">토큰 보기</button>
+    <form class="token-form" action="/manage" method="post" data-portal-token-form novalidate>
+      <div class="token-entry-region">
+        <label for="growful-token">Growful 토큰</label>
+        <div class="token-entry">
+          <input id="growful-token" name="growfulToken" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="grw_st_[A-Za-z0-9_\\-]{43}" minlength="50" maxlength="50" aria-describedby="token-hint" required>
+          <button class="secondary reveal" type="button" data-token-visibility aria-controls="growful-token" aria-pressed="false">토큰 보기</button>
+        </div>
+        <p class="hint" id="token-hint">연결 완료 화면에서 한 번 표시된 <span class="phrase"><code>grw_st_</code> 토큰을</span> 붙여 넣으세요.</p>
       </div>
-      <p class="hint" id="token-hint">연결 완료 화면에서 한 번 표시된 <span class="phrase"><code>grw_st_</code> 토큰을</span> 붙여 넣으세요.</p>
-      <button class="primary" type="submit" data-token-submit>연결 상태 확인</button>
+      <div class="connection-state-region">
+        <p class="feedback" data-portal-feedback role="status" aria-live="polite" hidden></p>
+        <div class="error" data-portal-error role="alert" hidden><p data-portal-error-message></p></div>
+        <section class="connection-status" data-portal-status aria-labelledby="connection-title" tabindex="-1" hidden>
+          <div class="status-heading">
+            <div><p class="status-indicator" data-status-active>API 사용 가능</p><p class="status-indicator status-blocked" data-status-blocked hidden>API 접근 차단</p><h2 id="connection-title">SmartThings 연결 상태</h2></div>
+            <button class="secondary" type="button" data-forget-token>이 탭에서 토큰 지우기</button>
+          </div>
+          <dl>
+            <div><dt>토큰 만료 예정</dt><dd><time data-expires-at></time></dd></div>
+            <div><dt>마지막 자동 갱신</dt><dd><time data-refreshed-at></time></dd></div>
+            <div class="support-entry"><dt>지원 참조</dt><dd class="support-value"><output data-support-reference></output><button class="secondary compact" type="button" data-copy-support-reference>지원 참조 복사</button></dd></div>
+          </dl>
+          <section class="restricted-notice" data-blocked-notice role="alert" aria-labelledby="blocked-title" hidden>
+            <p class="eyebrow">API 접근 차단</p>
+            <h3 id="blocked-title">SmartThings API 요청이 차단되었습니다</h3>
+            <p data-block-reason></p>
+            <p>차단 적용: <time data-blocked-at></time></p>
+            <p>문의할 때 위 지원 참조를 함께 전달해 주세요. <a href="mailto:${supportEmail}">${supportEmail}</a></p>
+          </section>
+          <section class="scope-section" aria-labelledby="scope-title">
+            <h3 id="scope-title">승인된 권한</h3>
+            <ul data-scope-list></ul>
+          </section>
+          <div class="action-row status-actions">
+            <button class="secondary" type="button" data-rotate-token>Growful 토큰 교체</button>
+            <button class="destructive" type="button" data-disconnect>연결 해제</button>
+          </div>
+        </section>
+      </div>
+      <div class="connection-action-slot">
+        <button class="primary" type="submit" data-token-submit>연결 상태 확인</button>
+        <a class="action action-primary" href="/oauth/start" data-reconnect hidden>SmartThings 다시 연결</a>
+      </div>
     </form>
-    <p class="feedback" data-portal-feedback role="status" aria-live="polite" hidden></p>
-    <div class="error" data-portal-error role="alert" hidden><p data-portal-error-message></p><a href="/oauth/start" data-reconnect hidden>SmartThings 다시 연결</a></div>
-    <section class="connection-status" data-portal-status aria-labelledby="connection-title" tabindex="-1" hidden>
-      <div class="status-heading">
-        <div><p class="status-indicator" data-status-active>API 사용 가능</p><p class="status-indicator status-blocked" data-status-blocked hidden>API 접근 차단</p><h2 id="connection-title">SmartThings 연결 상태</h2></div>
-        <button class="secondary" type="button" data-forget-token>이 탭에서 토큰 지우기</button>
-      </div>
-      <dl>
-        <div><dt>토큰 만료 예정</dt><dd><time data-expires-at></time></dd></div>
-        <div><dt>마지막 자동 갱신</dt><dd><time data-refreshed-at></time></dd></div>
-        <div class="support-entry"><dt>지원 참조</dt><dd class="support-value"><output data-support-reference></output><button class="secondary compact" type="button" data-copy-support-reference>지원 참조 복사</button></dd></div>
-      </dl>
-      <section class="restricted-notice" data-blocked-notice role="alert" aria-labelledby="blocked-title" hidden>
-        <p class="eyebrow">API 접근 차단</p>
-        <h3 id="blocked-title">SmartThings API 요청이 차단되었습니다</h3>
-        <p data-block-reason></p>
-        <p>차단 적용: <time data-blocked-at></time></p>
-        <p>문의할 때 위 지원 참조를 함께 전달해 주세요. <a href="mailto:${supportEmail}">${supportEmail}</a></p>
-      </section>
-      <section class="scope-section" aria-labelledby="scope-title">
-        <h3 id="scope-title">승인된 권한</h3>
-        <ul data-scope-list></ul>
-      </section>
-      <div class="action-row status-actions">
-        <button class="secondary" type="button" data-rotate-token>Growful 토큰 교체</button>
-        <button class="destructive" type="button" data-disconnect>연결 해제</button>
-      </div>
-    </section>
     <section class="credential-output" data-rotated-token-section aria-labelledby="rotated-token-title" hidden>
       <p class="eyebrow">교체 완료</p>
       <h2 id="rotated-token-title">새 Growful 토큰</h2>
@@ -81,21 +88,23 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
     scriptSource: "/portal.js",
     styles: `${portalSharedStyles}
+    main.page-manage { align-self: start; }
     .manage-header { padding: var(--space-8) 0 var(--space-4); }
     .manage-header p:last-child { margin-bottom: 0; }
-    .token-form { margin-top: var(--space-6); padding: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); }
-    .token-form > label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-bold); }
+    .token-form { display: grid; grid-template-rows: auto 1fr auto; min-block-size: 24rem; margin-top: var(--space-6); padding: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); word-break: keep-all; overflow-wrap: normal; }
+    .token-entry-region > label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-bold); }
     .token-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
     input { width: 100%; min-height: var(--action-height); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); background: var(--surface); color: var(--text); font: inherit; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
     .reveal { width: auto; white-space: nowrap; }
-    .hint { margin: var(--space-2) 0 var(--space-4); font-size: var(--font-small); }
+    .hint { margin: var(--space-2) 0 0; font-size: var(--font-small); }
     code, output { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
-    .feedback, .error { margin: var(--space-4) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-weight: var(--weight-bold); }
+    .connection-state-region { min-width: 0; padding-top: var(--space-4); }
+    .feedback, .error { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface); font-weight: var(--weight-bold); }
     .error p { margin: 0; color: var(--error); }
-    .error a { display: inline-block; margin-top: var(--space-2); color: var(--error); }
     .feedback { color: var(--success); }
     .error { color: var(--error); }
-    .connection-status, .credential-output { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
+    .connection-status { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+    .credential-output { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
     .connection-status:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .status-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
     .status-heading h2, .status-indicator { margin: 0; }
@@ -118,6 +127,8 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .scope-section ul { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
     .scope-section li { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-small); overflow-wrap: anywhere; }
     .status-actions { margin-top: var(--space-6); }
+    .connection-action-slot { align-self: end; padding-top: var(--space-4); }
+    .connection-action-slot > * { width: 100%; }
     .credential-output output { display: block; margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
     .credential-output output:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     dialog { width: min(var(--panel-max), calc(100% - var(--space-8))); padding: 0; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--text); box-shadow: 0 var(--space-2) var(--space-8) var(--shadow-panel); }
@@ -125,8 +136,8 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .dialog-content { padding: var(--space-6); }
     .dialog-content h2 { margin: 0 0 var(--space-3); }
     @media (max-width: 48rem) {
-      .token-entry, dl { grid-template-columns: 1fr; }
-      .reveal { width: 100%; }
+      dl { grid-template-columns: 1fr; }
+      .reveal { width: auto; }
       .status-heading { flex-direction: column; }
       .support-value { align-items: stretch; flex-direction: column; }
       button.compact { width: 100%; }

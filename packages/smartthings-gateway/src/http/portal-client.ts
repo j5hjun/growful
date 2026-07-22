@@ -15,6 +15,7 @@ function initializePortal(factories: PortalClientFactories): void {
   if (elements === null) return
   const contracts = factories.createContracts()
   const view = factories.createView(elements, contracts)
+  view.setActionState("initial")
   factories.bindInteractions(elements, contracts, view)
 }
 

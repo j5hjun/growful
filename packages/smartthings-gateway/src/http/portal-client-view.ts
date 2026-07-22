@@ -3,6 +3,8 @@
 import type { ConnectionStatus, PortalContracts } from "./portal-client-contracts.js"
 import type { PortalElements } from "./portal-client-elements.js"
 
+type PortalActionState = "connected" | "disconnected" | "error" | "initial" | "loading"
+
 export function createPortalView(elements: PortalElements, contracts: PortalContracts) {
   const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "long",
@@ -15,11 +17,41 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
     elements.feedback.hidden = false
   }
 
-  function showError(message: string, canReconnect = false): void {
+  function showError(message: string): void {
     elements.feedback.hidden = true
     elements.errorMessage.textContent = message
-    elements.reconnectAction.hidden = !canReconnect
     elements.errorBox.hidden = false
+  }
+
+  function clearMessages(): void {
+    elements.feedback.hidden = true
+    elements.errorBox.hidden = true
+  }
+
+  function setActionState(state: PortalActionState): void {
+    const disconnected = state === "disconnected"
+    elements.reconnectAction.hidden = !disconnected
+    elements.tokenSubmit.hidden = disconnected
+    elements.tokenSubmit.disabled = state === "loading"
+    switch (state) {
+      case "connected":
+        elements.tokenSubmit.textContent = "상태 다시 확인"
+        break
+      case "disconnected":
+        elements.reconnectAction.textContent = "SmartThings 다시 연결"
+        break
+      case "error":
+        elements.tokenSubmit.textContent = "다시 확인"
+        break
+      case "initial":
+        elements.tokenSubmit.textContent = "연결 상태 확인"
+        break
+      case "loading":
+        elements.tokenSubmit.textContent = "확인 중…"
+        break
+      default:
+        state satisfies never
+    }
   }
 
   function formatDate(value: string | null): string {
@@ -66,12 +98,13 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
       default:
         contracts.blockReasonMessage(connection.serviceAccess)
     }
-    elements.tokenForm.hidden = true
+    elements.tokenForm.hidden = false
     elements.statusSection.hidden = false
+    setActionState("connected")
     elements.statusSection.focus()
   }
 
-  return { renderStatus, showError, showFeedback }
+  return { clearMessages, renderStatus, setActionState, showError, showFeedback }
 }
 
 export type PortalView = ReturnType<typeof createPortalView>

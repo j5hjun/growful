@@ -25,5 +25,5 @@
     "types": ["node", "vitest/globals"],
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["browser-tests/**/*.ts", "src/**/*.ts", "tests/**/*.ts"]
 }
