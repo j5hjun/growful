@@ -1,10 +1,11 @@
 import fastifyRateLimit from "@fastify/rate-limit"
-import type { FastifyInstance } from "fastify"
+import type { FastifyInstance, FastifyRequest } from "fastify"
 
 const rateLimitWindowMs = 60_000
 
 export const httpRateLimitPolicies = {
   oauthCallback: {
+    keyGenerator: (request: FastifyRequest) => request.raw.socket.remoteAddress ?? "unknown",
     max: 60,
     timeWindow: rateLimitWindowMs,
   },

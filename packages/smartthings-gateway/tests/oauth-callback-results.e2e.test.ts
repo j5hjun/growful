@@ -254,6 +254,7 @@ describe("OAuth callback browser results", () => {
     const fixture = createGatewayAppFixture({ apps })
     for (let requestIndex = 0; requestIndex < 60; requestIndex += 1) {
       const response = await fixture.app.inject({
+        headers: { "x-forwarded-for": `198.51.100.${requestIndex + 1}` },
         method: "GET",
         url: `/oauth/callback?code=invalid-code-${requestIndex}`,
       })
@@ -262,6 +263,7 @@ describe("OAuth callback browser results", () => {
 
     // When
     const response = await fixture.app.inject({
+      headers: { "x-forwarded-for": "203.0.113.1" },
       method: "GET",
       url: "/oauth/callback?code=rate-limited-sensitive-code",
     })
