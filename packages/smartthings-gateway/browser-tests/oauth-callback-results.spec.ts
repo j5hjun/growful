@@ -57,7 +57,9 @@ for (const viewport of viewports) {
       for (const phrase of await phrases.all()) {
         const box = await phrase.boundingBox()
         const lineHeight = await phrase.evaluate((element) =>
-          Number.parseFloat(element.ownerDocument.defaultView?.getComputedStyle(element).lineHeight ?? "0"),
+          Number.parseFloat(
+            element.ownerDocument.defaultView?.getComputedStyle(element).lineHeight ?? "0",
+          ),
         )
         expect(box?.height).toBeLessThanOrEqual(lineHeight + 1)
       }
