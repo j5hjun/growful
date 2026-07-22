@@ -17,16 +17,52 @@ const machinePathPrefixes = [
   "/connection",
   "/healthz",
   "/readyz",
-  "/smartthings/webhook",
-  "/token/rotate",
+  "/smartthings",
+  "/token",
   "/v1",
 ] as const
+const maximumPathDecodeDepth = 3
+
+function matchesMachinePath(pathname: string): boolean {
+  const separatorNormalizedPathname = pathname.replaceAll("\\", "/").replace(/\/+/gu, "/")
+  const segments: string[] = []
+  for (const segment of separatorNormalizedPathname.split("/")) {
+    if (segment === "" || segment === ".") continue
+    if (segment === "..") {
+      segments.pop()
+      continue
+    }
+    segments.push(segment)
+  }
+  const dotNormalizedPathname = `/${segments.join("/")}`
+
+  return [separatorNormalizedPathname, dotNormalizedPathname].some((candidate) =>
+    machinePathPrefixes.some(
+      (prefix) =>
+        candidate === prefix ||
+        candidate.startsWith(`${prefix}/`) ||
+        candidate.startsWith(`${prefix}%`),
+    ),
+  )
+}
 
 function isMachinePath(rawUrl: string): boolean {
-  const pathname = new URL(rawUrl, "http://localhost").pathname
-  return machinePathPrefixes.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  )
+  let pathname = rawUrl.split("?", 1)[0] ?? rawUrl
+
+  for (let depth = 0; depth <= maximumPathDecodeDepth; depth += 1) {
+    if (matchesMachinePath(pathname)) return true
+
+    try {
+      const decodedPathname = decodeURIComponent(pathname)
+      if (decodedPathname === pathname) return false
+      if (depth === maximumPathDecodeDepth) return true
+      pathname = decodedPathname
+    } catch {
+      return true
+    }
+  }
+
+  return true
 }
 
 function acceptsHtml(accept: string | undefined): boolean {
