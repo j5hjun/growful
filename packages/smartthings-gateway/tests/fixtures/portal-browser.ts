@@ -110,9 +110,15 @@ const selectorEntries = [
   ["[data-scope-list]", "scopes"],
   ["[data-forget-token]", "forget"],
   ["[data-rotate-token]", "rotate"],
+  ["[data-rotate-token-dialog]", "rotateDialog"],
+  ["[data-rotate-token-form]", "rotateForm"],
+  ["[data-rotate-token-confirm]", "rotateConfirm"],
   ["[data-rotated-token-section]", "rotatedSection"],
   ["[data-rotated-token]", "rotatedOutput"],
+  ["[data-token-copy-feedback]", "rotatedFeedback"],
+  ["[data-token-copy-error]", "rotatedError"],
   ["[data-copy-token]", "copy"],
+  ["[data-return-status]", "returnStatus"],
   ["[data-disconnect]", "disconnect"],
   ["[data-disconnect-dialog]", "dialog"],
   ["[data-disconnect-form]", "disconnectForm"],
@@ -131,6 +137,8 @@ export function createPortalBrowserFixture(missingSelector?: string) {
   getPortalElement(elements, "blockedNotice").hidden = true
   getPortalElement(elements, "error").hidden = true
   getPortalElement(elements, "rotatedSection").hidden = true
+  getPortalElement(elements, "rotatedFeedback").hidden = true
+  getPortalElement(elements, "rotatedError").hidden = true
   return { elements, selectors }
 }
 
@@ -153,6 +161,15 @@ export function runPortalClient(
       createElement: () => new PortalElement(),
       getElementById: (id: string) => elements.get(id === "growful-token" ? "input" : id) ?? null,
       querySelector: (selector: string) => elements.get(selectors.get(selector) ?? "") ?? null,
+      querySelectorAll: (selector: string) =>
+        selector === "[data-token-safety]"
+          ? [
+              {
+                querySelector: (regionSelector: string) =>
+                  elements.get(selectors.get(regionSelector) ?? "") ?? null,
+              },
+            ]
+          : [],
     },
     fetch,
     Intl,

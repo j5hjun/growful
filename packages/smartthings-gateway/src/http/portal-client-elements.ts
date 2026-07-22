@@ -24,9 +24,16 @@ export function getPortalElements() {
   const scopeList = document.querySelector<HTMLUListElement>("[data-scope-list]")
   const forgetTokenButton = document.querySelector<HTMLButtonElement>("[data-forget-token]")
   const rotateTokenButton = document.querySelector<HTMLButtonElement>("[data-rotate-token]")
+  const rotateTokenDialog = document.querySelector<HTMLDialogElement>("[data-rotate-token-dialog]")
+  const rotateTokenForm = document.querySelector<HTMLFormElement>("[data-rotate-token-form]")
+  const rotateTokenConfirm = document.querySelector<HTMLButtonElement>(
+    "[data-rotate-token-confirm]",
+  )
   const rotatedTokenSection = document.querySelector<HTMLElement>("[data-rotated-token-section]")
   const rotatedTokenOutput = document.querySelector<HTMLOutputElement>("[data-rotated-token]")
-  const copyTokenButton = document.querySelector<HTMLButtonElement>("[data-copy-token]")
+  const rotatedTokenFeedback = document.querySelector<HTMLElement>("[data-token-copy-feedback]")
+  const rotatedTokenError = document.querySelector<HTMLElement>("[data-token-copy-error]")
+  const returnStatusButton = document.querySelector<HTMLButtonElement>("[data-return-status]")
   const disconnectButton = document.querySelector<HTMLButtonElement>("[data-disconnect]")
   const disconnectDialog = document.querySelector<HTMLDialogElement>("[data-disconnect-dialog]")
   const disconnectForm = document.querySelector<HTMLFormElement>("[data-disconnect-form]")
@@ -54,9 +61,14 @@ export function getPortalElements() {
     scopeList === null ||
     forgetTokenButton === null ||
     rotateTokenButton === null ||
+    rotateTokenDialog === null ||
+    rotateTokenForm === null ||
+    rotateTokenConfirm === null ||
     rotatedTokenSection === null ||
     rotatedTokenOutput === null ||
-    copyTokenButton === null ||
+    rotatedTokenFeedback === null ||
+    rotatedTokenError === null ||
+    returnStatusButton === null ||
     disconnectButton === null ||
     disconnectDialog === null ||
     disconnectForm === null ||
@@ -68,7 +80,6 @@ export function getPortalElements() {
     blockedAt,
     blockedNotice,
     blockReason,
-    copyTokenButton,
     copySupportReferenceButton,
     disconnectButton,
     disconnectConfirm,
@@ -81,9 +92,15 @@ export function getPortalElements() {
     forgetTokenButton,
     reconnectAction,
     refreshedAt,
+    rotatedTokenError,
+    rotatedTokenFeedback,
     rotatedTokenOutput,
     rotatedTokenSection,
+    rotateTokenConfirm,
+    rotateTokenDialog,
+    rotateTokenForm,
     rotateTokenButton,
+    returnStatusButton,
     scopeList,
     statusSection,
     statusActive,

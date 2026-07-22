@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { portalClientScript } from "../src/http/portal-client.js"
 import { renderPortalManagement } from "../src/http/portal-manage.js"
 
 function portalAccess() {
@@ -106,4 +107,80 @@ test("management states share a flexible three-row frame and fixed action slot",
   expect(successFrame.width).toBeCloseTo(initialFrame.width, 2)
   expect(revealBox.y).toBeCloseTo(inputBox.y, 2)
   expect(revealBox.width).toBeLessThan(initialFrame.width / 2)
+})
+
+test("token rotation requires confirmation and returns from the one-time result", async ({
+  page,
+}) => {
+  // Given
+  const tokenA = `grw_st_${"A".repeat(43)}`
+  const tokenB = `grw_st_${"B".repeat(43)}`
+  let rotationRequests = 0
+  await page.route("https://growful.test/**", async (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (pathname === "/manage") {
+      await route.fulfill({
+        body: renderPortalManagement(portalAccess()),
+        contentType: "text/html",
+      })
+      return
+    }
+    if (pathname === "/portal.js") {
+      await route.fulfill({ body: portalClientScript, contentType: "text/javascript" })
+      return
+    }
+    if (pathname === "/connection") {
+      await route.fulfill({
+        json: {
+          connected: true,
+          expiresAt: "2026-07-23T00:00:00.000Z",
+          grantedScopes: [],
+          lastRefreshedAt: null,
+          serviceAccess: { status: "active" },
+          supportReference: "c".repeat(64),
+        },
+      })
+      return
+    }
+    if (pathname === "/token/rotate") {
+      rotationRequests += 1
+      await route.fulfill({ json: { growfulToken: tokenB } })
+      return
+    }
+    await route.abort()
+  })
+  await page.goto("https://growful.test/manage")
+  await page.locator("#growful-token").fill(tokenA)
+  await page.locator("[data-token-submit]").click()
+  await expect(page.locator("[data-portal-status]")).toBeVisible()
+
+  // When
+  await page.locator("[data-rotate-token]").click()
+
+  // Then
+  const dialog = page.locator("[data-rotate-token-dialog]")
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText("현재 토큰은 즉시 무효화됩니다")
+  await expect(dialog).toContainText("모든 소비자 설정을 새 토큰으로 변경해야 합니다")
+  expect(rotationRequests).toBe(0)
+
+  // When
+  await page.locator("[data-rotate-token-confirm]").click()
+
+  // Then
+  const result = page.locator("[data-rotated-token-section]")
+  await expect(result).toBeVisible()
+  await expect(page.locator("[data-portal-status]")).toBeHidden()
+  await expect(page.locator("[data-rotated-token]")).toHaveText(tokenB)
+  expect(rotationRequests).toBe(1)
+  await expect(result.locator("[data-copy-token]")).toHaveClass(/primary/)
+  await expect(result.locator("[data-return-status]")).toHaveClass(/secondary/)
+
+  // When
+  await page.locator("[data-return-status]").click()
+
+  // Then
+  await expect(result).toBeHidden()
+  await expect(page.locator("[data-rotated-token]")).toHaveText("")
+  await expect(page.locator("[data-portal-status]")).toBeFocused()
 })

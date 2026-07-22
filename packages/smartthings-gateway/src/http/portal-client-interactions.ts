@@ -10,7 +10,15 @@ export function bindPortalInteractions(
   view: PortalView,
 ): void {
   let growfulToken = ""
+  let rotationSubmitted = false
   let tokenGeneration = 0
+
+  function clearRotatedToken(): void {
+    elements.rotatedTokenOutput.textContent = ""
+    elements.rotatedTokenFeedback.hidden = true
+    elements.rotatedTokenError.hidden = true
+    elements.rotatedTokenSection.hidden = true
+  }
 
   async function request(path: string, method: PortalMethod): Promise<unknown> {
     const response = await fetch(path, {
@@ -29,11 +37,10 @@ export function bindPortalInteractions(
     tokenGeneration += 1
     growfulToken = ""
     elements.tokenInput.value = ""
-    elements.rotatedTokenOutput.textContent = ""
+    clearRotatedToken()
     elements.supportReference.textContent = ""
     elements.tokenForm.hidden = false
     elements.statusSection.hidden = true
-    elements.rotatedTokenSection.hidden = true
     view.showError(message)
     view.setActionState("error")
     elements.tokenInput.focus()
@@ -44,7 +51,7 @@ export function bindPortalInteractions(
     growfulToken = ""
     elements.tokenInput.value = ""
     elements.statusSection.hidden = true
-    elements.rotatedTokenSection.hidden = true
+    clearRotatedToken()
     view.showError(message)
     view.setActionState("disconnected")
     elements.reconnectAction.focus()
@@ -130,31 +137,46 @@ export function bindPortalInteractions(
     tokenGeneration += 1
     growfulToken = ""
     elements.tokenInput.value = ""
-    elements.rotatedTokenOutput.textContent = ""
+    clearRotatedToken()
     elements.supportReference.textContent = ""
     elements.tokenInput.type = "password"
     elements.tokenVisibility.textContent = "토큰 보기"
     elements.tokenVisibility.setAttribute("aria-pressed", "false")
     elements.tokenForm.hidden = false
     elements.statusSection.hidden = true
-    elements.rotatedTokenSection.hidden = true
     view.showFeedback("이 탭에서 Growful 토큰을 지웠습니다.")
     view.setActionState("initial")
     elements.tokenInput.focus()
   })
-  elements.rotateTokenButton.addEventListener("click", async () => {
+  elements.rotateTokenButton.addEventListener("click", () => {
+    rotationSubmitted = false
+    elements.rotateTokenDialog.showModal()
+  })
+  elements.rotateTokenDialog.addEventListener("close", () => {
+    if (!rotationSubmitted) elements.rotateTokenButton.focus()
+    rotationSubmitted = false
+  })
+  elements.rotateTokenForm.addEventListener("submit", async (event) => {
+    if (event.submitter !== elements.rotateTokenConfirm) return
+    event.preventDefault()
+    rotationSubmitted = true
+    elements.rotateTokenDialog.close()
     const requestGeneration = tokenGeneration
     elements.rotateTokenButton.disabled = true
     elements.forgetTokenButton.disabled = true
     elements.disconnectButton.disabled = true
+    elements.rotateTokenConfirm.disabled = true
     try {
       const rotation = await request("/token/rotate", "POST")
       if (!contracts.isRotation(rotation)) throw new contracts.PortalRequestError(502)
       if (requestGeneration !== tokenGeneration) return
       growfulToken = rotation.growfulToken
       elements.rotatedTokenOutput.textContent = rotation.growfulToken
+      elements.rotatedTokenFeedback.hidden = true
+      elements.rotatedTokenError.hidden = true
       elements.rotatedTokenSection.hidden = false
-      view.showFeedback("Growful 토큰을 교체했습니다. 이전\u00a0토큰은 더 이상 사용할 수 없습니다.")
+      elements.statusSection.hidden = true
+      view.clearMessages()
       elements.rotatedTokenOutput.focus()
     } catch (error) {
       if (requestGeneration !== tokenGeneration) return
@@ -163,30 +185,28 @@ export function bindPortalInteractions(
       elements.rotateTokenButton.disabled = false
       elements.forgetTokenButton.disabled = false
       elements.disconnectButton.disabled = false
+      elements.rotateTokenConfirm.disabled = false
     }
   })
 
-  async function copyToClipboard(value: string, successMessage: string): Promise<void> {
+  elements.returnStatusButton.addEventListener("click", () => {
+    clearRotatedToken()
+    elements.statusSection.hidden = false
+    elements.statusSection.focus()
+  })
+
+  async function copySupportReference(): Promise<void> {
     try {
-      await navigator.clipboard.writeText(value)
-      view.showFeedback(successMessage)
+      await navigator.clipboard.writeText(elements.supportReference.textContent)
+      view.showFeedback("지원 참조를 클립보드에 복사했습니다.")
     } catch (error) {
       if (!(error instanceof Error)) throw error
       view.showError("자동 복사를 사용할 수 없습니다. 값을 직접 선택해 복사하세요.")
     }
   }
 
-  elements.copyTokenButton.addEventListener("click", async () => {
-    await copyToClipboard(
-      elements.rotatedTokenOutput.textContent,
-      "새 Growful 토큰을 클립보드에 복사했습니다.",
-    )
-  })
   elements.copySupportReferenceButton.addEventListener("click", async () => {
-    await copyToClipboard(
-      elements.supportReference.textContent,
-      "지원 참조를 클립보드에 복사했습니다.",
-    )
+    await copySupportReference()
   })
   elements.disconnectButton.addEventListener("click", () => elements.disconnectDialog.showModal())
   elements.disconnectDialog.addEventListener("close", () => {
@@ -208,10 +228,9 @@ export function bindPortalInteractions(
       await request("/connection", "DELETE")
       growfulToken = ""
       elements.tokenInput.value = ""
-      elements.rotatedTokenOutput.textContent = ""
+      clearRotatedToken()
       elements.supportReference.textContent = ""
       elements.statusSection.hidden = true
-      elements.rotatedTokenSection.hidden = true
       elements.tokenForm.hidden = false
       view.setActionState("disconnected")
       elements.disconnectDialog.close()

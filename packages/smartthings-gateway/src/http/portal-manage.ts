@@ -65,13 +65,28 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
         <a class="action action-primary" href="/oauth/start" data-reconnect hidden>SmartThings 다시 연결</a>
       </div>
     </form>
-    <section class="credential-output" data-rotated-token-section aria-labelledby="rotated-token-title" hidden>
+    <section class="credential-output" data-token-safety data-rotated-token-section aria-labelledby="rotated-token-title" hidden>
       <p class="eyebrow">교체 완료</p>
       <h2 id="rotated-token-title">새 Growful 토큰</h2>
       <p><span class="phrase">이 토큰은 다시 확인할 수 없습니다.</span> <span class="phrase">지금 복사해 안전한 곳에 보관하세요.</span></p>
-      <output data-rotated-token tabindex="-1"></output>
-      <button class="secondary" type="button" data-copy-token>새 토큰 복사</button>
+      <output id="rotated-growful-token" data-token-value data-rotated-token tabindex="-1"></output>
+      <p class="copy-feedback" data-token-copy-feedback role="status" aria-live="polite" hidden>새 Growful 토큰을 클립보드에 복사했습니다.</p>
+      <p class="copy-error" data-token-copy-error role="alert" hidden>자동 복사를 사용할 수 없습니다. 위 토큰을 직접 선택해 복사하세요.</p>
+      <div class="credential-actions">
+        <button class="primary" type="button" data-copy-token aria-controls="rotated-growful-token">새 토큰 복사</button>
+        <button class="secondary" type="button" data-return-status>상태로 돌아가기</button>
+      </div>
     </section>
+    <dialog data-rotate-token-dialog aria-labelledby="rotate-token-title" aria-describedby="rotate-token-description">
+      <form class="dialog-content" method="dialog" data-rotate-token-form>
+        <h2 id="rotate-token-title">Growful 토큰을 교체할까요?</h2>
+        <p id="rotate-token-description"><span class="phrase">교체하면 현재 토큰은 즉시 무효화됩니다.</span> <span class="phrase">모든 소비자 설정을 새 토큰으로 변경해야 합니다.</span></p>
+        <div class="action-row">
+          <button class="secondary" type="submit" value="cancel">취소</button>
+          <button class="destructive" type="submit" value="confirm" data-rotate-token-confirm>토큰 교체</button>
+        </div>
+      </form>
+    </dialog>
     <dialog data-disconnect-dialog aria-labelledby="disconnect-title" aria-describedby="disconnect-description">
       <form class="dialog-content" method="dialog" data-disconnect-form>
         <h2 id="disconnect-title">연결을 해제할까요?</h2>
@@ -131,6 +146,11 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .connection-action-slot > * { width: 100%; }
     .credential-output output { display: block; margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
     .credential-output output:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    .copy-feedback, .copy-error { margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); font-weight: var(--weight-bold); }
+    .copy-feedback { color: var(--success); }
+    .copy-error { color: var(--error); }
+    .credential-actions { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
+    .credential-actions > * { width: 100%; }
     dialog { width: min(var(--panel-max), calc(100% - var(--space-8))); padding: 0; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--text); box-shadow: 0 var(--space-2) var(--space-8) var(--shadow-panel); }
     dialog::backdrop { background: var(--backdrop); }
     .dialog-content { padding: var(--space-6); }

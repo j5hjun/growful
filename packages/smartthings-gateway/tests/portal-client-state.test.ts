@@ -183,6 +183,8 @@ describe("Growful portal connection states", () => {
     const form = getPortalElement(fixture.elements, "form")
     const input = getPortalElement(fixture.elements, "input")
     const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
     const rotatedOutput = getPortalElement(fixture.elements, "rotatedOutput")
     let statusRequestCount = 0
     runPortalClient(fixture, async (path) => {
@@ -194,7 +196,11 @@ describe("Growful portal connection states", () => {
     await form.dispatch("submit", { preventDefault() {} })
     await new Promise<void>((resolve) => setImmediate(resolve))
 
-    const rotationRequest = rotate.dispatch("click")
+    await rotate.dispatch("click")
+    const rotationRequest = rotateForm.dispatch("submit", {
+      preventDefault() {},
+      submitter: rotateConfirm,
+    })
     await form.dispatch("submit", { preventDefault() {} })
     rotation.resolve(response(200, { growfulToken: `grw_st_${"B".repeat(43)}` }))
     await rotationRequest

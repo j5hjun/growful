@@ -24,6 +24,10 @@ describe("SmartThings Gateway HTTP API", () => {
 
     // When
     const callbackResponse = await authorizeGatewayApp(fixture.app)
+    const tokenSafetyScript = await fixture.app.inject({
+      method: "GET",
+      url: "/token-safety.js",
+    })
     const unauthenticatedStatus = await fixture.app.inject({ method: "GET", url: "/connection" })
     const authenticatedStatus = await fixture.app.inject({
       headers: { authorization: `Bearer ${testGrowfulToken(1)}` },
@@ -35,8 +39,12 @@ describe("SmartThings Gateway HTTP API", () => {
     expect(callbackResponse.statusCode).toBe(200)
     expect(callbackResponse.headers["cache-control"]).toBe("no-store")
     expect(callbackResponse.headers["content-type"]).toContain("text/html")
+    expect(callbackResponse.headers["content-security-policy"]).toContain("script-src 'self'")
     expect(callbackResponse.body.match(/data-growful-token/g)).toHaveLength(1)
     expect(callbackResponse.body.match(new RegExp(testGrowfulToken(1), "g"))).toHaveLength(1)
+    expect(tokenSafetyScript.statusCode).toBe(200)
+    expect(tokenSafetyScript.headers["cache-control"]).toBe("no-store")
+    expect(tokenSafetyScript.headers["content-type"]).toContain("javascript")
     expect(unauthenticatedStatus.statusCode).toBe(401)
     expect(authenticatedStatus.json()).toEqual({
       connected: true,
