@@ -3,8 +3,8 @@ const portalPageNames = ["home", "status", "manage", "support", "privacy", "term
 export type PortalPageName = (typeof portalPageNames)[number]
 
 export const portalSharedStyles = `
-    body { align-items: safe center; justify-items: center; word-break: keep-all; overflow-wrap: break-word; }
-    .skip-link { position: fixed; z-index: 1; top: var(--space-4); left: var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-action); background: var(--action); color: var(--action-text); font-weight: var(--weight-bold); text-decoration: none; transform: translateY(calc(-100% - var(--space-8))); transition: transform 100ms ease-out; }
+    body { align-items: start; justify-items: center; word-break: keep-all; overflow-wrap: break-word; }
+    .skip-link { position: fixed; z-index: 1; top: var(--safe-area-top); left: var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-action); background: var(--action); color: var(--action-text); font-weight: var(--weight-bold); text-decoration: none; transform: translateY(calc(-100% - var(--space-8))); transition: transform 100ms ease-out; }
     .skip-link:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); transform: translateY(0); }
     .portal-page-shell { width: min(var(--page-max), 100%); padding: var(--space-8); border-radius: var(--radius-panel); background: var(--surface); box-shadow: 0 var(--space-2) var(--space-8) var(--shadow-panel); }
     .portal-page-shell.page-panel { --page-max: var(--panel-max); }
@@ -41,11 +41,15 @@ export const portalSharedStyles = `
     button:disabled { cursor: wait; opacity: .65; }
     .eyebrow { margin-bottom: var(--space-3); color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
     [hidden] { display: none !important; }
-    @media (max-width: 48rem) {
+    @media (max-width: 40rem) {
       .site-nav { align-items: flex-start; flex-direction: column; }
       .site-footer { grid-template-columns: 1fr; gap: var(--space-4); }
       .action-row { align-items: stretch; flex-direction: column; }
       .action, button { width: 100%; }
+      .portal-page-shell .current-status, main.page-manage .current-status { grid-template-columns: 1fr; gap: var(--space-2); }
+    }
+    @media (min-width: 40.0625rem) and (max-width: 48rem) {
+      .portal-page-shell.page-wide .flow ol, main.page-wide .flow ol { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
     }
     @media (max-width: 30rem) { .portal-page-shell { padding: var(--space-6); } }
     @media (max-width: 30rem) { .site-footer .footer-meta > div { grid-template-columns: 1fr; gap: 0; } }

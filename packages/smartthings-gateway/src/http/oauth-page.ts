@@ -24,12 +24,13 @@ const sharedStyles = `
       --control-size: 1.125rem; --control-offset: .15rem;
       --radius-panel: .75rem; --radius-field: .5rem; --radius-action: .375rem;
       --action-height: 2.75rem; --focus-ring: 3px; --pressed-scale: .98;
+      --safe-area-top: max(var(--space-4), env(safe-area-inset-top));
       --safe-area-bottom: max(var(--space-4), env(safe-area-inset-bottom));
       --space-2: .5rem; --space-3: .75rem; --space-4: 1rem; --space-6: 1.5rem;
       --space-8: 2rem; --space-12: 3rem; --space-16: 4rem;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: var(--space-4); scroll-padding-block-end: calc(var(--action-height) + var(--space-8) + var(--safe-area-bottom)); background: var(--canvas); color: var(--text); font-size: var(--font-body); }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: start center; padding: var(--safe-area-top) var(--space-4) var(--safe-area-bottom); scroll-padding-block: var(--safe-area-top) calc(var(--action-height) + var(--space-8) + var(--safe-area-bottom)); background: var(--canvas); color: var(--text); font-size: var(--font-body); }
     main { width: min(var(--page-max), 100%); min-width: 0; padding: var(--space-8); border-radius: var(--radius-panel); background: var(--surface); box-shadow: 0 var(--space-2) var(--space-8) var(--shadow-panel); }
     main.page-panel { --page-max: var(--panel-max); }
     main.page-manage { --page-max: var(--panel-manage); }
@@ -39,7 +40,7 @@ const sharedStyles = `
     p { margin: 0 0 var(--space-6); color: var(--text-muted); line-height: var(--line-body); text-wrap: pretty; }
     h1, h2, h3, p, label, button, a { word-break: keep-all; overflow-wrap: break-word; }
     .phrase { display: inline-block; max-width: 100%; white-space: nowrap; }
-    @media (max-width: 30rem) { main { padding: var(--space-6); } h1 { font-size: var(--font-h1-mobile); } }
+    @media (max-width: 30rem) { main { padding: var(--space-6); } h1 { font-size: var(--font-h1-mobile); } .phrase { white-space: normal; } }
     @media (prefers-color-scheme: dark) {
       :root { --canvas: #101820; --surface: #19232d; --text: #edf2f7; --text-muted: #aeb8c4; --border: #748396; --action: #e8eef5; --action-text: #17202a; --action-hover: #ffffff; --surface-subtle: #23303c; --success: #6ce9a6; --backdrop: #101820cc; --focus: #60a5fa; --error: #ffb4ab; }
     }`

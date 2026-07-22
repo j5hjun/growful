@@ -15,9 +15,9 @@ import {
 } from "./oauth-callback-result.js"
 import { renderOAuthCompletion } from "./oauth-completion.js"
 import {
-  type OAuthDeviceRange,
-  parseOAuthDeviceRangeSelection,
-  parseOAuthScopeSelection,
+  type OAuthScopeSelectionDraft,
+  type OAuthScopeSelectionIssueKind,
+  parseOAuthScopeSelectionSubmission,
   renderOAuthScopeSelection,
 } from "./oauth-scope-selection.js"
 import { tokenSafetyClientScript } from "./token-safety.js"
@@ -53,11 +53,10 @@ function sendOAuthScopeSelectionPage(
   authorizationOrigin: string,
   access: OAuthAccessPolicy,
   options: {
-    readonly deviceRange?: OAuthDeviceRange
-    readonly showSelectionError: boolean
+    readonly draft?: OAuthScopeSelectionDraft
+    readonly issues?: readonly OAuthScopeSelectionIssueKind[]
     readonly statusCode: 200 | 400
   } = {
-    showSelectionError: false,
     statusCode: 200,
   },
 ) {
@@ -73,9 +72,9 @@ function sendOAuthScopeSelectionPage(
     .status(options.statusCode)
     .send(
       renderOAuthScopeSelection({
-        deviceRange: options.deviceRange ?? "selected",
         disclosures: access,
-        showSelectionError: options.showSelectionError,
+        ...(options.draft === undefined ? {} : { draft: options.draft }),
+        ...(options.issues === undefined ? {} : { issues: options.issues }),
       }),
     )
 }
@@ -136,15 +135,15 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
       },
     },
     async (request, reply) => {
-      const scopes = parseOAuthScopeSelection(request.body)
-      if (scopes === null) {
+      const selection = parseOAuthScopeSelectionSubmission(request.body)
+      if (selection.kind === "invalid") {
         return sendOAuthScopeSelectionPage(
           reply,
           options.authorizationOrigin,
           options.oauthAccess,
           {
-            deviceRange: parseOAuthDeviceRangeSelection(request.body) ?? "selected",
-            showSelectionError: true,
+            draft: selection.draft,
+            issues: selection.issues,
             statusCode: 400,
           },
         )
@@ -156,7 +155,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
       const authorizationUrl = await options.service.startAuthorization({
         policyVersion: options.oauthAccess.policyVersion,
         ...authorizationAccess,
-        requestedScopes: scopes,
+        requestedScopes: selection.scopes,
       })
       return reply.redirect(authorizationUrl.toString())
     },
