@@ -18,6 +18,8 @@ image_digest="sha256:${image_reference##*@sha256:}"
 project_name="smartthings-gateway-ci-${release_id}-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-0}"
 environment_file="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-ci.XXXXXX")"
 invalid_selection_response="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-invalid-selection.XXXXXX")"
+direct_http_headers="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-direct-http.XXXXXX")"
+forwarded_https_headers="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-forwarded-https.XXXXXX")"
 
 export COMPOSE_PROJECT_NAME="$project_name"
 export GATEWAY_ENV_FILE="$environment_file"
@@ -31,7 +33,8 @@ gateway_origin="http://127.0.0.1:$gateway_host_port"
 cleanup() {
   local status=$?
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -f "$environment_file" "$invalid_selection_response"
+  rm -f "$environment_file" "$invalid_selection_response" "$direct_http_headers" \
+    "$forwarded_https_headers"
   exit "$status"
 }
 trap cleanup EXIT
@@ -81,7 +84,28 @@ for attempt in {1..30}; do
   sleep 2
 done
 
+test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container_id")" = 'true'
+test "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$container_id")" = '["ALL"]'
+test "$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container_id")" = \
+  '["no-new-privileges:true"]'
+if "${compose[@]}" exec -T gateway node -e \
+  "const fs=require('node:fs');fs.writeFileSync('/tmp/growful-write-probe','x');fs.unlinkSync('/tmp/growful-write-probe')" \
+  >/dev/null 2>&1; then
+  printf 'gateway root filesystem unexpectedly accepted a write\n' >&2
+  exit 1
+fi
+
 test "$(curl --fail --silent --show-error "$gateway_origin/healthz")" = '{"status":"ok"}'
+curl --fail --silent --show-error --dump-header "$direct_http_headers" --output /dev/null \
+  "$gateway_origin/healthz"
+if grep --ignore-case --quiet '^strict-transport-security:' "$direct_http_headers"; then
+  printf 'direct HTTP response unexpectedly advertised HSTS\n' >&2
+  exit 1
+fi
+curl --fail --silent --show-error --header 'X-Forwarded-Proto: https' \
+  --dump-header "$forwarded_https_headers" --output /dev/null "$gateway_origin/healthz"
+grep --ignore-case --fixed-strings --line-regexp --quiet \
+  $'strict-transport-security: max-age=63072000\r' "$forwarded_https_headers"
 test "$(curl --fail --silent --show-error "$gateway_origin/readyz")" = '{"status":"ready"}'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/")" = '200'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/manage")" = '200'

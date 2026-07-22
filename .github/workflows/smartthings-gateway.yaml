@@ -62,6 +62,8 @@ jobs:
         run: bash ../../deploy/smartthings-gateway/deploy.test.sh
       - name: Test production preflight
         run: bash ../../deploy/smartthings-gateway/preflight.test.sh
+      - name: Test Compose security controls
+        run: bash ../../deploy/smartthings-gateway/compose-security.test.sh
       - name: Test gateway release resolution
         run: bash ../../deploy/smartthings-gateway/resolve-release.test.sh
       - name: Smoke test digest-pinned deployment image with Compose
@@ -301,9 +303,14 @@ jobs:
             bash -s -- "$PUBLIC_BASE_URL" <<'REMOTE'
           set -euo pipefail
           public_base_url="${1:?public base URL is required}"
+          health_headers="$(mktemp)"
+          oauth_headers="$(mktemp)"
+          trap 'rm -f "$health_headers" "$oauth_headers"' EXIT
 
-          health_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/healthz")"
+          health_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors --dump-header "$health_headers" "$public_base_url/healthz")"
           test "$health_response" = '{"status":"ok"}'
+          grep --ignore-case --fixed-strings \
+            'strict-transport-security: max-age=63072000' "$health_headers" >/dev/null
 
           readiness_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/readyz")"
           test "$readiness_response" = '{"status":"ready"}'
@@ -323,8 +330,6 @@ jobs:
           connection_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/connection")"
           test "$connection_status" = '401'
 
-          oauth_headers="$(mktemp)"
-          trap 'rm -f "$oauth_headers"' EXIT
           oauth_status="$(curl --silent --show-error --dump-header "$oauth_headers" --output /dev/null --write-out '%{http_code}' "$public_base_url/oauth/start")"
           access_mode="$(sed -n 's/^SERVICE_ACCESS_MODE=//p' "$HOME/app/smartthings-gateway/.env" | tail -n 1)"
           access_mode="${access_mode:-private_beta}"
