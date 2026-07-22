@@ -18,6 +18,14 @@ export async function revokePostgresUnauthorizedConnections(
           expression("consentedAt", "is not", null),
           expression("policyVersion", "is", null),
         ]),
+        expression.and([
+          expression("consentedAt", "is", null),
+          expression("policyVersion", "is", null),
+          expression.or([
+            expression("privateBetaUsername", "is not", null),
+            expression("privateBetaInviteGeneration", "is not", null),
+          ]),
+        ]),
         expression("policyVersion", "!=", accessPolicy.policyVersion),
       ]),
     )
