@@ -159,18 +159,26 @@ describe("Growful portal HTTP surface", () => {
     expect(response.headers["content-type"]).toContain("text/html")
     expect(response.headers["cache-control"]).toBe("no-store")
     expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
-    expect(response.body).toContain("data-support-document")
-    expect(response.body).toContain('href="/support" aria-current="page"')
-    expect(response.body).toContain('href="/manage"')
-    expect(response.body).toContain(`href="mailto:${publicOAuthAccess.supportEmail}"`)
-    expect(response.body).toContain(publicOAuthAccess.operatorName)
-    expect(response.body).toContain('data-support-topic="connection"')
-    expect(response.body).toContain('data-support-topic="token-exposure"')
-    expect(response.body).toContain('data-support-topic="privacy"')
-    expect(response.body).toContain('data-support-topic="security"')
-    expect(response.body).toContain("Growful 토큰 원문")
-    expect(response.body).toContain("SmartThings access·refresh token")
-    expect(response.body).not.toContain("비공개 베타")
+    expect(response.body.includes("data-support-document")).toBe(true)
+    expect(response.body.includes('href="/support" aria-current="page"')).toBe(true)
+    expect(response.body.includes('href="/manage"')).toBe(true)
+    expect(
+      response.body.includes(
+        `href="mailto:${publicOAuthAccess.supportEmail}" data-support-email-action`,
+      ),
+    ).toBe(true)
+    expect(response.body.includes(publicOAuthAccess.operatorName)).toBe(true)
+    expect(response.body.includes('<dl class="support-topics">')).toBe(true)
+    expect(response.body.includes('data-support-topic="connection"')).toBe(true)
+    expect(response.body.includes('data-support-topic="token-exposure"')).toBe(true)
+    expect(response.body.includes('data-support-topic="privacy"')).toBe(true)
+    expect(response.body.includes('data-support-topic="security"')).toBe(true)
+    expect(response.body.includes("Growful 토큰 원문")).toBe(true)
+    expect(response.body.includes("SmartThings access·refresh token")).toBe(true)
+    expect(response.body.includes("OAuth code·state")).toBe(true)
+    expect(response.body.includes("비밀번호")).toBe(true)
+    expect(response.body.includes("원본 계정·설치 식별자")).toBe(true)
+    expect(response.body.includes("비공개 베타")).toBe(false)
   })
 
   it("publishes an indexing policy for the public portal routes", async () => {
