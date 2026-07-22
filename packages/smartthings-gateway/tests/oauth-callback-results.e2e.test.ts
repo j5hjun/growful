@@ -320,5 +320,14 @@ describe("OAuth callback browser results", () => {
     expectRecoveryPage(response, 429, "요청이 너무 많습니다")
     expect(response.body).not.toContain("fallback-rate-limited-sensitive-code")
     expect(response.headers["retry-after"]).toBeDefined()
+
+    const otherPeerResponse = await fixture.app.inject({
+      headers: { "x-forwarded-for": "203.0.113.200" },
+      method: "GET",
+      remoteAddress: "192.0.2.44",
+      url: "/oauth/callback?code=other-peer-sensitive-code",
+    })
+    expectRecoveryPage(otherPeerResponse, 400, "올바르지 않은 연결 요청입니다")
+    expect(otherPeerResponse.body).not.toContain("other-peer-sensitive-code")
   })
 })
