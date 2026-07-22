@@ -1,11 +1,14 @@
 import type { FastifyReply, FastifyRequest } from "fastify"
 import type { ServiceDisclosures } from "../config.js"
 import type { OAuthAuthorization } from "../oauth/contracts.js"
+import { renderPrivateBetaAccessGuidance } from "./access-guidance.js"
 import type { PrivateBetaInviteAccess } from "./invite-access.js"
 
 const maximumPrivateBetaFailures = 5
 const privateBetaFailureWindowMs = 60_000
 const maximumPrivateBetaRateLimitBuckets = 1_024
+const privateBetaAccessContentSecurityPolicy =
+  "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 
 type PrivateBetaFailureBucket = {
   failures: number
@@ -25,6 +28,72 @@ type OAuthRequestAccess = Pick<
   OAuthAuthorization,
   "privateBetaInviteGeneration" | "privateBetaUsername"
 >
+
+type MediaPreference = {
+  readonly quality: number
+  readonly specificity: number
+}
+
+const qualityValuePattern = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/u
+
+function mediaPreference(
+  accept: string,
+  targetType: string,
+  targetSubtype: string,
+): MediaPreference {
+  let preference: MediaPreference = { quality: 0, specificity: -1 }
+  for (const mediaRange of accept.split(",")) {
+    const [rawMediaType = "", ...parameters] = mediaRange
+      .split(";")
+      .map((part) => part.trim().toLowerCase())
+    const mediaTypeParts = rawMediaType.split("/")
+    if (mediaTypeParts.length !== 2) continue
+    const [rangeType = "", rangeSubtype = ""] = mediaTypeParts
+    if (rangeType === "" || rangeSubtype === "") continue
+    const specificity =
+      rangeType === targetType && rangeSubtype === targetSubtype
+        ? 2
+        : rangeType === targetType && rangeSubtype === "*"
+          ? 1
+          : rangeType === "*" && rangeSubtype === "*"
+            ? 0
+            : -1
+    if (specificity < 0) continue
+
+    const qualityParameter = parameters.find((parameter) => parameter.startsWith("q="))
+    const rawQuality = qualityParameter?.slice(2)
+    const quality =
+      rawQuality === undefined ? 1 : qualityValuePattern.test(rawQuality) ? Number(rawQuality) : 0
+    if (
+      specificity > preference.specificity ||
+      (specificity === preference.specificity && quality > preference.quality)
+    ) {
+      preference = { quality, specificity }
+    }
+  }
+  return preference
+}
+
+function acceptsHtml(accept: string | undefined): boolean {
+  if (accept === undefined) return false
+  const html = mediaPreference(accept, "text", "html")
+  const json = mediaPreference(accept, "application", "json")
+  if (html.quality !== json.quality) return html.quality > json.quality
+  return html.quality > 0 && html.specificity > json.specificity
+}
+
+function prepareAccessErrorReply(reply: FastifyReply): FastifyReply {
+  return reply
+    .header("Cache-Control", "no-store")
+    .header("Content-Security-Policy", privateBetaAccessContentSecurityPolicy)
+    .header("Cross-Origin-Opener-Policy", "same-origin")
+    .header("Cross-Origin-Resource-Policy", "same-origin")
+    .header("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+    .header("Referrer-Policy", "no-referrer")
+    .header("Vary", "Accept")
+    .header("X-Content-Type-Options", "nosniff")
+    .header("X-Frame-Options", "DENY")
+}
 
 class PrivateBetaAccessRateLimiter {
   private readonly buckets = new Map<string, PrivateBetaFailureBucket>()
@@ -96,21 +165,29 @@ export class PrivateBetaAccessGate {
     const rateLimitKey = request.ip
     const retryAfterSeconds = this.rateLimiter.check(rateLimitKey)
     if (retryAfterSeconds !== null) {
-      return reply
-        .header("Cache-Control", "no-store")
+      const errorReply = prepareAccessErrorReply(reply)
         .header("Retry-After", String(retryAfterSeconds))
         .status(429)
-        .send({ error: "private_beta_access_rate_limited" as const })
+      if (acceptsHtml(request.headers.accept)) {
+        return errorReply
+          .type("text/html; charset=utf-8")
+          .send(renderPrivateBetaAccessGuidance({ kind: "rate_limited", retryAfterSeconds }))
+      }
+      return errorReply.send({ error: "private_beta_access_rate_limited" as const })
     }
     if ((await this.getAuthorizationAccess(request)) !== undefined) {
       this.rateLimiter.recordSuccess(rateLimitKey)
       return undefined
     }
     this.rateLimiter.recordFailure(rateLimitKey)
-    return reply
-      .header("Cache-Control", "no-store")
+    const errorReply = prepareAccessErrorReply(reply)
       .header("WWW-Authenticate", 'Basic realm="Growful private beta", charset="UTF-8"')
       .status(401)
-      .send({ error: "private_beta_access_required" as const })
+    if (acceptsHtml(request.headers.accept)) {
+      return errorReply
+        .type("text/html; charset=utf-8")
+        .send(renderPrivateBetaAccessGuidance({ kind: "authentication_failed" }))
+    }
+    return errorReply.send({ error: "private_beta_access_required" as const })
   }
 }
