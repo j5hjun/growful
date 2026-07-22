@@ -31,13 +31,14 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
   function setActionState(state: PortalActionState): void {
     const disconnected = state === "disconnected"
     elements.reconnectAction.hidden = !disconnected
-    elements.tokenSubmit.hidden = disconnected
+    elements.tokenSubmit.hidden = false
     elements.tokenSubmit.disabled = state === "loading"
     switch (state) {
       case "connected":
         elements.tokenSubmit.textContent = "상태 다시 확인"
         break
       case "disconnected":
+        elements.tokenSubmit.textContent = "연결 상태 확인"
         elements.reconnectAction.textContent = "SmartThings 다시 연결"
         break
       case "error":

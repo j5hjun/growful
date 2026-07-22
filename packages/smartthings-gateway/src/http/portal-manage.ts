@@ -40,7 +40,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
         </div>
         <div class="connection-action-slot">
           <button class="primary" type="submit" data-token-submit>연결 상태 확인</button>
-          <a class="action action-primary" href="/oauth/start" data-reconnect hidden>SmartThings 다시 연결</a>
+          <a class="action action-secondary" href="/oauth/start" data-reconnect hidden>SmartThings 다시 연결</a>
         </div>
       </form>
       <section class="connection-status" data-portal-status aria-labelledby="connection-title" tabindex="-1" hidden>
@@ -112,7 +112,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .manage-header { padding: var(--space-8) 0 var(--space-4); }
     .manage-header p:last-child { margin-bottom: 0; }
     .connection-panel { margin-top: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); word-break: keep-all; overflow-wrap: normal; }
-    .token-form { display: grid; grid-template-rows: auto 1fr auto; min-block-size: 24rem; padding: var(--space-6); }
+    .token-form { display: grid; grid-template-rows: auto 1fr auto; min-block-size: calc(24rem + var(--space-4)); padding: var(--space-6); }
     .token-entry-region > label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-bold); }
     .token-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
     input { width: 100%; min-height: var(--action-height); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); background: var(--surface); color: var(--text); font: inherit; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
@@ -150,7 +150,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .scope-section ul { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
     .scope-section li { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-small); overflow-wrap: anywhere; }
     .status-actions { margin-top: var(--space-6); }
-    .connection-action-slot { align-self: end; padding-top: var(--space-4); }
+    .connection-action-slot { display: grid; align-self: end; grid-template-rows: repeat(2, var(--action-height)); gap: var(--space-3); padding-top: var(--space-4); }
     .connection-action-slot > * { width: 100%; }
     .credential-output output { display: block; margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
     .credential-output output:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
