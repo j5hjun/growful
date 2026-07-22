@@ -133,7 +133,7 @@ export function registerPortalRoutes(
     sendPortalPage(
       reply,
       renderPortalManagement(access),
-      `${sharedContentSecurityPolicy}; script-src 'self'`,
+      `${sharedContentSecurityPolicy.replace("form-action 'none'", "form-action 'self'")}; script-src 'self'`,
       "manage",
       access,
     ),

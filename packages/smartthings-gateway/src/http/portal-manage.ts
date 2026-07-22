@@ -22,11 +22,11 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       <p>토큰은 이 탭을 닫거나 새로고침하면 사라집니다. <span class="phrase">브라우저에 저장하지 않습니다.</span></p>
     </header>
     <section class="connection-panel" aria-label="Growful 토큰 연결 상태">
-      <form class="token-form" action="/manage" method="post" data-portal-token-form novalidate>
+      <form class="token-form" action="/manage#javascript-required" method="get" data-portal-token-form novalidate>
         <div class="token-entry-region">
           <label for="growful-token">Growful 토큰</label>
           <div class="token-entry">
-            <input id="growful-token" name="growfulToken" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="grw_st_[A-Za-z0-9_\\-]{43}" minlength="50" maxlength="50" aria-describedby="token-hint" required>
+            <input id="growful-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="grw_st_[A-Za-z0-9_\\-]{43}" minlength="50" maxlength="50" aria-describedby="token-hint" required>
             <button class="secondary reveal" type="button" data-token-visibility aria-controls="growful-token" aria-pressed="false">토큰 보기</button>
           </div>
           <p class="hint" id="token-hint">연결 완료 화면에서 한 번 표시된 <span class="phrase"><code>grw_st_</code> 토큰을</span> 붙여 넣으세요.</p>
@@ -34,6 +34,9 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
         <div class="connection-state-region">
           <p class="feedback" data-portal-feedback role="status" aria-live="polite" hidden></p>
           <div class="error" data-portal-error role="alert" hidden><p data-portal-error-message></p></div>
+          <div class="no-js-fallback error" id="javascript-required" data-no-js-fallback role="status" aria-labelledby="javascript-required-title">
+            <p id="javascript-required-title"><strong>스크립트를 사용할 수 없습니다.</strong> 스크립트를 허용한 뒤 <span class="phrase">다시 시도하세요.</span> <span class="phrase">토큰은 전송되지 않았습니다.</span></p>
+          </div>
         </div>
         <div class="connection-action-slot">
           <button class="primary" type="submit" data-token-submit>연결 상태 확인</button>
@@ -121,6 +124,8 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .error p { margin: 0; color: var(--error); }
     .feedback { color: var(--success); }
     .error { color: var(--error); }
+    .no-js-fallback { display: none; font-size: var(--font-small); }
+    .no-js-fallback:target { display: block; }
     .connection-status { margin: 0 var(--space-6); padding: var(--space-4) 0 var(--space-6); border-top: 1px solid var(--border); }
     .credential-output { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
     .connection-status:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
