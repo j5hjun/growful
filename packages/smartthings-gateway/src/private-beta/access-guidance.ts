@@ -31,7 +31,7 @@ function renderAuthenticationFailure(): string {
     <section class="guidance" aria-labelledby="credential-guidance">
       <h2 id="credential-guidance">다시 확인할 정보</h2>
       <ol>
-        <li>초대 메시지에 적힌 <strong>초대 사용자 이름</strong></li>
+        <li>초대 메시지에 적힌 <strong class="phrase">초대 사용자 이름</strong></li>
         <li>초대 메시지에 함께 전달된 <strong class="phrase">원본 invite secret</strong></li>
       </ol>
       <p><strong>이 정보는 삼성 계정 비밀번호가 아닙니다.</strong> 삼성 계정 비밀번호는 Growful 인증 창에 입력하지 마세요.</p>
@@ -56,7 +56,7 @@ function renderRateLimit(retryAfterSeconds: number): string {
     <section class="guidance" aria-labelledby="retry-guidance">
       <h2 id="retry-guidance">다시 시도하는 방법</h2>
       <p><time datetime="PT${retryAfterSeconds}S">약 ${retryAfterSeconds}초 뒤</time> 인증을 다시 시작하세요.</p>
-      <p>기다리는 동안 초대 메시지의 <strong>초대 사용자 이름</strong>과 <strong class="phrase">원본 invite secret</strong>을 확인하세요. 삼성 계정 비밀번호를 입력하면 안 됩니다.</p>
+      <p>기다리는 동안 초대 메시지의 <strong class="phrase">초대 사용자 이름</strong>과 <strong class="phrase">원본 invite secret</strong>을 확인하세요. 삼성 계정 비밀번호를 입력하면 안 됩니다.</p>
     </section>
     <nav class="actions" aria-label="일시 제한 복구">
       <a class="action action-primary" href="/oauth/start">잠시 후 다시 인증하기</a>

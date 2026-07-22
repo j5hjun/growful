@@ -245,6 +245,62 @@ describe("Private-beta OAuth access HTTP surface", () => {
     expect(response.json()).toEqual({ error: "private_beta_access_required" })
   })
 
+  it("renders browser guidance when XHTML is the accepted document type", async () => {
+    // Given
+    const fixture = createFixture(
+      privateBetaOAuthAccess([
+        {
+          passwordHash: "dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42",
+          username: "private-user",
+        },
+      ]),
+    )
+
+    // When
+    const response = await fixture.app.inject({
+      headers: { accept: "application/xhtml+xml" },
+      method: "GET",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(response.statusCode).toBe(401)
+    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.headers.vary).toBe("Accept")
+    expect(response.body).toContain("초대 사용자 이름")
+    expect(response.headers["www-authenticate"]).toBe(
+      'Basic realm="Growful private beta", charset="UTF-8"',
+    )
+  })
+
+  it.each(["text/html/invalid", "text/html;q=0x1"])(
+    "keeps the JSON contract for malformed browser media preference %s",
+    async (accept) => {
+      // Given
+      const fixture = createFixture(
+        privateBetaOAuthAccess([
+          {
+            passwordHash: "dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42",
+            username: "private-user",
+          },
+        ]),
+      )
+
+      // When
+      const response = await fixture.app.inject({
+        headers: { accept },
+        method: "GET",
+        url: "/oauth/start",
+      })
+
+      // Then
+      expect(response.statusCode).toBe(401)
+      expect(response.headers["content-type"]).toContain("application/json")
+      expect(response.headers.vary).toBe("Accept")
+      expect(response.json()).toEqual({ error: "private_beta_access_required" })
+    },
+  )
+
   it("rejects a private beta user removed from the invitation list", async () => {
     // Given
     const fixture = createFixture(

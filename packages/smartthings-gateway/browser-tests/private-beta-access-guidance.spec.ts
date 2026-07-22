@@ -59,7 +59,7 @@ for (const variant of pageVariants) {
         })
         const primaryAction = page.locator(".action-primary")
         const secondaryAction = page.locator(".action-secondary")
-        const secretPhrase = page.getByText("원본 invite secret", { exact: true })
+        const credentialPhrases = ["초대 사용자 이름", "원본 invite secret"] as const
         await page.keyboard.press("Tab")
 
         // Then
@@ -71,7 +71,13 @@ for (const variant of pageVariants) {
           colorScheme === "light" ? "rgb(247, 246, 243)" : "rgb(16, 24, 32)",
         )
         expect(splitWords).toEqual([])
-        expect(await secretPhrase.evaluate((element) => element.getClientRects().length)).toBe(1)
+        for (const phrase of credentialPhrases) {
+          expect(
+            await page
+              .getByText(phrase, { exact: true })
+              .evaluate((element) => element.getClientRects().length),
+          ).toBe(1)
+        }
         await expect(primaryAction).toBeFocused()
         expect((await primaryAction.boundingBox())?.height).toBeGreaterThanOrEqual(44)
         expect(

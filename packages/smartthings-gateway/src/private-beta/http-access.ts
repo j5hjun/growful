@@ -34,6 +34,8 @@ type MediaPreference = {
   readonly specificity: number
 }
 
+const qualityValuePattern = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/u
+
 function mediaPreference(
   accept: string,
   targetType: string,
@@ -44,7 +46,10 @@ function mediaPreference(
     const [rawMediaType = "", ...parameters] = mediaRange
       .split(";")
       .map((part) => part.trim().toLowerCase())
-    const [rangeType = "", rangeSubtype = ""] = rawMediaType.split("/")
+    const mediaTypeParts = rawMediaType.split("/")
+    if (mediaTypeParts.length !== 2) continue
+    const [rangeType = "", rangeSubtype = ""] = mediaTypeParts
+    if (rangeType === "" || rangeSubtype === "") continue
     const specificity =
       rangeType === targetType && rangeSubtype === targetSubtype
         ? 2
@@ -56,9 +61,9 @@ function mediaPreference(
     if (specificity < 0) continue
 
     const qualityParameter = parameters.find((parameter) => parameter.startsWith("q="))
-    const parsedQuality = qualityParameter === undefined ? 1 : Number(qualityParameter.slice(2))
+    const rawQuality = qualityParameter?.slice(2)
     const quality =
-      Number.isFinite(parsedQuality) && parsedQuality >= 0 && parsedQuality <= 1 ? parsedQuality : 0
+      rawQuality === undefined ? 1 : qualityValuePattern.test(rawQuality) ? Number(rawQuality) : 0
     if (
       specificity > preference.specificity ||
       (specificity === preference.specificity && quality > preference.quality)
@@ -71,7 +76,13 @@ function mediaPreference(
 
 function acceptsHtml(accept: string | undefined): boolean {
   if (accept === undefined) return false
-  const html = mediaPreference(accept, "text", "html")
+  const textHtml = mediaPreference(accept, "text", "html")
+  const xhtml = mediaPreference(accept, "application", "xhtml+xml")
+  const html =
+    xhtml.quality > textHtml.quality ||
+    (xhtml.quality === textHtml.quality && xhtml.specificity > textHtml.specificity)
+      ? xhtml
+      : textHtml
   const json = mediaPreference(accept, "application", "json")
   if (html.quality !== json.quality) return html.quality > json.quality
   return html.quality > 0 && html.specificity > json.specificity
