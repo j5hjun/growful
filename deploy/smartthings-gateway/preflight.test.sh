@@ -7,7 +7,6 @@ test_root="$(mktemp -d "${temporary_root%/}/smartthings-gateway-preflight-test.X
 deployment_root="$test_root/deployment"
 release_dir="$deployment_root/releases/test"
 fake_bin="$test_root/bin"
-prerequisite_bin="$test_root/prerequisite-bin"
 test_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000001'
 
 cleanup() {
@@ -15,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$release_dir" "$fake_bin" "$prerequisite_bin"
+mkdir -p "$release_dir" "$fake_bin"
 cp "$source_dir/preflight.sh" "$source_dir/compose.yaml" "$release_dir/"
 # Dollar expressions below belong to the generated fake executable.
 # shellcheck disable=SC2016
@@ -70,19 +69,28 @@ valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
 write_environment "$valid_key" 8100
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
 
-for command_name in base64 dirname docker flock head stat tr; do
-  ln -s "$(command -v "$command_name")" "$prerequisite_bin/$command_name"
+prerequisite_commands=(base64 cp curl dirname docker flock head rm sleep stat tr)
+for missing_command in cp curl rm sleep; do
+  prerequisite_bin="$test_root/bin-without-$missing_command"
+  mkdir -p "$prerequisite_bin"
+  for command_name in "${prerequisite_commands[@]}"; do
+    if [[ "$command_name" != "$missing_command" ]]; then
+      ln -s "$(command -v "$command_name")" "$prerequisite_bin/$command_name"
+    fi
+  done
+  if PATH="$prerequisite_bin" DEPLOYMENT_ROOT="$deployment_root" \
+    /bin/bash "$release_dir/preflight.sh" "$test_image_reference" test \
+    >"$test_root/missing-command.out" 2>"$test_root/missing-command.err"; then
+    printf 'preflight without %s unexpectedly passed\n' "$missing_command" >&2
+    exit 1
+  fi
+  if ! grep -Fq "required command is missing: $missing_command" \
+    "$test_root/missing-command.err"; then
+    printf 'preflight did not report missing %s before deployment validation\n' \
+      "$missing_command" >&2
+    exit 1
+  fi
 done
-if PATH="$prerequisite_bin" DEPLOYMENT_ROOT="$deployment_root" \
-  /bin/bash "$release_dir/preflight.sh" "$test_image_reference" test \
-  >"$test_root/missing-command.out" 2>"$test_root/missing-command.err"; then
-  printf 'preflight without curl unexpectedly passed\n' >&2
-  exit 1
-fi
-if ! grep -Fq 'required command is missing: curl' "$test_root/missing-command.err"; then
-  printf 'preflight did not report missing curl before deployment validation\n' >&2
-  exit 1
-fi
 
 write_environment "$valid_key" 8100
 sed -i.bak '/^PUBLIC_SUPPORT_EMAIL=/d' "$deployment_root/.env"
