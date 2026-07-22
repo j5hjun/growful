@@ -1,11 +1,19 @@
+import { isIP } from "node:net"
 import fastifyRateLimit from "@fastify/rate-limit"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 
 const rateLimitWindowMs = 60_000
 
+function getCloudflareClientAddress(request: FastifyRequest): string {
+  const cloudflareClientAddress = request.headers["cf-connecting-ip"]
+  return typeof cloudflareClientAddress === "string" && isIP(cloudflareClientAddress) !== 0
+    ? cloudflareClientAddress
+    : (request.raw.socket.remoteAddress ?? "unknown")
+}
+
 export const httpRateLimitPolicies = {
   oauthCallback: {
-    keyGenerator: (request: FastifyRequest) => request.raw.socket.remoteAddress ?? "unknown",
+    keyGenerator: getCloudflareClientAddress,
     max: 60,
     timeWindow: rateLimitWindowMs,
   },

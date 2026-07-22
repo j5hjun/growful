@@ -254,7 +254,10 @@ describe("OAuth callback browser results", () => {
     const fixture = createGatewayAppFixture({ apps })
     for (let requestIndex = 0; requestIndex < 60; requestIndex += 1) {
       const response = await fixture.app.inject({
-        headers: { "x-forwarded-for": `198.51.100.${requestIndex + 1}` },
+        headers: {
+          "cf-connecting-ip": "198.51.100.1",
+          "x-forwarded-for": `198.51.100.${requestIndex + 1}`,
+        },
         method: "GET",
         url: `/oauth/callback?code=invalid-code-${requestIndex}`,
       })
@@ -263,7 +266,10 @@ describe("OAuth callback browser results", () => {
 
     // When
     const response = await fixture.app.inject({
-      headers: { "x-forwarded-for": "203.0.113.1" },
+      headers: {
+        "cf-connecting-ip": "198.51.100.1",
+        "x-forwarded-for": "203.0.113.1",
+      },
       method: "GET",
       url: "/oauth/callback?code=rate-limited-sensitive-code",
     })
@@ -272,5 +278,16 @@ describe("OAuth callback browser results", () => {
     expectRecoveryPage(response, 429, "요청이 너무 많습니다")
     expect(response.body).not.toContain("rate-limited-sensitive-code")
     expect(response.headers["retry-after"]).toBeDefined()
+
+    const otherClientResponse = await fixture.app.inject({
+      headers: {
+        "cf-connecting-ip": "198.51.100.2",
+        "x-forwarded-for": "203.0.113.1",
+      },
+      method: "GET",
+      url: "/oauth/callback?code=other-client-sensitive-code",
+    })
+    expectRecoveryPage(otherClientResponse, 400, "올바르지 않은 연결 요청입니다")
+    expect(otherClientResponse.body).not.toContain("other-client-sensitive-code")
   })
 })
