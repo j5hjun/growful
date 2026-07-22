@@ -15,6 +15,7 @@ previous_image_reference='registry.example/gateway@sha256:0000000000000000000000
 broken_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000003'
 public_broken_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000004'
 same_rerun_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000005'
+policy_misroute_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000006'
 healthy_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000002'
 release_state_file="$deployment_root/.deployed-release-state"
 deployment_sequence_file="$deployment_root/.deployment-sequence"
@@ -123,7 +124,28 @@ printf '%s\n' \
   '  touch "$FAIL_ONCE_MARKER"' \
   '  exit 22' \
   'fi' \
-  'if [[ "$*" == */readyz ]]; then' \
+  'policy_marker_mismatch=0' \
+  'case "${POLICY_MISMATCH_TARGET:-}" in' \
+  '  local-privacy) [[ "$*" == *127.0.0.1:8100/privacy ]] && policy_marker_mismatch=1 ;;' \
+  '  local-terms) [[ "$*" == *127.0.0.1:8100/terms ]] && policy_marker_mismatch=1 ;;' \
+  '  local-support) [[ "$*" == *127.0.0.1:8100/support ]] && policy_marker_mismatch=1 ;;' \
+  '  local-status) [[ "$*" == *127.0.0.1:8100/status ]] && policy_marker_mismatch=1 ;;' \
+  '  public-privacy) [[ "$*" == *smartthings.growful.click/privacy ]] && policy_marker_mismatch=1 ;;' \
+  '  public-terms) [[ "$*" == *smartthings.growful.click/terms ]] && policy_marker_mismatch=1 ;;' \
+  '  public-support) [[ "$*" == *smartthings.growful.click/support ]] && policy_marker_mismatch=1 ;;' \
+  '  public-status) [[ "$*" == *smartthings.growful.click/status ]] && policy_marker_mismatch=1 ;;' \
+  'esac' \
+  'if ((policy_marker_mismatch)); then' \
+  '  printf "<article data-policy-document=\"unexpected\"></article>\n"' \
+  'elif [[ "$*" == */privacy ]]; then' \
+  '  printf "<article data-policy-document=\"privacy\"></article>\n"' \
+  'elif [[ "$*" == */terms ]]; then' \
+  '  printf "<article data-policy-document=\"terms\"></article>\n"' \
+  'elif [[ "$*" == */support ]]; then' \
+  '  printf "<article data-support-document></article>\n"' \
+  'elif [[ "$*" == */status ]]; then' \
+  '  printf "<article data-status-document></article>\n"' \
+  'elif [[ "$*" == */readyz ]]; then' \
   '  printf "{\"status\":\"ready\"}\n"' \
   'else' \
   '  printf "{\"status\":\"ok\"}\n"' \
@@ -325,53 +347,87 @@ grep -Eq '^same-rerun\|compose .* stop gateway$' "$fake_log"
 assert_release_state "$previous_image_reference" same-rerun "$previous_release" 4
 assert_deployment_sequence 7 broken "$broken_image_reference"
 
+for policy_mismatch_target in local-privacy local-terms local-support local-status public-privacy public-terms public-support public-status; do
+  : >"$fake_log"
+  if POLICY_MISMATCH_TARGET="$policy_mismatch_target" DEPLOYMENT_ROOT="$deployment_root" \
+    PUBLIC_BASE_URL="https://smartthings.growful.click" \
+    bash "$release_dir/deploy.sh" "$policy_misroute_image_reference" policy-misroute 8; then
+    printf 'deployment with a mismatched %s marker unexpectedly succeeded\n' \
+      "$policy_mismatch_target" >&2
+    exit 1
+  fi
+  case "$policy_mismatch_target" in
+    local-privacy) expected_policy_url='127\.0\.0\.1:8100/privacy' ;;
+    local-terms) expected_policy_url='127\.0\.0\.1:8100/terms' ;;
+    local-support) expected_policy_url='127\.0\.0\.1:8100/support' ;;
+    local-status) expected_policy_url='127\.0\.0\.1:8100/status' ;;
+    public-privacy) expected_policy_url='smartthings\.growful\.click/privacy' ;;
+    public-terms) expected_policy_url='smartthings\.growful\.click/terms' ;;
+    public-support) expected_policy_url='smartthings\.growful\.click/support' ;;
+    public-status) expected_policy_url='smartthings\.growful\.click/status' ;;
+  esac
+  grep -Eq "^policy-misroute\\|curl .*${expected_policy_url}$" "$fake_log"
+  grep -Eq '^same-rerun\|compose .* up -d --no-deps gateway$' "$fake_log"
+  assert_release_state "$previous_image_reference" same-rerun "$previous_release" 4
+  assert_deployment_sequence 8 policy-misroute "$policy_misroute_image_reference"
+done
+
 : >"$fake_log"
-DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy 8
+DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
+  bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy 9
 
 grep -Eq '^healthy\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/readyz$' "$fake_log"
-assert_release_state "$healthy_image_reference" healthy "$release_dir" 8
-assert_deployment_sequence 8 healthy "$healthy_image_reference"
+grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/privacy$' "$fake_log"
+grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/terms$' "$fake_log"
+grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/support$' "$fake_log"
+grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/status$' "$fake_log"
+grep -Eq '^healthy\|curl .*smartthings\.growful\.click/privacy$' "$fake_log"
+grep -Eq '^healthy\|curl .*smartthings\.growful\.click/terms$' "$fake_log"
+grep -Eq '^healthy\|curl .*smartthings\.growful\.click/support$' "$fake_log"
+grep -Eq '^healthy\|curl .*smartthings\.growful\.click/status$' "$fake_log"
+assert_release_state "$healthy_image_reference" healthy "$release_dir" 9
+assert_deployment_sequence 9 healthy "$healthy_image_reference"
 test "$(readlink "$deployment_root/current")" = "$release_dir"
 
 : >"$fake_log"
 mv "$deployment_sequence_file" "$deployment_sequence_file.saved"
 printf '%s\n' '18446744073709551617' malformed "$broken_image_reference" >"$deployment_sequence_file"
-if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" malformed 9; then
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" malformed 10; then
   printf 'overflowing stored deployment sequence unexpectedly succeeded\n' >&2
   exit 1
 fi
 test ! -s "$fake_log"
 mv "$deployment_sequence_file.saved" "$deployment_sequence_file"
-assert_deployment_sequence 8 healthy "$healthy_image_reference"
+assert_deployment_sequence 9 healthy "$healthy_image_reference"
 
 : >"$fake_log"
-DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" stale 7
+DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" stale 8
 test ! -s "$fake_log"
-assert_release_state "$healthy_image_reference" healthy "$release_dir" 8
-assert_deployment_sequence 8 healthy "$healthy_image_reference"
+assert_release_state "$healthy_image_reference" healthy "$release_dir" 9
+assert_deployment_sequence 9 healthy "$healthy_image_reference"
 
 : >"$fake_log"
-if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" conflict 8; then
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_image_reference" conflict 9; then
   printf 'deployment sequence collision unexpectedly succeeded\n' >&2
   exit 1
 fi
 test ! -s "$fake_log"
-assert_release_state "$healthy_image_reference" healthy "$release_dir" 8
-assert_deployment_sequence 8 healthy "$healthy_image_reference"
+assert_release_state "$healthy_image_reference" healthy "$release_dir" 9
+assert_deployment_sequence 9 healthy "$healthy_image_reference"
 
 : >"$fake_log"
-DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy 9
+DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy 10
 if grep -Eq '^healthy\|compose .* (pull gateway|run --rm gateway|up -d|stop gateway)' "$fake_log"; then
   printf 'same-release sequence update mutated the healthy gateway\n' >&2
   exit 1
 fi
-assert_release_state "$healthy_image_reference" healthy "$release_dir" 9
-assert_deployment_sequence 9 healthy "$healthy_image_reference"
+assert_release_state "$healthy_image_reference" healthy "$release_dir" 10
+assert_deployment_sequence 10 healthy "$healthy_image_reference"
 
 rm -f "$rollback_block_marker"
 BLOCK_ROLLBACK=1 DEPLOYMENT_ROOT="$deployment_root" \
-  bash "$release_dir/deploy.sh" "$broken_image_reference" interrupted 10 &
+  bash "$release_dir/deploy.sh" "$broken_image_reference" interrupted 11 &
 interrupted_deploy_pid=$!
 for attempt in {1..50}; do
   if [[ -s "$rollback_block_marker" ]]; then

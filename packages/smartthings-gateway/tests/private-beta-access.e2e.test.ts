@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { type AppOptions, createApp } from "../src/http/app.js"
 import { InstalledAppIdSchema, type StoredTokens } from "../src/oauth/contracts.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
+import { emptyServiceStatusSource } from "../src/status/service-status.js"
 import { allowAllGrowfulAbuseControl } from "./fixtures/abuse-control.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore, memoryStoreGrowfulToken } from "./fixtures/memory-oauth-store.js"
@@ -29,10 +30,7 @@ function createFixture(oauthAccess: AppOptions["oauthAccess"]) {
   const service = new OAuthService({
     accessPolicy: {
       policyVersion: oauthAccess.policyVersion,
-      privateBetaUsernames:
-        oauthAccess.mode === "private_beta"
-          ? oauthAccess.invites.map((invite) => invite.username)
-          : null,
+      privateBetaAccess: oauthAccess.mode === "private_beta" ? oauthAccess.inviteAccess : null,
     },
     client: new FakeSmartThingsClient(),
     now: () => new Date("2026-07-19T00:00:00.000Z"),
@@ -47,6 +45,7 @@ function createFixture(oauthAccess: AppOptions["oauthAccess"]) {
     oauthAccess,
     readinessProbe: readyProbe,
     redirectOrigin,
+    serviceStatusSource: emptyServiceStatusSource,
     service,
     smartThingsAppId: "growful-app",
   })

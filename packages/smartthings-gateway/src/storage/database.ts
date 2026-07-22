@@ -1,6 +1,10 @@
 import { CamelCasePlugin, type ColumnType, type Generated, Kysely, PostgresDialect } from "kysely"
 import { Pool } from "pg"
 import type { PrivateBetaInviteTable } from "../private-beta/invite-schema.js"
+import type {
+  ServiceIncidentTable,
+  ServiceIncidentUpdateTable,
+} from "../status/service-status-schema.js"
 
 export { DatabaseMigrationError, runMigrations } from "./database-migrations.js"
 
@@ -11,6 +15,7 @@ export type OAuthStateTable = {
   readonly consentedAt: Timestamp | null
   readonly expiresAt: Timestamp
   readonly policyVersion: string | null
+  readonly privateBetaInviteGeneration: string | null
   readonly privateBetaUsername: string | null
   readonly requestedScopes: string
   readonly stateHash: string
@@ -35,6 +40,7 @@ export type SmartThingsConnectionTable = OAuthTokenTable & {
   readonly growfulTokenCreatedAt: Timestamp
   readonly growfulTokenHash: string
   readonly policyVersion: string | null
+  readonly privateBetaInviteGeneration: string | null
   readonly privateBetaUsername: string | null
   readonly requestQuotaAcceptedCount: Generated<number>
   readonly requestQuotaLastRejectedAt: NullableTimestamp
@@ -65,6 +71,8 @@ export type GatewayDatabase = {
   readonly oauthStates: OAuthStateTable
   readonly oauthTokens: OAuthTokenTable
   readonly privateBetaInvites: PrivateBetaInviteTable
+  readonly serviceIncidents: ServiceIncidentTable
+  readonly serviceIncidentUpdates: ServiceIncidentUpdateTable
   readonly smartThingsConnections: SmartThingsConnectionTable
 }
 

@@ -4,6 +4,7 @@ import { vi } from "vitest"
 import { createApp } from "../../src/http/app.js"
 import { InstalledAppIdSchema, type StoredTokens } from "../../src/oauth/contracts.js"
 import { OAuthService } from "../../src/oauth/oauth-service.js"
+import { emptyServiceStatusSource } from "../../src/status/service-status.js"
 import { allowAllGrowfulAbuseControl } from "./abuse-control.js"
 import { FakeSmartThingsClient } from "./fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./memory-oauth-store.js"
@@ -87,6 +88,7 @@ export function createSmartThingsWebhookFixture(
     oauthAccess: publicOAuthAccess,
     readinessProbe: readyProbe,
     redirectOrigin: "https://smartthings.growful.click",
+    serviceStatusSource: emptyServiceStatusSource,
     service,
     smartThingsConfirmationRequester: confirmationRequester,
     smartThingsAppId: "growful-app",

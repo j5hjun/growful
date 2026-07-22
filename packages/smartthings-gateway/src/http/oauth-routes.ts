@@ -83,7 +83,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
       bodyLimit: 4_096,
       config: { rateLimit: httpRateLimitPolicies.oauthStart },
       onRequest: async (request, reply) => {
-        const accessDenied = privateBetaAccess.require(request, reply)
+        const accessDenied = await privateBetaAccess.require(request, reply)
         if (accessDenied !== undefined) {
           return accessDenied
         }
@@ -107,7 +107,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
           },
         )
       }
-      const privateBetaUsername = privateBetaAccess.getUsername(request)
+      const privateBetaUsername = await privateBetaAccess.getUsername(request)
       if (privateBetaUsername === undefined) {
         return privateBetaAccess.require(request, reply)
       }

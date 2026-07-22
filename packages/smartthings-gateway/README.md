@@ -14,8 +14,12 @@ SmartThings 서면 확인을 요청할 때는
 
 - `GET /healthz`: 프로세스 상태
 - `GET /readyz`: PostgreSQL 조회와 마지막 전체 감사 체인 검증이 모두 정상인 서비스 준비 상태
+- `GET /status`: 현재 readiness, 운영자가 게시한 서비스 공지와 해결 이력을 보여주는 상태 페이지
 - `GET /`: SmartThings 연결 흐름과 보안 경계를 설명하는 공개 포털
 - `GET /manage`: Growful 토큰으로 연결을 확인·교체·해제하는 관리 화면
+- `GET /privacy`: 현재 데이터 흐름과 미확정 운영 경계를 밝히는 개인정보 처리방침
+- `GET /terms`: 실행 모드에 맞춘 기술적 이용조건과 아직 확정되지 않은 상업·법률 조건
+- `GET /support`: 비밀값 없이 연결·토큰 노출·개인정보·보안 문제를 문의하는 지원 안내
 - `GET /portal.js`: 관리 화면의 자체 호스팅 브라우저 클라이언트
 - `GET /robots.txt`: 공개 포털의 검색 엔진 접근 정책
 - `GET /oauth/start`: 권한·디바이스 범위 선택 화면
@@ -139,9 +143,48 @@ Gateway가 제공하는 다음 상한 scope를 모두 허용해야 합니다.
 
 `SERVICE_ACCESS_MODE=private_beta`에서는 `/oauth/start`의 GET과 POST 모두
 `PRIVATE_BETA_INVITES_JSON`에 등록된 사용자별 HTTP Basic 인증을 요구합니다. 목록에는 사용자명과
-비밀번호 원문 대신 소문자 SHA-256 hash만 저장합니다. 사용자를 회수하려면 해당 항목을 제거하고
-Gateway를 재기동합니다. 공개 모드는
-운영자·정책 URL과 SmartThings 공개 사용 서면 확인 정보를 모두 검증한 설정에서만 기동합니다.
+비밀번호 원문 대신 소문자 SHA-256 hash만 저장합니다. 이 설정 목록은 기존 초대의 초기값으로
+계속 사용할 수 있으며, 같은 사용자명의 PostgreSQL 초대 행이 있으면 DB 상태가 우선합니다.
+운영자는 빌드된 관리 CLI로 재기동 없이 초대를 발급·조회·회수합니다.
+
+```sh
+DATABASE_URL=postgresql://... node dist/manage-invites.js list
+DATABASE_URL=postgresql://... node dist/manage-invites.js issue USERNAME OPERATOR_ID TICKET_ID
+DATABASE_URL=postgresql://... node dist/manage-invites.js revoke USERNAME OPERATOR_ID TICKET_ID
+```
+
+`issue`가 실제로 새 초대를 만들거나 회수된 초대를 재발급할 때만 256-bit secret 원문을 한 번
+출력합니다. 이미 활성 상태이면 `changed=false`만 반환하고 기존 secret을 노출하거나 교체하지
+않습니다. 재발급마다 새 초대 세대 ID를 만들므로 회수 전에 시작된 OAuth 흐름은 같은 사용자명이
+다시 활성화되어도 완료할 수 없습니다. `revoke`는 DB 초대를 회수하고 해당 사용자의 미완료 OAuth state와 기존 SmartThings
+연결을 같은 트랜잭션에서 삭제합니다. 설정에만 있던 초대도 회수 DB 행을 남겨 재기동 후 다시
+살아나지 않게 합니다. 따라서 회수 직후 기존 Basic 자격 증명과 Growful 토큰은 모두 거부됩니다.
+운영자 ID와 ticket은 원문을 저장하지 않고 SHA-256 hash로 감사 체인에 기록합니다. CLI 입력의
+실제 운영자 귀속은 개별 SSH 계정과 session audit로 별도 증명해야 합니다. 공개 모드는
+운영자·지원 연락처와 SmartThings 공개 사용 서면 확인 정보를 모두 검증한 설정에서만 기동합니다.
+개인정보 처리방침과 이용약관 URL은 OAuth callback과 같은 origin의 `/privacy`, `/terms`로
+Gateway가 직접 제공하며 별도 환경변수를 읽지 않습니다.
+지원 절차는 `/support`에서 제공하며 Growful·SmartThings 토큰 원문, OAuth code, 비밀번호나
+민감한 전체 응답 본문을 이메일로 요청하지 않습니다. 본인 확인, 목표 응답시간과 보안 신고의
+긴급 단계는 아직 확정되지 않았으므로 공개 출시 전 운영·법률 검토가 필요합니다.
+사용자용 `/status`는 `/readyz`와 같은 현재 readiness를 보여주지만 SmartThings 종단 간 가용성,
+SLA 또는 가동률을 보장하지 않습니다. 장애 중에도 안내를 읽을 수 있도록 HTML은 `200`을
+유지하고 기계용 `/readyz`가 `503`을 반환합니다. 운영자는 다음 CLI로 공개 공지를 열고,
+조사·관찰 상태를 갱신하고, 해결 처리합니다.
+
+```sh
+DATABASE_URL=postgresql://... node dist/manage-status.js list
+DATABASE_URL=postgresql://... node dist/manage-status.js open degraded "TITLE" "MESSAGE" OPERATOR_ID TICKET_ID
+DATABASE_URL=postgresql://... node dist/manage-status.js update INCIDENT_ID monitoring "MESSAGE" OPERATOR_ID TICKET_ID
+DATABASE_URL=postgresql://... node dist/manage-status.js resolve INCIDENT_ID "MESSAGE" OPERATOR_ID TICKET_ID
+```
+
+영향 범위는 `degraded` 또는 `outage`, 진행 상태는 `investigating` 또는 `monitoring`입니다. 제목과
+메시지는 즉시 `/status`에 공개되므로 token, secret, 사용자 식별자, 내부 인프라 상세를 넣지
+않습니다. 해결된 사건은 이력으로 남고 다시 갱신할 수 없습니다. 운영자 ID와 ticket은 원문을
+저장하지 않고 SHA-256 hash로 감사 체인에 기록하지만, 실제 운영자 귀속은 개별 SSH 계정과
+session audit로 별도 증명해야 합니다. 이 공지 기능은 자동 장애 탐지나 개별 사용자 통지를
+대신하지 않습니다.
 공개 모드 설정 필드와 외부 게이트는 [공개 출시 계획](./PUBLIC-LAUNCH.md)을 따릅니다.
 SmartThings 제출 질문은 [승인 요청 패킷](./SMARTTHINGS-APPROVAL-REQUEST.md), 요구사항과 증빙은
 [준수 매트릭스](./SMARTTHINGS-COMPLIANCE-MATRIX.md)에서 추적합니다. 운영 통제 초안은

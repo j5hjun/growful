@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify"
 import type { ServiceDisclosures } from "../config.js"
-import { getPrivateBetaInviteUsername, type PrivateBetaInvite } from "./invite.js"
+import type { PrivateBetaInviteAccess } from "./invite-access.js"
 
 const maximumPrivateBetaFailures = 5
 const privateBetaFailureWindowMs = 60_000
@@ -15,7 +15,7 @@ export type OAuthAccessPolicy = ServiceDisclosures &
   (
     | { readonly mode: "public" }
     | {
-        readonly invites: readonly PrivateBetaInvite[]
+        readonly inviteAccess: PrivateBetaInviteAccess
         readonly mode: "private_beta"
       }
   )
@@ -63,14 +63,13 @@ export class PrivateBetaAccessGate {
 
   constructor(private readonly access: OAuthAccessPolicy) {}
 
-  getUsername(request: FastifyRequest): string | null | undefined {
+  async getUsername(request: FastifyRequest): Promise<string | null | undefined> {
     return this.access.mode === "public"
       ? null
-      : (getPrivateBetaInviteUsername(request.headers.authorization, this.access.invites) ??
-          undefined)
+      : ((await this.access.inviteAccess.authenticate(request.headers.authorization)) ?? undefined)
   }
 
-  require(request: FastifyRequest, reply: FastifyReply) {
+  async require(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | undefined> {
     if (this.access.mode === "public") {
       return undefined
     }
@@ -83,7 +82,7 @@ export class PrivateBetaAccessGate {
         .status(429)
         .send({ error: "private_beta_access_rate_limited" as const })
     }
-    if (this.getUsername(request) !== undefined) {
+    if ((await this.getUsername(request)) !== undefined) {
       this.rateLimiter.recordSuccess(rateLimitKey)
       return undefined
     }

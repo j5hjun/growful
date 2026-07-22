@@ -8,6 +8,7 @@ import { createApp } from "../src/http/app.js"
 import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import { generateGrowfulToken, hashGrowfulToken } from "../src/security/growful-token.js"
+import { emptyServiceStatusSource } from "../src/status/service-status.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
 import { allowAllGrowfulAbuseControl } from "./fixtures/abuse-control.js"
@@ -62,6 +63,7 @@ describe("audited HTTP access", () => {
       oauthAccess: publicOAuthAccess,
       readinessProbe: readyProbe,
       redirectOrigin: "https://smartthings.growful.click",
+      serviceStatusSource: emptyServiceStatusSource,
       service: new OAuthService({
         client: new FakeSmartThingsClient(),
         refreshBeforeExpiryMs: 3_600_000,

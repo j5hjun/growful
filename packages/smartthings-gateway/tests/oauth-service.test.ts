@@ -6,6 +6,7 @@ import {
   OAuthScopeMismatchError,
   OAuthService,
 } from "../src/oauth/oauth-service.js"
+import { ConfiguredPrivateBetaInviteAccess } from "../src/private-beta/invite-access.js"
 import { hashGrowfulToken } from "../src/security/growful-token.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
@@ -41,6 +42,7 @@ describe("OAuthService", () => {
       consentedAt: now,
       expiresAt: new Date(now.getTime() - 1),
       policyVersion: "test-policy",
+      privateBetaInviteGeneration: null,
       privateBetaUsername: null,
       requestedScopes: ["r:devices:$"],
     })
@@ -48,6 +50,7 @@ describe("OAuthService", () => {
       consentedAt: now,
       expiresAt: new Date(now.getTime() + 1),
       policyVersion: "test-policy",
+      privateBetaInviteGeneration: null,
       privateBetaUsername: null,
       requestedScopes: ["r:devices:$"],
     })
@@ -90,7 +93,12 @@ describe("OAuthService", () => {
     const store = new MemoryOAuthStore()
     const createPrivateService = (privateBetaUsernames: readonly string[]) =>
       new OAuthService({
-        accessPolicy: { policyVersion: "test-policy", privateBetaUsernames },
+        accessPolicy: {
+          policyVersion: "test-policy",
+          privateBetaAccess: new ConfiguredPrivateBetaInviteAccess(
+            privateBetaUsernames.map((username) => ({ passwordHash: "0".repeat(64), username })),
+          ),
+        },
         client,
         growfulTokenGenerator: () => testGrowfulToken(1),
         now: () => now,
@@ -125,7 +133,12 @@ describe("OAuthService", () => {
     const store = new MemoryOAuthStore()
     const createPrivateService = (privateBetaUsernames: readonly string[]) =>
       new OAuthService({
-        accessPolicy: { policyVersion: "test-policy", privateBetaUsernames },
+        accessPolicy: {
+          policyVersion: "test-policy",
+          privateBetaAccess: new ConfiguredPrivateBetaInviteAccess(
+            privateBetaUsernames.map((username) => ({ passwordHash: "0".repeat(64), username })),
+          ),
+        },
         client,
         now: () => now,
         refreshBeforeExpiryMs: 60 * 60 * 1_000,

@@ -20,13 +20,12 @@ openssl rand -base64 32
 chmod 600 ~/app/smartthings-gateway/.env
 ```
 
-예제 파일의 secret 값은 의도적으로 비어 있습니다. 이전 예제의 `replace-with-` 값도
-실제 secret으로 인정하지 않으므로 모든 빈 값을 새로 채워야 합니다.
+예제 파일의 secret과 필수 운영 값은 의도적으로 비어 있습니다. 이전 예제의 `replace-with-`
+값도 실제 secret으로 인정하지 않으므로 필수 값은 새로 채워야 합니다.
 
-최초 배포는 `SERVICE_ACCESS_MODE=private_beta`를 유지하고 사용자마다 서로 다른 capability 자격
-증명을 발급합니다. 사람이 정한 비밀번호를 재사용하지 않고 다음처럼 256-bit 무작위 secret과
-hash를 만들며, secret은 사용자에게 한 번만 전달합니다.
-운영 `.env`의 `PRIVATE_BETA_INVITES_JSON`에는 사용자명과 hash만 넣습니다.
+최초 배포는 `SERVICE_ACCESS_MODE=private_beta`를 유지합니다. 첫 기동용 초대는 사람이 정한
+비밀번호를 재사용하지 않고 다음처럼 256-bit 무작위 secret과 hash를 만들며, secret은 사용자에게
+한 번만 전달합니다. 운영 `.env`의 `PRIVATE_BETA_INVITES_JSON`에는 사용자명과 hash만 넣습니다.
 
 ```bash
 read -r -p 'Invite username: ' invite_username
@@ -46,34 +45,75 @@ unset invite_password invite_password_hash invite_username
 PRIVATE_BETA_INVITES_JSON=[{"username":"tester-1","passwordHash":"<64자리 소문자 SHA-256>"}]
 ```
 
-회수할 때는 해당 사용자 객체를 배열에서 제거하고 Gateway를 재기동합니다. 다른 사용자의
-자격 증명은 유지되며 제거된 사용자의 기존 Growful 토큰과 저장된 SmartThings 토큰도 재기동
-중 삭제되어 즉시 `401`을 받습니다. Basic 자격 증명은 `/oauth/start`의 GET과 POST에만
+배포 후에는 실행 중인 Gateway 컨테이너의 관리 CLI로 초대를 발급·조회·회수합니다. 다음 명령의
+컨테이너 선택식은 `smartthings-gateway` Compose 프로젝트에서 실행 중인 Gateway 하나를
+선택합니다.
+
+```bash
+gateway_container="$(docker ps \
+  --filter label=com.docker.compose.project=smartthings-gateway \
+  --filter label=com.docker.compose.service=gateway \
+  --filter status=running -q)"
+docker exec "$gateway_container" node dist/manage-invites.js list
+docker exec "$gateway_container" node dist/manage-invites.js issue USERNAME OPERATOR_ID TICKET_ID
+docker exec "$gateway_container" node dist/manage-invites.js revoke USERNAME OPERATOR_ID TICKET_ID
+unset gateway_container
+```
+
+`issue`는 새 초대나 회수 후 재발급에만 새 secret을 한 번 출력하며, 이미 활성인 사용자는
+`changed=false`로 끝납니다. `list`는 username, 출처, 활성·회수 상태와 시각만 출력하고 hash나
+secret을 출력하지 않습니다. 재발급마다 새 세대 ID를 사용하므로 회수 전에 시작된 OAuth 흐름은
+다시 완료할 수 없습니다. `revoke`는 같은 트랜잭션에서 DB 회수 상태, 미완료 OAuth state,
+기존 연결을 처리하므로 해당 Basic 자격 증명과 Growful 토큰이 즉시 `401`을 받습니다. `.env`에만
+있는 초기 초대를 회수해도 DB tombstone이 설정값보다 우선하므로 재기동 뒤 되살아나지 않습니다.
+발급·회수에는 운영자 ID와 승인 ticket이 필요하며, 애플리케이션 감사 체인에는 두 값을
+SHA-256 처리한 값만 기록합니다. 실제 운영자 귀속은 Tailscale SSH의 개별 계정과 session audit로
+별도 보존합니다. Basic 자격 증명은 `/oauth/start`의 GET과 POST에만
 사용하며, 1분 동안 연속 5회 실패한 클라이언트는 일시적으로 제한합니다. 운영 `.env`와 요청의
 `Authorization` 헤더는 로그에 남기지 않습니다.
 추가로 단일 클라이언트는 `/oauth/start`의 각 HTTP method마다 분당 60회,
 `/smartthings/webhook`은 분당 120회로 제한합니다.
 
-두 모드 모두 다음 운영자·지원·정책 값을 요구하며 OAuth 시작 전에 사용자에게 표시하고
+같은 Gateway 컨테이너에서 서비스 공지를 운영합니다. `TITLE`과 `MESSAGE`는 즉시 공개되므로
+비밀값·사용자 식별자·내부 인프라 상세를 넣지 않습니다.
+
+```bash
+gateway_container="$(docker ps \
+  --filter label=com.docker.compose.project=smartthings-gateway \
+  --filter label=com.docker.compose.service=gateway \
+  --filter status=running -q)"
+docker exec "$gateway_container" node dist/manage-status.js list
+docker exec "$gateway_container" node dist/manage-status.js open degraded "TITLE" "MESSAGE" OPERATOR_ID TICKET_ID
+docker exec "$gateway_container" node dist/manage-status.js update INCIDENT_ID monitoring "MESSAGE" OPERATOR_ID TICKET_ID
+docker exec "$gateway_container" node dist/manage-status.js resolve INCIDENT_ID "MESSAGE" OPERATOR_ID TICKET_ID
+unset gateway_container
+```
+
+`open`은 `investigating` 공지를 만들고, `update`는 `investigating` 또는 `monitoring` 갱신을
+추가하며, `resolve`는 해결 시각과 마지막 공지를 기록합니다. 해결된 사건은 변경할 수 없습니다.
+각 작업은 해시된 운영자 ID와 ticket으로 감사 체인에 남습니다.
+
+두 모드 모두 다음 운영자·지원 값을 요구하며 OAuth 시작 전에 사용자에게 표시하고
 명시적 동의를 받습니다. 공개 모드는 SmartThings 서면 확인 값도 추가로 요구합니다. 값의
 존재는 서면 확인 자체를 대신하지 않으므로 원본 답변과 법률 검토 기록을 별도로 보관합니다.
 
 - `PUBLIC_OPERATOR_NAME`
 - `PUBLIC_SUPPORT_EMAIL`
-- `PUBLIC_PRIVACY_POLICY_URL` (HTTPS)
-- `PUBLIC_TERMS_URL` (HTTPS)
 - `SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE` (공개 모드만)
 - `SMARTTHINGS_PUBLIC_USE_APPROVED_AT` (`YYYY-MM-DD`, 공개 모드만)
 
-운영자·지원·정책 값이 바뀌면 정책 버전도 바뀌며 기존 연결은 시작 시 회수됩니다. 사용자는
+개인정보 처리방침과 이용약관은 `OAUTH_REDIRECT_URI`와 같은 origin의 `/privacy`, `/terms`에서
+Gateway가 직접 제공합니다. 별도 정책 URL 환경변수는 사용하지 않습니다. 운영자·지원 값 또는
+코드의 정책 개정일이 바뀌면 정책 버전도 바뀌며 기존 연결은 시작 시 회수됩니다. 사용자는
 새 정책을 확인하고 OAuth를 다시 완료해야 합니다.
 
 `REFRESH_LEASE_SECONDS`는 `120` 이상이어야 합니다. preflight는 `.env`가 group/other
 사용자에게 노출되지 않았는지와 이 하한을 배포 전에 확인합니다.
 또한 API, authorize, token URL을 지원되는 `api.smartthings.com` 운영 경로로 제한합니다.
-두 정책 URL은 HTTPS 전용 redirect만 따라가며 배포 서버에서 실제 `2xx` HTML 응답을 반환해야
-합니다. 이 확인은 문서가 열리는지만 증명하며, 내용의 정확성·법률 검토·외부 공개망 전체의
-가용성을 대신하지 않습니다.
+배포와 CI는 내장 `/privacy`, `/terms`, `/support`, `/status`가 실제 `2xx` 응답과 각 문서 marker를
+반환하는지 확인합니다. 이 확인은
+문서가 열리는지만 증명하며, 내용의 정확성·법률 검토·외부 공개망 전체의 가용성을 대신하지
+않습니다.
 `REFRESH_CHECK_INTERVAL_SECONDS`는 토큰 갱신뿐 아니라 만료 OAuth state 정리 주기이므로
 `1`~`300`초만 허용합니다. OAuth state의 10분 유효기간과 이 상한을 합쳐 미사용 state
 해시와 요청 scope를 서비스가 정상 실행 중일 때 생성 후 최대 15분 안에 삭제합니다. 중단 뒤
@@ -108,7 +148,7 @@ PR의 CI는 다음 순서로 배포 이미지 자체를 검증합니다.
 3. 실제 Docker 이미지와 PostgreSQL을 Compose로 실행
 4. migration을 두 번 실행해 멱등성 확인
 5. `127.0.0.1:8100`의 프로세스 liveness `/healthz`, PostgreSQL과 핵심 테이블을 확인하는
-   readiness `/readyz`, `/`, `/manage`, `/robots.txt`, 인증 없는
+   readiness `/readyz`, `/`, `/manage`, `/privacy`, `/terms`, `/support`, `/status`, `/robots.txt`, 인증 없는
    `/connection`, `/oauth/start`, `/smartthings/webhook`, `/v1/*` 확인
    - 비공개 베타의 인증 없는 `/oauth/start`가 `401`인지 확인
    - Basic 인증한 `GET /oauth/start` 선택 화면과 유효한 `POST /oauth/start` 리다이렉트를 확인
@@ -122,7 +162,8 @@ PR의 CI는 다음 순서로 배포 이미지 자체를 검증합니다.
 3. 컨테이너 health와 재시작 횟수 확인
 4. 서버의 `http://127.0.0.1:8100/readyz`에서 PostgreSQL readiness 확인
 5. `https://smartthings.growful.click/readyz`에서 공개 경로와 PostgreSQL readiness 확인
-6. Tailscale SSH를 통해 배포 서버에서 공개 `/healthz`, `/readyz`, `/connection`, `/oauth/start`,
+6. Tailscale SSH를 통해 배포 서버에서 공개 `/healthz`, `/readyz`, `/privacy`, `/terms`, `/support`,
+   `/status`, `/connection`, `/oauth/start`,
    인증 없는 `/v1/*` 재확인
 
 배포 이미지는 변경 가능한 tag가 아니라 빌드가 반환한 `sha256` digest로 고정합니다.

@@ -1,4 +1,5 @@
 import type {
+  AuthorizationSaveTokensInput,
   ConnectionAccessPolicy,
   ConnectionAuthentication,
   InstalledAppId,
@@ -76,6 +77,12 @@ export class AuditedOAuthStore implements OAuthStore {
     authorization: OAuthAuthorization,
   ): Promise<void> {
     await this.options.store.saveState(stateHash, expiresAt, authorization)
+  }
+
+  async saveAuthorizationTokensIfAccessActive(
+    input: AuthorizationSaveTokensInput,
+  ): Promise<StoredTokens | null> {
+    return this.options.store.saveAuthorizationTokensIfAccessActive(input)
   }
 
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {

@@ -47,9 +47,7 @@ printf '%s\n' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
   'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-ci-beta","passwordHash":"1176116bf496de8e723bf66b3c09dd7534b9898bcdc91450e074513014df81a1"}]' \
   'PUBLIC_OPERATOR_NAME=Growful CI' \
-  'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
   'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
-  'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
   'SERVICE_ACCESS_MODE=private_beta' \
   'SMARTTHINGS_API_URL=https://api.smartthings.com' \
   'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
@@ -87,6 +85,10 @@ test "$(curl --fail --silent --show-error "$gateway_origin/healthz")" = '{"statu
 test "$(curl --fail --silent --show-error "$gateway_origin/readyz")" = '{"status":"ready"}'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/")" = '200'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/manage")" = '200'
+curl --fail --silent --show-error "$gateway_origin/privacy" | grep --fixed-strings --quiet 'data-policy-document="privacy"'
+curl --fail --silent --show-error "$gateway_origin/terms" | grep --fixed-strings --quiet 'data-policy-document="terms"'
+curl --fail --silent --show-error "$gateway_origin/support" | grep --fixed-strings --quiet 'data-support-document'
+curl --fail --silent --show-error "$gateway_origin/status" | grep --fixed-strings --quiet 'data-status-document'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/robots.txt")" = '200'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/connection")" = '401'
 test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '401'

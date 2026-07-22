@@ -9,6 +9,7 @@ import {
   type SmartThingsRateLimitBackoffStore,
 } from "../../src/http/smartthings-rate-limit-backoff.js"
 import { OAuthService } from "../../src/oauth/oauth-service.js"
+import { emptyServiceStatusSource } from "../../src/status/service-status.js"
 import { allowAllGrowfulAbuseControl } from "./abuse-control.js"
 import type { FakeSmartThingsApi } from "./fake-smartthings-api.js"
 import { FakeSmartThingsClient } from "./fake-smartthings-client.js"
@@ -65,6 +66,7 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
     oauthAccess: publicOAuthAccess,
     readinessProbe: readyProbe,
     redirectOrigin: "https://smartthings.growful.click",
+    serviceStatusSource: emptyServiceStatusSource,
     service,
     smartThingsAppId: "growful-app",
   })

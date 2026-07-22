@@ -163,6 +163,33 @@ verify_public_http() {
   return 1
 }
 
+verify_local_page() {
+  local path="$1"
+  local expected_marker="$2"
+  local response
+  response="$(curl --fail --silent --show-error --max-time 5 \
+    "http://127.0.0.1:8100$path")" || return 1
+  [[ "$response" == *"$expected_marker"* ]]
+}
+
+verify_public_page() {
+  local path="$1"
+  local expected_marker="$2"
+  local attempt response
+  [[ -n "$public_base_url" ]] || return 0
+  for ((attempt = 1; attempt <= public_healthcheck_attempts; attempt += 1)); do
+    response="$(curl --fail --silent --show-error --max-time 10 \
+      "$public_base_url$path" 2>/dev/null || true)"
+    if [[ "$response" == *"$expected_marker"* ]]; then
+      return 0
+    fi
+    if ((attempt < public_healthcheck_attempts)); then
+      sleep "$public_healthcheck_interval_seconds"
+    fi
+  done
+  return 1
+}
+
 show_diagnostics() {
   "${compose[@]}" ps >&2 || true
   "${compose[@]}" logs --tail=100 gateway >&2 || true
@@ -177,6 +204,14 @@ deploy_release() {
   wait_for_gateway || return 1
   verify_local_http '/readyz' '{"status":"ready"}' || return 1
   verify_public_http '/readyz' '{"status":"ready"}' || return 1
+  verify_local_page '/privacy' 'data-policy-document="privacy"' || return 1
+  verify_local_page '/terms' 'data-policy-document="terms"' || return 1
+  verify_local_page '/support' 'data-support-document' || return 1
+  verify_local_page '/status' 'data-status-document' || return 1
+  verify_public_page '/privacy' 'data-policy-document="privacy"' || return 1
+  verify_public_page '/terms' 'data-policy-document="terms"' || return 1
+  verify_public_page '/support' 'data-support-document' || return 1
+  verify_public_page '/status' 'data-status-document' || return 1
 }
 
 rollback_release() {
@@ -244,7 +279,15 @@ if [[ -n "$previous_release_id" && "$previous_release_id" == "$new_release_id" ]
   fi
   if wait_for_gateway &&
     verify_local_http '/readyz' '{"status":"ready"}' &&
-    verify_public_http '/readyz' '{"status":"ready"}'; then
+    verify_public_http '/readyz' '{"status":"ready"}' &&
+    verify_local_page '/privacy' 'data-policy-document="privacy"' &&
+    verify_local_page '/terms' 'data-policy-document="terms"' &&
+    verify_local_page '/support' 'data-support-document' &&
+    verify_local_page '/status' 'data-status-document' &&
+    verify_public_page '/privacy' 'data-policy-document="privacy"' &&
+    verify_public_page '/terms' 'data-policy-document="terms"' &&
+    verify_public_page '/support' 'data-support-document' &&
+    verify_public_page '/status' 'data-status-document'; then
     if ((10#$deployment_sequence > 10#$highest_deployment_sequence)); then
       commit_deployment_sequence
       state_temp="$(mktemp "${release_state_file}.XXXXXX")"

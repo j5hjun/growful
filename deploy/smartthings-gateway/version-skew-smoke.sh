@@ -107,9 +107,7 @@ printf '\n%s\n' \
   'SERVICE_ACCESS_MODE=private_beta' \
   'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-version-skew-beta","passwordHash":"5ddf8b91211dce99eacd9d5923f5a6fa47c4943630855c921a50c47f111aa2ee"}]' \
   'PUBLIC_OPERATOR_NAME=Growful version skew' \
-  'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
   'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
-  'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
   >>"$candidate_environment_file"
 printf '\n%s\n' \
   'SMARTTHINGS_SCOPES=r:devices:$' \

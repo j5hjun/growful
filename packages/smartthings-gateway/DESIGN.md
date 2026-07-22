@@ -125,6 +125,7 @@ offset은 `--focus-ring` (`3px`)을 사용한다.
 ### Portal navigation
 
 - Structure: `nav[aria-label] > a.brand + ul > li > a`
+- Links: 서비스 안내, 상태, 연결 관리, 지원 안내, 개인정보 처리방침, 이용약관을 모든 포털 문서에서 동일한 순서로 제공
 - States: 기본, hover, focus-visible, 현재 페이지
 - Accessibility: 목적을 설명하는 링크 문구와 44px 이상의 터치 영역
 - Responsive: 좁은 화면에서 브랜드와 링크가 자연스럽게 줄바꿈
@@ -136,10 +137,54 @@ offset은 `--focus-ring` (`3px`)을 사용한다.
 - Accessibility: 카드 나열 대신 문서 순서가 곧 의사결정 순서가 되며 제목 수준을 건너뛰지 않음
 - Motion: 없음
 
+### Policy document
+
+- Source: `src/http/portal-policy.ts`
+- Structure: 포털 navigation 뒤 `header > eyebrow + h1 + summary`, 이어서 제목이 있는 `section[]`,
+  마지막에 운영자와 `mailto:` 지원 연락처
+- Variants: 개인정보 처리방침, 이용약관
+- Content: 현재 코드와 운영 설정으로 확인되는 사실만 표시하며, 사업자 주소·위탁자·처리 국가·
+  백업 보존기간·상업 조건처럼 확정되지 않은 값은 추정하지 않고 미확정 경계를 명시
+- Typography: 본문은 Body, 보조 설명과 갱신일은 Small, 섹션 제목은 H2를 사용하고 문단 너비를
+  `--panel-manage` 이하로 제한해 긴 한국어 문장의 읽기 흐름을 유지
+- Accessibility: 단일 `main`, 순차적인 h1/h2, 의미 있는 목록, 현재 문서의 `aria-current`, 명시적인
+  지원 이메일 링크를 제공하며 200% 확대와 375px에서 가로 스크롤이 없어야 함
+- Responsive: 문서 목차와 본문은 모든 breakpoint에서 단일 열을 유지
+- Motion: 없음
+
+### Support document
+
+- Source: `src/http/portal-support.ts`
+- Structure: 포털 navigation 뒤 `header > eyebrow + h1 + summary`, 문의 유형 목록, 안전한 문의 정보,
+  셀프서비스 절차, 미확정 운영 경계, 운영자와 `mailto:` 지원 연락처
+- Content: 원시 토큰·OAuth code·비밀번호·민감한 전체 응답 본문을 요청하지 않으며, 확인된
+  셀프서비스 동작과 아직 확정되지 않은 본인 확인·응답시간·긴급 단계만 사실대로 설명
+- Accessibility: 단일 `main`, 순차적인 h1/h2, 의미 있는 목록, 현재 문서의 `aria-current`,
+  명시적인 지원 이메일 링크를 제공
+- Responsive: 문의 유형과 운영자 정보는 30rem 이하에서 한 열로 전환
+- Motion: 없음
+
+### Service status document
+
+- Source: `src/http/portal-status.ts`
+- Structure: 포털 navigation 뒤 현재 readiness를 표시하는 `article[data-status-document]`, 운영자가
+  등록한 현재 공지와 해결 이력, 상태 범위, 연결별 문제 해결 경로와 운영자·지원 연락처
+- States: `ready`, `unavailable`; 두 상태 모두 문서를 읽을 수 있도록 HTTP 200을 유지하고
+  기계용 `/readyz`만 unavailable에서 503을 반환. 공지 이력은 비어 있음, 활성 공지, 해결됨,
+  readiness 장애로 저장소를 읽을 수 없음 상태를 구분
+- Content: Gateway 프로세스·데이터베이스·감사 체인 준비 상태만 설명하며 SmartThings 종단 간
+  가용성, SLA, 가동률이나 복구 시간을 추정하지 않음. 이력은 운영자가 실제로 등록한 공지만
+  표시하고 자동 탐지나 개별 사용자 통지를 암시하지 않음
+- Accessibility: 현재 문서의 `aria-current`, h1/h2 순서, 색상 외 한국어 상태 레이블과 의미 있는
+  `/readyz`, 관리, 지원 링크, 공지별 `time[datetime]`을 제공
+- Responsive: 현재 상태, 공지 metadata와 운영자 정보는 30rem 이하에서 한 열로 전환하고 긴
+  공지 제목과 본문은 패널 안에서 줄바꿈
+- Motion: 없음
+
 ### Service disclosure block
 
 - Structure: `section[aria-labelledby] > div[heading] + dl`
-- Content: 운영자, `mailto:` 지원 링크, 개인정보처리방침과 이용약관 링크
+- Content: 운영자, 현재 상태, `mailto:` 지원 링크, 개인정보처리방침과 이용약관 링크
 - Accessibility: `dt`와 `dd`로 값의 의미를 연결하고 외부 정책 링크 이름을 구체적으로 유지
 - Responsive: 48rem 이하에서 제목과 정보 목록을 한 열로 전환
 - Motion: 없음

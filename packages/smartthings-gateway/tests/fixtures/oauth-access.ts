@@ -3,6 +3,7 @@ import type { OAuthAccessPolicy } from "../../src/http/oauth-routes.js"
 import type { OAuthAuthorization } from "../../src/oauth/contracts.js"
 import type { SmartThingsScope } from "../../src/oauth/smartthings-scope.js"
 import type { PrivateBetaInvite } from "../../src/private-beta/invite.js"
+import { ConfiguredPrivateBetaInviteAccess } from "../../src/private-beta/invite-access.js"
 
 export const testDisclosures = {
   operatorName: "Growful Test",
@@ -18,7 +19,11 @@ export const publicOAuthAccess = {
 } satisfies OAuthAccessPolicy
 
 export function privateBetaOAuthAccess(invites: readonly PrivateBetaInvite[]): OAuthAccessPolicy {
-  return { ...testDisclosures, invites, mode: "private_beta" }
+  return {
+    ...testDisclosures,
+    inviteAccess: new ConfiguredPrivateBetaInviteAccess(invites),
+    mode: "private_beta",
+  }
 }
 
 export function oauthAuthorization(
@@ -28,6 +33,7 @@ export function oauthAuthorization(
   return {
     consentedAt: new Date("2026-07-19T00:00:00.000Z"),
     policyVersion: testDisclosures.policyVersion,
+    privateBetaInviteGeneration: privateBetaUsername === null ? null : "test-invite-generation",
     privateBetaUsername,
     requestedScopes,
   }

@@ -16,7 +16,6 @@ trap cleanup EXIT
 
 mkdir -p "$release_dir" "$fake_bin"
 cp "$source_dir/preflight.sh" "$source_dir/compose.yaml" "$release_dir/"
-
 # Dollar expressions below belong to the generated fake executable.
 # shellcheck disable=SC2016
 printf '%s\n' \
@@ -37,18 +36,8 @@ printf '%s\n' \
   'fi' \
   'printf "00000000000000000000000000000000"' >"$fake_bin/base64"
 
-printf '%s\n' \
-  '#!/usr/bin/env bash' \
-  'set -euo pipefail' \
-  "url=\"\${!#}\"" \
-  "if [[ \"\$url\" == *\"\${FAKE_CURL_FAIL_SUFFIX:-__never__}\" ]]; then" \
-  '  exit 22' \
-  'fi' \
-  "content_type=\"\${FAKE_CURL_CONTENT_TYPE:-text/html; charset=utf-8}\"" \
-  "effective_url=\"\${FAKE_CURL_EFFECTIVE_URL:-\$url}\"" \
-  "printf \"200\\t%s\\t%s\" \"\$content_type\" \"\$effective_url\"" >"$fake_bin/curl"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/flock"
-chmod +x "$fake_bin/base64" "$fake_bin/curl" "$fake_bin/docker" "$fake_bin/flock"
+chmod +x "$fake_bin/base64" "$fake_bin/docker" "$fake_bin/flock"
 export PATH="$fake_bin:$PATH"
 
 write_environment() {
@@ -63,9 +52,7 @@ write_environment() {
     'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
     'PRIVATE_BETA_INVITES_JSON=[{"username":"test-beta-user","passwordHash":"dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42"}]' \
     'PUBLIC_OPERATOR_NAME=Growful' \
-    'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
     'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
-    'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
     'REFRESH_CHECK_INTERVAL_SECONDS=300' \
     'REFRESH_LEASE_SECONDS=120' \
     'SERVICE_ACCESS_MODE=private_beta' \
@@ -82,35 +69,10 @@ valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
 write_environment "$valid_key" 8100
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
 
-if FAKE_CURL_FAIL_SUFFIX=/privacy DEPLOYMENT_ROOT="$deployment_root" \
-  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
-  printf 'unreachable privacy policy unexpectedly passed preflight\n' >&2
-  exit 1
-fi
-
-if FAKE_CURL_FAIL_SUFFIX=/terms DEPLOYMENT_ROOT="$deployment_root" \
-  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
-  printf 'unreachable terms document unexpectedly passed preflight\n' >&2
-  exit 1
-fi
-
-if FAKE_CURL_CONTENT_TYPE=application/json DEPLOYMENT_ROOT="$deployment_root" \
-  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
-  printf 'non-HTML policy document unexpectedly passed preflight\n' >&2
-  exit 1
-fi
-
-if FAKE_CURL_EFFECTIVE_URL=http://smartthings.growful.click/privacy \
-  DEPLOYMENT_ROOT="$deployment_root" \
-  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
-  printf 'policy redirect to HTTP unexpectedly passed preflight\n' >&2
-  exit 1
-fi
-
 write_environment "$valid_key" 8100
-sed -i.bak '/^PUBLIC_PRIVACY_POLICY_URL=/d' "$deployment_root/.env"
+sed -i.bak '/^PUBLIC_SUPPORT_EMAIL=/d' "$deployment_root/.env"
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
-  printf 'private beta without policy disclosures unexpectedly passed preflight\n' >&2
+  printf 'private beta without support disclosure unexpectedly passed preflight\n' >&2
   exit 1
 fi
 rm -f "$deployment_root/.env.bak"

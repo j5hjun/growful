@@ -50,7 +50,8 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
       <div><p class="eyebrow">운영 및 정책</p><h2 id="disclosures-title">서비스 정보를 확인하세요</h2></div>
       <dl>
         <div><dt>운영자</dt><dd>${operatorName}</dd></div>
-        <div><dt>지원</dt><dd><a href="mailto:${supportEmail}">${supportEmail}</a></dd></div>
+        <div><dt>상태</dt><dd><a href="/status">현재 Gateway 상태</a></dd></div>
+        <div><dt>지원</dt><dd><a href="/support">지원 안내</a> · <a href="mailto:${supportEmail}">${supportEmail}</a></dd></div>
         <div><dt>정책</dt><dd><a href="${privacyPolicyUrl}">개인정보 처리방침</a> · <a href="${termsUrl}">이용약관</a></dd></div>
       </dl>
     </section>`,

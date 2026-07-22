@@ -23,7 +23,7 @@
 | service bureau 또는 타인의 이익을 위한 사용 제한 | 차단 | 연결별 사용자 승인과 격리는 구현 | 비공개 베타·무료 공개·유료 각각의 허용 여부 서면 확인 |
 | 출시 전 live production 통합과 applicable test | 부분 | webhook, OAuth, proxy, PostgreSQL 통합·실제 HTTP QA | SmartThings가 요구하는 closed test와 제출 형식 확인·완료 |
 | 30일 change notice와 45일 Material Modification 통지 | 차단 | [출시 계획](./PUBLIC-LAUNCH.md)에 gate 기록 | 어느 기한·채널이 최초 공개, 유료화, 정책 변경에 적용되는지 확인 |
-| 고객 지원 책임 | 부분 | `/manage` self-service 연결 확인·교체·삭제 | 공개 지원 채널, 응답 목표, 민원·권리행사 절차 운영 |
+| 고객 지원 책임 | 부분 | `/manage` self-service 연결 확인·교체·삭제, `/support`의 안전한 문의·신고 안내, `/status`의 readiness와 운영자 공지·해결 이력 | 본인 확인, 응답 목표, 긴급 단계, 실제 ticket·공지 훈련과 자동 탐지·개별 통지 |
 | 공개 발표·Samsung/SmartThings 명칭 사용 제한 | 차단 | 인증 마크와 Samsung 로고를 사용하지 않음 | 설명적 명칭·도메인 문구 사용 범위와 사전 동의 여부 확인 |
 | Certification Mark는 인증된 제품에만 사용 | 통과 | Works with SmartThings mark 미사용 | 향후 표장 추가 시 인증과 usage guideline 재검토 |
 | 유료 기능 추가의 상업 조건 | 차단 | 결제·가격 기능 없음 | 별도 계약 필요 여부 확인 후 결제·환불·세금 법률 검토 |
@@ -44,14 +44,14 @@
 
 | 공식 요구사항 | 상태 | 현재 증빙 | 남은 조치 |
 | --- | --- | --- | --- |
-| 적절한 고지와 동의 | 부분 | OAuth 전에 운영자·정책 링크·지원 채널을 표시하고 scope·정책 동의를 연결에 기록; 정책 URL은 배포 서버에서 HTTPS 2xx HTML인지 preflight 확인 | 실제 정책 내용·운영자 사실값·법률 검토 완료 |
-| 수집 항목·목적·보유기간 공개 | 부분 | `PUBLIC-LAUNCH.md`에 현재 데이터 흐름 기록 | 처리위탁자·국가·백업·로그 보존 확정 후 법률 검토·게시 |
+| 적절한 고지와 동의 | 부분 | OAuth 전에 운영자·내장 정책 링크·지원 채널을 표시하고 scope·정책 동의를 연결에 기록; CI·배포가 `/privacy`, `/terms` 응답 확인 | 운영자 사실값·법률 검토 완료 |
+| 수집 항목·목적·보유기간 공개 | 부분 | `/privacy`와 `PUBLIC-LAUNCH.md`에 확인된 데이터 흐름과 미확정 보존 경계 기록 | 처리위탁자·국가·백업·로그 보존 확정 후 법률 검토·게시 |
 | 제3자 제공·위탁과 공유 데이터 공개 | 차단 | SmartThings API 통신 경계는 코드로 확인 | Samsung/SmartThings 전달 항목과 Licensee subprocessors 확정·제출 |
 | 데이터 판매·광고·분석·모델링 금지 | 통과 | 해당 저장·분석·광고·학습 기능 없음 | 기능 추가 시 회귀 검토와 명시적 SmartThings 합의 없이 유지 |
 | 사용자 삭제 수단 | 부분 | `DELETE /connection`, signed uninstall lifecycle | Growful token 분실 시 권리행사·신원 확인 절차와 백업 파기 구현 |
 | Samsung/User 요청 시 영구 삭제 | 부분 | primary connection row 즉시 삭제 | WAL·backup·snapshot·외부 log의 파기 시한과 증빙 확정 |
 | OAuth 임시 데이터 최소 보존 | 통과 | state 원문 미저장, 10분 만료, 정상 실행 중 최대 5분 내 정리 | 서비스 중단 시 재기동 정리와 운영 모니터링 유지 |
-| privacy policy가 Samsung으로의 공개·사용을 허용 | 차단 | 설정 URL의 HTTPS 2xx HTML 접근성은 preflight로 확인하지만 최종 내용은 저장소에서 증명되지 않음 | 실제 데이터 흐름과 적용법에 맞는 문구를 법률 검토 후 게시 |
+| privacy policy가 Samsung으로의 공개·사용을 허용 | 차단 | `/privacy`가 OAuth 승인과 SmartThings API 요청의 정보 전달 경계를 설명 | 적용법과 SmartThings 요구사항에 맞는 문구인지 법률 검토 후 확정 |
 | subprocessors 목록 사전 제공 | 차단 | 저장소에는 확정 사업자·국가 목록 없음 | Cloudflare·hosting·DB·backup·monitoring 계약 주체와 국가 확정 |
 
 ## 기술·조직적 보안 조치
@@ -74,7 +74,7 @@
 | --- | --- | --- | --- |
 | incident response program | 부분 | [사고 대응 Runbook 초안](./INCIDENT-RESPONSE.md)에 탐지·분류·격리·증거보존·복구·통지·사후검토 정의 | 연락망 확정, 반기 훈련과 시정조치 증빙 |
 | SmartThings에 24시간 내 사고 통지 | 부분 | 15분/1시간/24시간 timeline과 초기 통지 template 작성 | 승인 요청에서 실제 채널·필수 형식 확인 후 전송 훈련 |
-| 사용자·규제기관 통지 | 차단 | 공개 지원·사고 페이지 없음 | 적용법별 의사결정표, 템플릿, 법률 연락망 |
+| 사용자·규제기관 통지 | 차단 | `/support`와 운영자 공지·해결 이력용 `/status`는 있으나 법정 통지 결정·개별 전달 기능은 없음 | 적용법별 의사결정표, 통지 템플릿, 전달·접수 증빙과 법률 연락망 |
 | 삭제 요청 처리와 증빙 | 부분 | primary DB 삭제와 unlink E2E, [보존·파기 대장 초안](./DATA-RETENTION.md) | token 분실 요청, backup aging, 완료 통지, 표본 훈련 |
 | 서비스 중단·보안 문제의 SmartThings 통지 | 차단 | 자동 통지 없음 | 담당자, 접수 채널, emergency change notice 절차 확정 |
 

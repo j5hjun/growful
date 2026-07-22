@@ -16,6 +16,7 @@ export type GatewayAppFixtureOptions = {
   readonly apps: FastifyInstance[]
   readonly logger?: AppOptions["logger"]
   readonly readinessProbe?: AppOptions["readinessProbe"]
+  readonly serviceStatusSource?: AppOptions["serviceStatusSource"]
 }
 
 export function testGrowfulToken(index: number) {
@@ -50,6 +51,9 @@ export function createGatewayAppFixture(options: GatewayAppFixtureOptions) {
     oauthAccess: publicOAuthAccess,
     readinessProbe: options.readinessProbe ?? readyProbe,
     redirectOrigin: gatewayRedirectOrigin,
+    serviceStatusSource: options.serviceStatusSource ?? {
+      listPublicIncidents: async () => [],
+    },
     service,
     smartThingsAppId: "growful-app",
   })

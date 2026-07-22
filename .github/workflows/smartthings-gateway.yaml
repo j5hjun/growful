@@ -304,6 +304,15 @@ jobs:
           readiness_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/readyz")"
           test "$readiness_response" = '{"status":"ready"}'
 
+          curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/privacy" |
+            grep --fixed-strings --quiet 'data-policy-document="privacy"'
+          curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/terms" |
+            grep --fixed-strings --quiet 'data-policy-document="terms"'
+          curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/support" |
+            grep --fixed-strings --quiet 'data-support-document'
+          curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/status" |
+            grep --fixed-strings --quiet 'data-status-document'
+
           connection_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/connection")"
           test "$connection_status" = '401'
 
