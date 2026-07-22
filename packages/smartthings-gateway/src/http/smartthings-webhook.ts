@@ -208,7 +208,6 @@ export function registerSmartThingsWebhookRoute(
     "/smartthings/webhook",
     {
       config: { rateLimit: httpRateLimitPolicies.smartThingsWebhook },
-      onRequest: async (request) => request.log.info("smartthings.webhook.received"),
       onResponse: async (request, reply) => {
         if (reply.statusCode < 400) return
         const errorClass = webhookFailureClasses.get(reply.statusCode) ?? "internal_error"
@@ -218,6 +217,7 @@ export function registerSmartThingsWebhookRoute(
       },
     },
     async (request, reply) => {
+      request.log.info("smartthings.webhook.received")
       const body = rawBodySchema.parse(request.body)
       const parsedJson = parseJson(body)
       const messageType = messageTypeSchema.parse(parsedJson).messageType
