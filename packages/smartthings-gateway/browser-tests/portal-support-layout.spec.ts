@@ -85,11 +85,6 @@ test("support content reflows without horizontal overflow at 200 percent zoom", 
   })
   await page.setContent(renderPortalSupport(publicOAuthAccess))
 
-  // When
-  await page.evaluate(() => {
-    document.documentElement.style.zoom = "2"
-  })
-
   // Then
   const cta = page.locator("[data-support-email-action]")
   const layout = await cta.evaluate((action) => ({
@@ -105,4 +100,16 @@ test("support content reflows without horizontal overflow at 200 percent zoom", 
   expect(layout.devicePixelRatio).toBe(2)
   expect(layout.innerWidth).toBe(640)
   await expect(cta).toBeVisible()
+  await expect(page.locator("dl.support-topics > div > dt")).toHaveCount(4)
+  await expect(page.locator("dl.support-topics > div > dd")).toHaveCount(4)
+  await expect(
+    page.locator(".support-topics a, .support-topics button, .support-topics [tabindex]"),
+  ).toHaveCount(0)
+
+  // When
+  for (let index = 0; index < 5; index += 1) await page.keyboard.press("Tab")
+
+  // Then
+  await expect(cta).toBeFocused()
+  await expect(page.locator("[data-support-topic]:focus")).toHaveCount(0)
 })
