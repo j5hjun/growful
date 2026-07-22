@@ -20,6 +20,7 @@ import {
   registerGrowfulAuthentication,
   requireGrowfulAuthentication,
 } from "./growful-auth.js"
+import { GrowfulRequestQuota } from "./growful-request-quota.js"
 import { HttpRequestRateLimitError, registerHttpRateLimiting } from "./http-rate-limit.js"
 import {
   InvalidOAuthOriginError,
@@ -58,6 +59,7 @@ export type AppOptions = {
   readonly oauthAccess: OAuthAccessPolicy
   readonly readinessProbe: ReadinessProbe
   readonly redirectOrigin: string
+  readonly requestQuota?: GrowfulRequestQuota
   readonly serviceStatusSource: ServiceStatusSource
   readonly service: OAuthService
   readonly smartThingsAppId: string
@@ -73,6 +75,7 @@ function containsSensitiveRequestData(pathname: string): boolean {
 }
 
 export function createApp(options: AppOptions): FastifyInstance {
+  const requestQuota = options.requestQuota ?? new GrowfulRequestQuota()
   const app = Fastify({
     logController: new LogController({
       disableRequestLogging: (request) =>
@@ -138,7 +141,7 @@ export function createApp(options: AppOptions): FastifyInstance {
     "/connection",
     {
       onRequest: async (request, reply) =>
-        requireGrowfulAuthentication(request, reply, options.service),
+        requireGrowfulAuthentication({ reply, request, requestQuota, service: options.service }),
     },
     async (request, reply) => {
       const installedAppId = getGrowfulConnectionId(request)
@@ -161,7 +164,7 @@ export function createApp(options: AppOptions): FastifyInstance {
     "/token/rotate",
     {
       onRequest: async (request, reply) =>
-        requireGrowfulAuthentication(request, reply, options.service),
+        requireGrowfulAuthentication({ reply, request, requestQuota, service: options.service }),
     },
     async (request, reply) =>
       reply.header("Cache-Control", "no-store").send({
@@ -172,7 +175,7 @@ export function createApp(options: AppOptions): FastifyInstance {
     "/connection",
     {
       onRequest: async (request, reply) =>
-        requireGrowfulAuthentication(request, reply, options.service),
+        requireGrowfulAuthentication({ reply, request, requestQuota, service: options.service }),
     },
     async (request, reply) => {
       await options.service.disconnect(getGrowfulConnectionId(request))

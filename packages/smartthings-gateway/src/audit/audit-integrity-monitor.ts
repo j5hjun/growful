@@ -1,7 +1,13 @@
 import type { ReadinessProbe, ReadinessStatus } from "../health/readiness.js"
 import type { AuditChainVerification } from "./audit-event.js"
+import type {
+  AuditIntegrityCheckpoint,
+  PostgresAuditIntegrityVerification,
+} from "./postgres-audit-integrity.js"
 
-export type AuditIntegrityVerifier = () => Promise<AuditChainVerification>
+export type AuditIntegrityVerifier = (
+  checkpoint: AuditIntegrityCheckpoint | null,
+) => Promise<PostgresAuditIntegrityVerification>
 
 export type AuditIntegrityLogger = {
   readonly error: (
@@ -27,6 +33,7 @@ export type AuditIntegrityMonitorSchedule = {
 
 export class AuditIntegrityMonitor implements ReadinessProbe {
   private activeRun: Promise<void> | undefined
+  private checkpoint: AuditIntegrityCheckpoint | null = null
   private hasCompletedVerification = false
   private status: ReadinessStatus = "unavailable"
   private readonly verify: AuditIntegrityVerifier
@@ -65,9 +72,13 @@ export class AuditIntegrityMonitor implements ReadinessProbe {
 
   private async execute(logger: AuditIntegrityLogger): Promise<void> {
     try {
-      const result = await this.verify()
+      const result = await this.verify(this.checkpoint)
       switch (result.status) {
+        case "in_progress":
+          this.checkpoint = result.checkpoint
+          return
         case "valid":
+          this.checkpoint = null
           if (!this.hasCompletedVerification || this.status === "unavailable") {
             logger.info({ eventCount: result.eventCount }, "audit.integrity.verified")
           }
@@ -75,6 +86,7 @@ export class AuditIntegrityMonitor implements ReadinessProbe {
           this.hasCompletedVerification = true
           return
         case "invalid":
+          this.checkpoint = null
           if (!this.hasCompletedVerification || this.status === "ready") {
             logger.error(
               {

@@ -38,10 +38,11 @@ export async function revokePostgresUnauthorizedConnections(
       ]),
     )
     .executeTakeFirst()
-  if (accessPolicy.privateBetaUsernames === null) {
+  const activeInvites = accessPolicy.privateBetaInvites
+  if (activeInvites === null) {
     return Number(invalidConsent.numDeletedRows)
   }
-  if (accessPolicy.privateBetaUsernames.length === 0) {
+  if (activeInvites.length === 0) {
     const inactiveInvite = await database
       .deleteFrom("smartThingsConnections")
       .where("policyVersion", "is not", null)
@@ -51,10 +52,15 @@ export async function revokePostgresUnauthorizedConnections(
   const inactiveInvite = await database
     .deleteFrom("smartThingsConnections")
     .where("policyVersion", "is not", null)
-    .where((expression) =>
-      expression.or([
-        expression("privateBetaUsername", "is", null),
-        expression("privateBetaUsername", "not in", accessPolicy.privateBetaUsernames),
+    .where(({ eb, or, refTuple, tuple }) =>
+      or([
+        eb("privateBetaUsername", "is", null),
+        eb("privateBetaInviteGeneration", "is", null),
+        eb(
+          refTuple("privateBetaUsername", "privateBetaInviteGeneration"),
+          "not in",
+          activeInvites.map((invite) => tuple(invite.username, invite.generation)),
+        ),
       ]),
     )
     .executeTakeFirst()

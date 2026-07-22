@@ -7,9 +7,11 @@ import {
 } from "../security/growful-token.js"
 import type {
   ConnectionAccessPolicy,
+  ConnectionAdmission,
   ConnectionStatus,
   InstalledAppId,
   OAuthAuthorization,
+  OAuthCompletionAuthorization,
   OAuthStore,
   SmartThingsClient,
   StoredTokens,
@@ -84,15 +86,23 @@ export class OAuthService {
     this.stateGenerator = options.stateGenerator ?? (() => randomBytes(32).toString("base64url"))
   }
 
-  async authenticate(growfulToken: GrowfulToken): Promise<InstalledAppId | null> {
-    const authentication = await this.options.store.authenticate(hashGrowfulToken(growfulToken))
+  async authenticate(
+    growfulToken: GrowfulToken,
+    admission?: ConnectionAdmission,
+  ): Promise<InstalledAppId | null> {
+    const authentication = await this.options.store.authenticate(
+      hashGrowfulToken(growfulToken),
+      admission,
+    )
     if (authentication === null || !(await this.isAuthorizationActive(authentication))) {
       return null
     }
     return authentication.installedAppId
   }
 
-  async startAuthorization(authorization: Omit<OAuthAuthorization, "consentedAt">): Promise<URL> {
+  async startAuthorization(
+    authorization: Omit<OAuthAuthorization, "consentedAt" | "privacyDeletionEpoch">,
+  ): Promise<URL> {
     if (!(await this.isAuthorizationActive(authorization))) {
       throw new InvalidOAuthStateError()
     }
@@ -101,6 +111,7 @@ export class OAuthService {
     const storedAuthorization: OAuthAuthorization = {
       ...authorization,
       consentedAt: now,
+      privacyDeletionEpoch: null,
     }
     await this.options.store.saveState(
       this.hashState(state),
@@ -148,10 +159,10 @@ export class OAuthService {
   async revokeUnauthorizedConnections(): Promise<number> {
     const accessPolicy: ConnectionAccessPolicy = {
       policyVersion: this.accessPolicy.policyVersion,
-      privateBetaUsernames:
+      privateBetaInvites:
         this.accessPolicy.privateBetaAccess === null
           ? null
-          : await this.accessPolicy.privateBetaAccess.listActiveUsernames(),
+          : await this.accessPolicy.privateBetaAccess.listActiveInvites(),
     }
     return this.options.store.revokeUnauthorizedConnections(accessPolicy)
   }
@@ -203,12 +214,12 @@ export class OAuthService {
     return tokens
   }
 
-  private async consumeState(state: string): Promise<OAuthAuthorization> {
+  private async consumeState(state: string): Promise<OAuthCompletionAuthorization> {
     const consumed = await this.options.store.consumeState(this.hashState(state), this.now())
-    if (consumed === null) {
+    if (consumed?.privacyDeletionEpoch === null || consumed === null) {
       throw new InvalidOAuthStateError()
     }
-    return consumed
+    return { ...consumed, privacyDeletionEpoch: consumed.privacyDeletionEpoch }
   }
 
   private async isAuthorizationActive(

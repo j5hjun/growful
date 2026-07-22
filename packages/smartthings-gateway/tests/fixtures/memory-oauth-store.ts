@@ -1,11 +1,14 @@
 import {
   type AuthorizationSaveTokensInput,
   type ConnectionAccessPolicy,
+  type ConnectionAdmission,
   type ConnectionAuthentication,
   type InstalledAppId,
   type OAuthAuthorization,
+  type OAuthCompletionAuthorization,
   type OAuthStateHash,
   type OAuthStore,
+  PrivacyDeletionEpochSchema,
   type RefreshClaim,
   type RefreshClaimId,
   type RefreshFailure,
@@ -49,15 +52,20 @@ export class MemoryOAuthStore implements OAuthStore {
   readonly failures: RefreshFailure[] = []
   readonly states = new Map<OAuthStateHash, StoredOAuthState>()
 
-  async authenticate(growfulTokenHash: GrowfulTokenHash): Promise<ConnectionAuthentication | null> {
+  async authenticate(
+    growfulTokenHash: GrowfulTokenHash,
+    admission?: ConnectionAdmission,
+  ): Promise<ConnectionAuthentication | null> {
     for (const [installedAppId, connection] of this.connections) {
       if (connection.growfulTokenHash === growfulTokenHash) {
-        return {
+        const authentication = {
           installedAppId,
           policyVersion: connection.policyVersion,
           privateBetaInviteGeneration: connection.privateBetaInviteGeneration,
           privateBetaUsername: connection.privateBetaUsername,
         }
+        await admission?.(installedAppId)
+        return authentication
       }
     }
     return null
@@ -91,10 +99,15 @@ export class MemoryOAuthStore implements OAuthStore {
     return null
   }
 
-  async consumeState(stateHash: OAuthStateHash, now: Date): Promise<OAuthAuthorization | null> {
+  async consumeState(
+    stateHash: OAuthStateHash,
+    now: Date,
+  ): Promise<OAuthCompletionAuthorization | null> {
     const state = this.states.get(stateHash)
     this.states.delete(stateHash)
-    return state !== undefined && state.expiresAt.getTime() > now.getTime() ? state : null
+    return state !== undefined && state.expiresAt.getTime() > now.getTime()
+      ? { ...state, privacyDeletionEpoch: PrivacyDeletionEpochSchema.parse("0") }
+      : null
   }
 
   async deleteConnection(installedAppId: InstalledAppId): Promise<boolean> {
@@ -126,9 +139,14 @@ export class MemoryOAuthStore implements OAuthStore {
     let deletedCount = 0
     for (const [installedAppId, connection] of this.connections) {
       const inactiveInvite =
-        accessPolicy.privateBetaUsernames !== null &&
+        accessPolicy.privateBetaInvites !== null &&
         (connection.privateBetaUsername === null ||
-          !accessPolicy.privateBetaUsernames.includes(connection.privateBetaUsername))
+          connection.privateBetaInviteGeneration === null ||
+          !accessPolicy.privateBetaInvites.some(
+            (invite) =>
+              invite.username === connection.privateBetaUsername &&
+              invite.generation === connection.privateBetaInviteGeneration,
+          ))
       if (
         (connection.policyVersion !== accessPolicy.policyVersion || inactiveInvite) &&
         this.connections.delete(installedAppId)

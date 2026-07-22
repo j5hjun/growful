@@ -89,9 +89,12 @@ async function main(): Promise<void> {
     })
     await service.revokeUnauthorizedConnections()
     const abuseControl = new PostgresGrowfulAbuseControl({ database })
-    const auditIntegrityMonitor = new AuditIntegrityMonitor(() =>
-      verifyPostgresAuditIntegrity(database),
+    const auditIntegrityMonitor = new AuditIntegrityMonitor((checkpoint) =>
+      verifyPostgresAuditIntegrity(database, checkpoint),
     )
+    const requestQuota = new GrowfulRequestQuota({
+      store: new PostgresGrowfulRequestQuotaStore({ database }),
+    })
     const app = createApp({
       abuseControl,
       authorizationOrigin: config.authorizationUrl.origin,
@@ -105,6 +108,7 @@ async function main(): Promise<void> {
         database,
       }),
       redirectOrigin: config.redirectUri.origin,
+      requestQuota,
       serviceStatusSource: new PostgresServiceStatusManager(database),
       service,
       smartThingsAppId: config.smartThingsAppId,
@@ -119,9 +123,7 @@ async function main(): Promise<void> {
       rateLimitBackoff: new SmartThingsRateLimitBackoff({
         store: new PostgresSmartThingsRateLimitBackoffStore({ database }),
       }),
-      requestQuota: new GrowfulRequestQuota({
-        store: new PostgresGrowfulRequestQuotaStore({ database }),
-      }),
+      requestQuota,
       service,
     })
     await auditIntegrityMonitor.refresh(app.log)

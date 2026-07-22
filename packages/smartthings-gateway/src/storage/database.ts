@@ -17,8 +17,14 @@ export type OAuthStateTable = {
   readonly policyVersion: string | null
   readonly privateBetaInviteGeneration: string | null
   readonly privateBetaUsername: string | null
+  readonly privacyDeletionEpoch: Generated<string>
   readonly requestedScopes: string
   readonly stateHash: string
+}
+
+export type PrivacyDeletionEpochTable = {
+  readonly deletionEpoch: string
+  readonly subjectHash: string
 }
 
 export type OAuthTokenTable = {
@@ -70,6 +76,7 @@ export type GatewayDatabase = {
   readonly auditEvents: AuditEventTable
   readonly oauthStates: OAuthStateTable
   readonly oauthTokens: OAuthTokenTable
+  readonly privacyDeletionEpochs: PrivacyDeletionEpochTable
   readonly privateBetaInvites: PrivateBetaInviteTable
   readonly serviceIncidents: ServiceIncidentTable
   readonly serviceIncidentUpdates: ServiceIncidentUpdateTable

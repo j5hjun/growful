@@ -1,5 +1,10 @@
-import type { Kysely } from "kysely"
-import type { OAuthAuthorization, OAuthStateHash } from "../oauth/contracts.js"
+import { type Kysely, sql } from "kysely"
+import {
+  type OAuthAuthorization,
+  type OAuthCompletionAuthorization,
+  type OAuthStateHash,
+  PrivacyDeletionEpochSchema,
+} from "../oauth/contracts.js"
 import {
   SmartThingsScopeStringSchema,
   serializeSmartThingsScopes,
@@ -9,7 +14,10 @@ import type { GatewayDatabase } from "./database.js"
 export class PostgresOAuthStateStore {
   constructor(private readonly database: Kysely<GatewayDatabase>) {}
 
-  async consume(stateHash: OAuthStateHash, now: Date): Promise<OAuthAuthorization | null> {
+  async consume(
+    stateHash: OAuthStateHash,
+    now: Date,
+  ): Promise<OAuthCompletionAuthorization | null> {
     const state = await this.database
       .deleteFrom("oauthStates")
       .where("stateHash", "=", stateHash)
@@ -19,6 +27,7 @@ export class PostgresOAuthStateStore {
         "policyVersion",
         "privateBetaInviteGeneration",
         "privateBetaUsername",
+        "privacyDeletionEpoch",
         "requestedScopes",
       ])
       .executeTakeFirst()
@@ -36,6 +45,7 @@ export class PostgresOAuthStateStore {
       policyVersion: state.policyVersion,
       privateBetaInviteGeneration: state.privateBetaInviteGeneration,
       privateBetaUsername: state.privateBetaUsername,
+      privacyDeletionEpoch: PrivacyDeletionEpochSchema.parse(state.privacyDeletionEpoch),
       requestedScopes: SmartThingsScopeStringSchema.parse(state.requestedScopes),
     }
   }
@@ -54,27 +64,43 @@ export class PostgresOAuthStateStore {
     authorization: OAuthAuthorization,
   ): Promise<void> {
     const requestedScopes = serializeSmartThingsScopes(authorization.requestedScopes)
-    await this.database
-      .insertInto("oauthStates")
-      .values({
-        consentedAt: authorization.consentedAt,
-        expiresAt,
-        policyVersion: authorization.policyVersion,
-        privateBetaInviteGeneration: authorization.privateBetaInviteGeneration,
-        privateBetaUsername: authorization.privateBetaUsername,
-        requestedScopes,
-        stateHash,
-      })
-      .onConflict((conflict) =>
-        conflict.column("stateHash").doUpdateSet({
+    await this.database.transaction().execute(async (transaction) => {
+      await sql`
+        select pg_advisory_xact_lock(
+          hashtextextended('growful:privacy-deletion-epoch', 0)
+        )
+      `.execute(transaction)
+      const epoch = await sql<{ privacyDeletionEpoch: string }>`
+        select case when is_called then last_value else 0 end::text as "privacyDeletionEpoch"
+        from privacy_deletion_epoch_sequence
+      `.execute(transaction)
+      const privacyDeletionEpoch = PrivacyDeletionEpochSchema.parse(
+        epoch.rows[0]?.privacyDeletionEpoch,
+      )
+      await transaction
+        .insertInto("oauthStates")
+        .values({
           consentedAt: authorization.consentedAt,
           expiresAt,
           policyVersion: authorization.policyVersion,
           privateBetaInviteGeneration: authorization.privateBetaInviteGeneration,
           privateBetaUsername: authorization.privateBetaUsername,
+          privacyDeletionEpoch,
           requestedScopes,
-        }),
-      )
-      .execute()
+          stateHash,
+        })
+        .onConflict((conflict) =>
+          conflict.column("stateHash").doUpdateSet({
+            consentedAt: authorization.consentedAt,
+            expiresAt,
+            policyVersion: authorization.policyVersion,
+            privateBetaInviteGeneration: authorization.privateBetaInviteGeneration,
+            privateBetaUsername: authorization.privateBetaUsername,
+            privacyDeletionEpoch,
+            requestedScopes,
+          }),
+        )
+        .execute()
+    })
   }
 }

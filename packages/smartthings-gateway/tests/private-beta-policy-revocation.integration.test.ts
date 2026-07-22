@@ -19,6 +19,10 @@ const store = new PostgresOAuthStore({
 })
 const issuedAt = new Date("2026-07-22T00:00:00.000Z")
 
+function activeInvite(username: string) {
+  return { generation: "test-invite-generation", username }
+}
+
 async function seedConnection(installedAppIdValue: string, privateBetaUsername = "private-user") {
   const growfulToken = generateGrowfulToken()
   const installedAppId = InstalledAppIdSchema.parse(installedAppIdValue)
@@ -78,15 +82,15 @@ describe("private beta connection policy revocation", () => {
     // When
     const publicPolicy = {
       policyVersion: "test-policy",
-      privateBetaUsernames: null,
+      privateBetaInvites: null,
     } satisfies ConnectionAccessPolicy
     const emptyPrivatePolicy = {
       policyVersion: "test-policy",
-      privateBetaUsernames: [],
+      privateBetaInvites: [],
     } satisfies ConnectionAccessPolicy
     const activePrivatePolicy = {
       policyVersion: "test-policy",
-      privateBetaUsernames: ["private-user"],
+      privateBetaInvites: [activeInvite("private-user")],
     } satisfies ConnectionAccessPolicy
 
     // Then
@@ -172,7 +176,7 @@ describe("private beta connection policy revocation", () => {
     // When
     const revokedCount = await store.revokeUnauthorizedConnections({
       policyVersion: "test-policy",
-      privateBetaUsernames: [],
+      privateBetaInvites: [],
     })
 
     // Then
@@ -181,36 +185,33 @@ describe("private beta connection policy revocation", () => {
   })
 
   it.each([
-    { name: "empty invite list", privateBetaUsernames: [] },
-    { name: "different active invite", privateBetaUsernames: ["different-user"] },
+    { name: "empty invite list", privateBetaInvites: [] },
+    { name: "different active invite", privateBetaInvites: [activeInvite("different-user")] },
   ] satisfies readonly {
     readonly name: string
-    readonly privateBetaUsernames: readonly string[]
-  }[])(
-    "revokes a partially populated legacy tuple with $name",
-    async ({ privateBetaUsernames }) => {
-      // Given
-      const { installedAppId } = await seedConnection(
-        `partial-legacy-${privateBetaUsernames.length}-installed-app`,
-        "inactive-private-user",
-      )
-      await database
-        .updateTable("smartThingsConnections")
-        .set({ consentedAt: null, policyVersion: null })
-        .where("installedAppId", "=", installedAppId)
-        .execute()
+    readonly privateBetaInvites: readonly ReturnType<typeof activeInvite>[]
+  }[])("revokes a partially populated legacy tuple with $name", async ({ privateBetaInvites }) => {
+    // Given
+    const { installedAppId } = await seedConnection(
+      `partial-legacy-${privateBetaInvites.length}-installed-app`,
+      "inactive-private-user",
+    )
+    await database
+      .updateTable("smartThingsConnections")
+      .set({ consentedAt: null, policyVersion: null })
+      .where("installedAppId", "=", installedAppId)
+      .execute()
 
-      // When
-      const revokedCount = await store.revokeUnauthorizedConnections({
-        policyVersion: "test-policy",
-        privateBetaUsernames,
-      })
+    // When
+    const revokedCount = await store.revokeUnauthorizedConnections({
+      policyVersion: "test-policy",
+      privateBetaInvites,
+    })
 
-      // Then
-      expect(revokedCount).toBe(1)
-      await expect(store.getTokens(installedAppId)).resolves.toBeNull()
-    },
-  )
+    // Then
+    expect(revokedCount).toBe(1)
+    await expect(store.getTokens(installedAppId)).resolves.toBeNull()
+  })
 
   it.each([
     {
@@ -218,28 +219,28 @@ describe("private beta connection policy revocation", () => {
       name: "public policy with only a private username",
       privateBetaInviteGeneration: null,
       privateBetaUsername: "private-user",
-      privateBetaUsernames: null,
+      privateBetaInvites: null,
     },
     {
       id: "public-generation-only",
       name: "public policy with only an invite generation",
       privateBetaInviteGeneration: "orphaned-generation",
       privateBetaUsername: null,
-      privateBetaUsernames: null,
+      privateBetaInvites: null,
     },
     {
       id: "active-private-username-only",
       name: "active private policy with only a private username",
       privateBetaInviteGeneration: null,
       privateBetaUsername: "private-user",
-      privateBetaUsernames: ["private-user"],
+      privateBetaInvites: [activeInvite("private-user")],
     },
   ] satisfies readonly {
     readonly id: string
     readonly name: string
     readonly privateBetaInviteGeneration: string | null
     readonly privateBetaUsername: string | null
-    readonly privateBetaUsernames: readonly string[] | null
+    readonly privateBetaInvites: readonly ReturnType<typeof activeInvite>[] | null
   }[])("revokes an inconsistent private-beta tuple under $name", async (testCase) => {
     // Given
     const { installedAppId } = await seedConnection(`${testCase.id}-installed-app`)
@@ -255,7 +256,7 @@ describe("private beta connection policy revocation", () => {
     // When
     const revokedCount = await store.revokeUnauthorizedConnections({
       policyVersion: "test-policy",
-      privateBetaUsernames: testCase.privateBetaUsernames,
+      privateBetaInvites: testCase.privateBetaInvites,
     })
 
     // Then

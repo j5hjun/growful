@@ -1,6 +1,7 @@
 import type {
   AuthorizationSaveTokensInput,
   ConnectionAccessPolicy,
+  ConnectionAdmission,
   ConnectionAuthentication,
   InstalledAppId,
   OAuthAuthorization,
@@ -23,8 +24,11 @@ export type AuditedOAuthStoreOptions = {
 export class AuditedOAuthStore implements OAuthStore {
   constructor(private readonly options: AuditedOAuthStoreOptions) {}
 
-  async authenticate(growfulTokenHash: GrowfulTokenHash): Promise<ConnectionAuthentication | null> {
-    const authentication = await this.options.store.authenticate(growfulTokenHash)
+  async authenticate(
+    growfulTokenHash: GrowfulTokenHash,
+    admission?: ConnectionAdmission,
+  ): Promise<ConnectionAuthentication | null> {
+    const authentication = await this.options.store.authenticate(growfulTokenHash, admission)
     if (authentication !== null) {
       await this.appendAccess("connection.access", authentication.installedAppId)
     }

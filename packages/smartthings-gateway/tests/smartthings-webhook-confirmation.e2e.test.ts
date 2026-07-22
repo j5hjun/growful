@@ -60,6 +60,33 @@ describe("SmartThings webhook", () => {
     expect(fixture.confirmationRequester).toHaveBeenCalledTimes(1)
   })
 
+  it("rate limits a different confirmation after a successful outbound request", async () => {
+    // Given
+    const fixture = createSmartThingsWebhookFixture(apps)
+    const request = (token: string) =>
+      fixture.app.inject({
+        method: "POST",
+        payload: {
+          confirmationData: {
+            appId: "growful-app",
+            confirmationUrl: `https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=${token}`,
+          },
+          messageType: "CONFIRMATION",
+        },
+        url: webhookPath,
+      })
+
+    // When
+    const firstResponse = await request("first-success-token")
+    const immediateRetry = await request("second-success-token")
+
+    // Then
+    expect(firstResponse.statusCode).toBe(200)
+    expect(immediateRetry.statusCode).toBe(429)
+    expect(immediateRetry.headers["retry-after"]).toBe("60")
+    expect(fixture.confirmationRequester).toHaveBeenCalledTimes(1)
+  })
+
   it("allows only one outbound confirmation request at a time", async () => {
     // Given
     const pending = Promise.withResolvers<void>()
@@ -158,11 +185,11 @@ describe("SmartThings webhook", () => {
     expect(fixture.confirmationRequester).not.toHaveBeenCalled()
   })
 
-  it("returns a sanitized error when SmartThings confirmation fails", async () => {
+  it("allows an immediate valid confirmation after an outbound failure", async () => {
     // Given
     const fixture = createSmartThingsWebhookFixture(apps)
     fixture.confirmationRequester.mockRejectedValueOnce(
-      new Error("confirmation failed for token=confirmation-token"),
+      new Error("confirmation failed for token=failed-token"),
     )
 
     // When
@@ -172,7 +199,7 @@ describe("SmartThings webhook", () => {
         confirmationData: {
           appId: "growful-app",
           confirmationUrl:
-            "https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=confirmation-token",
+            "https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=failed-token",
         },
         messageType: "CONFIRMATION",
       },
@@ -184,7 +211,7 @@ describe("SmartThings webhook", () => {
         confirmationData: {
           appId: "growful-app",
           confirmationUrl:
-            "https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=confirmation-token",
+            "https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=legitimate-token",
         },
         messageType: "CONFIRMATION",
       },
@@ -194,9 +221,15 @@ describe("SmartThings webhook", () => {
     // Then
     expect(response.statusCode).toBe(502)
     expect(response.json()).toEqual({ error: "smartthings_confirmation_failed" })
-    expect(response.body).not.toContain("confirmation-token")
-    expect(immediateRetry.statusCode).toBe(429)
-    expect(immediateRetry.headers["retry-after"]).toBe("60")
-    expect(fixture.confirmationRequester).toHaveBeenCalledTimes(1)
+    expect(response.body).not.toContain("failed-token")
+    expect(immediateRetry.statusCode).toBe(200)
+    expect(immediateRetry.headers["retry-after"]).toBeUndefined()
+    expect(fixture.confirmationRequester).toHaveBeenCalledTimes(2)
+    expect(fixture.confirmationRequester).toHaveBeenNthCalledWith(
+      2,
+      new URL(
+        "https://api.smartthings.com/v1/apps/growful-app/confirm-registration?token=legitimate-token",
+      ),
+    )
   })
 })

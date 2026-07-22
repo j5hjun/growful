@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import type { GrowfulAbuseControl } from "../../src/abuse/abuse-control.js"
+import type { AuditSink } from "../../src/audit/audit-event.js"
+import { AuditedOAuthStore } from "../../src/audit/audited-oauth-store.js"
 import { createApp } from "../../src/http/app.js"
 import { GrowfulRequestQuota } from "../../src/http/growful-request-quota.js"
 import { SmartThingsProxy } from "../../src/http/smartthings-proxy.js"
@@ -24,6 +26,7 @@ export type GatewayProxyFixtureOptions = {
   readonly abuseControl?: GrowfulAbuseControl
   readonly api: FakeSmartThingsApi
   readonly apps: FastifyInstance[]
+  readonly auditSink?: AuditSink
   readonly maxResponseBytes?: number
   readonly rateLimitStore?: SmartThingsRateLimitBackoffStore
   readonly requestQuota?: GrowfulRequestQuota
@@ -32,8 +35,8 @@ export type GatewayProxyFixtureOptions = {
 
 export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
   const client = new FakeSmartThingsClient()
-  const store = new MemoryOAuthStore()
-  store.seedTokens({
+  const rawStore = new MemoryOAuthStore()
+  rawStore.seedTokens({
     accessToken: "stored-smartthings-access-token",
     expiresAt: new Date("2026-07-20T00:00:00.000Z"),
     installedAppId: client.exchangeGrant.installedAppId,
@@ -42,6 +45,10 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
     scopes: ["r:devices:*"],
     tokenType: "bearer",
   })
+  const store =
+    options.auditSink === undefined
+      ? rawStore
+      : new AuditedOAuthStore({ auditSink: options.auditSink, store: rawStore })
   client.refreshGrant = { ...client.refreshGrant, scopes: ["r:devices:*"] }
   const service = new OAuthService({
     client,
@@ -60,12 +67,14 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
       ? proxyOptions
       : { ...proxyOptions, maxResponseBytes: options.maxResponseBytes },
   )
+  const requestQuota = options.requestQuota ?? new GrowfulRequestQuota()
   const app = createApp({
     abuseControl: options.abuseControl ?? allowAllGrowfulAbuseControl,
     authorizationOrigin: "https://api.smartthings.test",
     oauthAccess: publicOAuthAccess,
     readinessProbe: readyProbe,
     redirectOrigin: "https://smartthings.growful.click",
+    requestQuota,
     serviceStatusSource: emptyServiceStatusSource,
     service,
     smartThingsAppId: "growful-app",
@@ -78,9 +87,9 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
     abuseControl: options.abuseControl ?? allowAllGrowfulAbuseControl,
     proxy,
     rateLimitBackoff,
-    requestQuota: options.requestQuota ?? new GrowfulRequestQuota(),
+    requestQuota,
     service,
   })
   options.apps.push(app)
-  return { app, client, store }
+  return { app, client, store: rawStore }
 }

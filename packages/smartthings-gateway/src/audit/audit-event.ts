@@ -112,6 +112,11 @@ export type AuditChainVerification =
       readonly status: "invalid"
     }
 
+export type AuditChainSegmentStart = {
+  readonly previousHash: AuditEventHash | null
+  readonly previousSequence: string | null
+}
+
 export function hashAuditSubject(installedAppId: InstalledAppId): AuditEventHash {
   return hashAuditValue(installedAppId)
 }
@@ -149,6 +154,13 @@ export function createAuditEvent(
 }
 
 export function verifyAuditChain(rows: readonly unknown[]): AuditChainVerification {
+  return verifyAuditChainSegment(rows, { previousHash: null, previousSequence: null })
+}
+
+export function verifyAuditChainSegment(
+  rows: readonly unknown[],
+  start: AuditChainSegmentStart,
+): AuditChainVerification {
   let previousEvent: z.infer<typeof storedAuditEventSchema> | undefined
   for (const row of rows) {
     const parsed = storedAuditEventSchema.safeParse(row)
@@ -156,14 +168,15 @@ export function verifyAuditChain(rows: readonly unknown[]): AuditChainVerificati
       return { reason: "invalid_event", sequence: null, status: "invalid" }
     }
     const event = parsed.data
-    if (previousEvent !== undefined && BigInt(event.sequence) <= BigInt(previousEvent.sequence)) {
+    const previousSequence = previousEvent?.sequence ?? start.previousSequence
+    if (previousSequence !== null && BigInt(event.sequence) <= BigInt(previousSequence)) {
       return {
         reason: "sequence_order_mismatch",
         sequence: event.sequence,
         status: "invalid",
       }
     }
-    const expectedPreviousHash = previousEvent === undefined ? null : previousEvent.eventHash
+    const expectedPreviousHash = previousEvent?.eventHash ?? start.previousHash
     if (event.previousHash !== expectedPreviousHash) {
       return {
         reason: "previous_hash_mismatch",

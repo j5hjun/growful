@@ -26,6 +26,14 @@ export class PostgresPrivacyDeletion {
 
   async delete(command: PrivacyDeletionCommand): Promise<PrivacyDeletionResult> {
     return this.database.transaction().execute(async (transaction) => {
+      await sql`
+        select pg_advisory_xact_lock(
+          hashtextextended('growful:privacy-deletion-epoch', 0)
+        )
+      `.execute(transaction)
+      await sql`
+        select pg_advisory_xact_lock(hashtextextended(${command.supportReference}, 0))
+      `.execute(transaction)
       const deleted = await transaction
         .deleteFrom("smartThingsConnections")
         .where(
@@ -40,6 +48,20 @@ export class PostgresPrivacyDeletion {
         deleted === undefined
           ? { affectedCount: 0, outcome: "failed" }
           : { affectedCount: 1, outcome: "succeeded" }
+      if (result.outcome === "succeeded") {
+        const epoch = await transaction
+          .selectNoFrom(
+            sql<string>`nextval('privacy_deletion_epoch_sequence')::text`.as("deletionEpoch"),
+          )
+          .executeTakeFirstOrThrow()
+        await transaction
+          .insertInto("privacyDeletionEpochs")
+          .values({ deletionEpoch: epoch.deletionEpoch, subjectHash: command.supportReference })
+          .onConflict((conflict) =>
+            conflict.column("subjectHash").doUpdateSet({ deletionEpoch: epoch.deletionEpoch }),
+          )
+          .execute()
+      }
       await appendPostgresAuditEvent(transaction, {
         action: "privacy.delete",
         actorIdHash: command.actorIdHash,

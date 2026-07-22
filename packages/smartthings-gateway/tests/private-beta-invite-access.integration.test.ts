@@ -86,6 +86,8 @@ describe("PostgreSQL private beta invitation access", () => {
 
     // Then
     await expect(access.authenticate(authorization)).resolves.toBeNull()
-    await expect(access.listActiveUsernames()).resolves.not.toContain(username)
+    expect((await access.listActiveInvites()).map((invite) => invite.username)).not.toContain(
+      username,
+    )
   })
 })

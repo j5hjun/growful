@@ -6,6 +6,14 @@ import type { GatewayDatabase } from "../storage/database.js"
 const defaultRequestLimit = 60
 const defaultWindowMilliseconds = 60_000
 
+export class GrowfulRequestQuotaExceededError extends Error {
+  override readonly name = "GrowfulRequestQuotaExceededError"
+
+  constructor(readonly retryAfterSeconds: number) {
+    super("Growful connection request quota exceeded")
+  }
+}
+
 export type GrowfulRequestQuotaConsumption = {
   readonly installedAppId: InstalledAppId
   readonly limit: number

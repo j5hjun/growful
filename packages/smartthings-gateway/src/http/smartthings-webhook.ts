@@ -103,9 +103,9 @@ class SmartThingsConfirmationGate {
       throw new SmartThingsConfirmationRateLimitError(Math.ceil(retryAfterMs / 1_000))
     }
     this.inFlight = true
-    this.nextAttemptAtMs = nowMs + confirmationRetryIntervalMs
     try {
       await requester(confirmationUrl)
+      this.nextAttemptAtMs = nowMs + confirmationRetryIntervalMs
       while (this.completed.size >= maximumCachedConfirmations) {
         const oldestHash = this.completed.keys().next().value
         if (oldestHash === undefined) break

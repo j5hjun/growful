@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { z } from "zod"
 import { hashAuditValue } from "../src/audit/audit-event.js"
-import { InstalledAppIdSchema } from "../src/oauth/contracts.js"
+import { InstalledAppIdSchema, RefreshClaimIdSchema } from "../src/oauth/contracts.js"
 import { InvalidOAuthStateError, OAuthService } from "../src/oauth/oauth-service.js"
-import { PostgresPrivateBetaInviteAccess } from "../src/private-beta/invite-access.js"
+import {
+  ConfiguredPrivateBetaInviteAccess,
+  getConfiguredPrivateBetaInviteGeneration,
+  PostgresPrivateBetaInviteAccess,
+} from "../src/private-beta/invite-access.js"
 import { PostgresPrivateBetaInviteManager } from "../src/private-beta/invite-management.js"
+import { generateGrowfulToken, hashGrowfulToken } from "../src/security/growful-token.js"
 import { createDatabase, runMigrations } from "../src/storage/database.js"
 import { PostgresOAuthStore } from "../src/storage/postgres-oauth-store.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
@@ -16,6 +21,9 @@ const database = createDatabase(TEST_DATABASE_URL)
 const scenarioId = randomUUID()
 const poolUsername = `revocation-pool-${scenarioId}`
 const reissueUsername = `revocation-reissue-${scenarioId}`
+const rotatedUsername = `configured-rotation-${scenarioId}`
+const previousConfiguredInvite = { passwordHash: "e".repeat(64), username: rotatedUsername }
+const activeConfiguredInvite = { passwordHash: "f".repeat(64), username: rotatedUsername }
 
 function deferred<T>() {
   let resolvePromise: (value: T | PromiseLike<T>) => void = () => undefined
@@ -48,6 +56,55 @@ function createService(
   return { inviteAccess, service }
 }
 
+async function seedConfiguredRotation(installedAppIdValue: string) {
+  const client = new FakeSmartThingsClient()
+  const installedAppId = InstalledAppIdSchema.parse(installedAppIdValue)
+  client.exchangeGrant = { ...client.exchangeGrant, installedAppId, scopes: ["r:devices:*"] }
+  const store = new PostgresOAuthStore({
+    configuredPrivateBetaInvites: [activeConfiguredInvite],
+    database,
+    encryptionKeyBase64: Buffer.alloc(32, 6).toString("base64"),
+  })
+  const growfulToken = generateGrowfulToken()
+  await store.saveTokens({
+    authorization: {
+      consentedAt: new Date("2026-07-22T00:00:00.000Z"),
+      policyVersion: testDisclosures.policyVersion,
+      privateBetaInviteGeneration:
+        getConfiguredPrivateBetaInviteGeneration(previousConfiguredInvite),
+      privateBetaUsername: rotatedUsername,
+      privacyDeletionEpoch: null,
+      requestedScopes: ["r:devices:*"],
+    },
+    grant: {
+      accessToken: `${installedAppIdValue}-access`,
+      expiresInSeconds: 3_600,
+      installedAppId,
+      refreshToken: `${installedAppIdValue}-refresh`,
+      scopes: ["r:devices:*"],
+      tokenType: "bearer",
+    },
+    growfulTokenCreatedAt: new Date("2026-07-22T00:00:00.000Z"),
+    growfulTokenHash: hashGrowfulToken(growfulToken),
+    issuedAt: new Date("2026-07-22T00:00:00.000Z"),
+    source: "authorization",
+  })
+  return {
+    installedAppId,
+    service: new OAuthService({
+      accessPolicy: {
+        policyVersion: testDisclosures.policyVersion,
+        privateBetaAccess: new ConfiguredPrivateBetaInviteAccess([activeConfiguredInvite]),
+      },
+      client,
+      refreshBeforeExpiryMs: 3_600_000,
+      refreshLeaseMs: 120_000,
+      store,
+    }),
+    store,
+  }
+}
+
 async function removeUsername(username: string): Promise<void> {
   await database.deleteFrom("oauthStates").where("privateBetaUsername", "=", username).execute()
   await database
@@ -59,13 +116,49 @@ async function removeUsername(username: string): Promise<void> {
 
 beforeAll(async () => runMigrations(database))
 
+beforeEach(async () => removeUsername(rotatedUsername))
+
 afterAll(async () => {
   await removeUsername(poolUsername)
   await removeUsername(reissueUsername)
+  await removeUsername(rotatedUsername)
   await database.destroy()
 })
 
 describe("private beta OAuth invitation generations", () => {
+  it("revokes a stored connection when a configured invite generation rotates", async () => {
+    // Given
+    const { installedAppId, service, store } = await seedConfiguredRotation(
+      `configured-cleanup-${scenarioId}`,
+    )
+
+    // When
+    await service.revokeUnauthorizedConnections()
+
+    // Then
+    await expect(store.getTokens(installedAppId)).resolves.toBeNull()
+  })
+
+  it("refuses to lease stale configured-invite credentials for refresh", async () => {
+    // Given
+    const { installedAppId, store } = await seedConfiguredRotation(
+      `configured-refresh-${scenarioId}`,
+    )
+
+    // When
+    const claimed = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000916"),
+      kind: "due",
+      leaseMs: 120_000,
+      now: new Date("2026-07-22T00:00:00.000Z"),
+      refreshBeforeExpiryMs: 7_200_000,
+    })
+
+    // Then
+    expect(claimed).toBeNull()
+    await expect(store.getTokens(installedAppId)).resolves.toBeNull()
+  })
+
   it("does not exhaust the PostgreSQL pool during concurrent completions for one invite", async () => {
     const completionCount = 10
     const manager = new PostgresPrivateBetaInviteManager({ configuredInvites: [], database })
