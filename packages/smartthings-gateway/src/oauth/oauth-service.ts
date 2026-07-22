@@ -1,18 +1,24 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import {
   type GrowfulToken,
   generateGrowfulToken,
   hashGrowfulToken,
 } from "../security/growful-token.js"
 import type {
+  ConnectionAccessPolicy,
   ConnectionStatus,
   InstalledAppId,
+  OAuthAuthorization,
   OAuthStore,
   SmartThingsClient,
   StoredTokens,
 } from "./contracts.js"
-import { OAuthStateHashSchema, RefreshClaimIdSchema } from "./contracts.js"
-import { areScopesWithin, type SmartThingsScope } from "./smartthings-scope.js"
+import { OAuthStateHashSchema } from "./contracts.js"
+import { OAuthRefreshService, type RefreshBatchResult } from "./oauth-refresh-service.js"
+import { ensureOAuthScopesWithin } from "./oauth-scope-policy.js"
+
+export type { RefreshBatchResult } from "./oauth-refresh-service.js"
+export { OAuthScopeMismatchError } from "./oauth-scope-policy.js"
 
 const oauthStateLifetimeMs = 10 * 60 * 1_000
 
@@ -32,25 +38,13 @@ export class OAuthConnectionRequiredError extends Error {
   }
 }
 
-export class OAuthScopeMismatchError extends Error {
-  override readonly name = "OAuthScopeMismatchError"
-
-  constructor() {
-    super("SmartThings returned scopes outside the authorized boundary")
-  }
-}
-
 export type AuthorizationCompletion = {
   readonly connection: ConnectionStatus
   readonly growfulToken: GrowfulToken
 }
 
-export type RefreshBatchResult = {
-  readonly failureNames: readonly string[]
-  readonly refreshedCount: number
-}
-
 export type OAuthServiceOptions = {
+  readonly accessPolicy?: ConnectionAccessPolicy
   readonly client: SmartThingsClient
   readonly growfulTokenGenerator?: () => GrowfulToken
   readonly now?: () => Date
@@ -61,35 +55,65 @@ export type OAuthServiceOptions = {
 }
 
 export class OAuthService {
+  private readonly accessPolicy: ConnectionAccessPolicy
   private readonly growfulTokenGenerator: () => GrowfulToken
   private readonly now: () => Date
+  private readonly refreshService: OAuthRefreshService
   private readonly stateGenerator: () => string
 
   constructor(private readonly options: OAuthServiceOptions) {
+    this.accessPolicy = options.accessPolicy ?? {
+      policyVersion: "test-policy",
+      privateBetaUsernames: null,
+    }
     this.growfulTokenGenerator = options.growfulTokenGenerator ?? generateGrowfulToken
     this.now = options.now ?? (() => new Date())
+    this.refreshService = new OAuthRefreshService({
+      client: options.client,
+      now: this.now,
+      refreshBeforeExpiryMs: options.refreshBeforeExpiryMs,
+      refreshLeaseMs: options.refreshLeaseMs,
+      store: options.store,
+    })
     this.stateGenerator = options.stateGenerator ?? (() => randomBytes(32).toString("base64url"))
   }
 
   async authenticate(growfulToken: GrowfulToken): Promise<InstalledAppId | null> {
-    return this.options.store.authenticate(hashGrowfulToken(growfulToken))
+    const authentication = await this.options.store.authenticate(hashGrowfulToken(growfulToken))
+    if (
+      authentication === null ||
+      authentication.policyVersion !== this.accessPolicy.policyVersion ||
+      (this.accessPolicy.privateBetaUsernames !== null &&
+        (authentication.privateBetaUsername === null ||
+          !this.accessPolicy.privateBetaUsernames.includes(authentication.privateBetaUsername)))
+    ) {
+      return null
+    }
+    return authentication.installedAppId
   }
 
-  async startAuthorization(scopes: readonly SmartThingsScope[]): Promise<URL> {
+  async startAuthorization(authorization: Omit<OAuthAuthorization, "consentedAt">): Promise<URL> {
+    if (!this.isAuthorizationActive(authorization)) {
+      throw new InvalidOAuthStateError()
+    }
     const state = this.stateGenerator()
     const now = this.now()
+    const storedAuthorization: OAuthAuthorization = { ...authorization, consentedAt: now }
     await this.options.store.saveState(
       this.hashState(state),
       new Date(now.getTime() + oauthStateLifetimeMs),
-      scopes,
+      storedAuthorization,
     )
-    return this.options.client.buildAuthorizationUrl(state, scopes)
+    return this.options.client.buildAuthorizationUrl(state, authorization.requestedScopes)
   }
 
   async completeAuthorization(code: string, state: string): Promise<AuthorizationCompletion> {
-    const requestedScopes = await this.consumeState(state)
+    const authorization = await this.consumeState(state)
+    if (!this.isAuthorizationActive(authorization)) {
+      throw new InvalidOAuthStateError()
+    }
     const grant = await this.options.client.exchangeCode(code)
-    this.ensureScopesWithin(grant.scopes, requestedScopes)
+    ensureOAuthScopesWithin(grant.scopes, authorization.requestedScopes)
     const issuedAt = this.now()
     const growfulToken = this.growfulTokenGenerator()
     const tokens = await this.options.store.saveTokens({
@@ -97,6 +121,7 @@ export class OAuthService {
       growfulTokenCreatedAt: issuedAt,
       growfulTokenHash: hashGrowfulToken(growfulToken),
       issuedAt,
+      authorization,
       source: "authorization",
     })
     return { connection: this.toConnectionStatus(tokens), growfulToken }
@@ -108,6 +133,14 @@ export class OAuthService {
 
   async getAccessToken(installedAppId: InstalledAppId): Promise<string> {
     return (await this.requireTokens(installedAppId)).accessToken
+  }
+
+  async purgeExpiredAuthorizationStates(): Promise<number> {
+    return this.options.store.deleteExpiredStates(this.now())
+  }
+
+  async revokeUnauthorizedConnections(): Promise<number> {
+    return this.options.store.revokeUnauthorizedConnections(this.accessPolicy)
   }
 
   async rotateGrowfulToken(installedAppId: InstalledAppId): Promise<GrowfulToken> {
@@ -130,74 +163,23 @@ export class OAuthService {
     }
   }
 
+  async forgetConnection(installedAppId: InstalledAppId): Promise<void> {
+    await this.options.store.deleteConnection(installedAppId)
+  }
+
   async refreshDueConnections(): Promise<RefreshBatchResult> {
-    const failureNames: string[] = []
-    let refreshedCount = 0
-    while (true) {
-      const now = this.now()
-      const claimId = RefreshClaimIdSchema.parse(randomUUID())
-      const tokens = await this.options.store.claimTokensForRefresh({
-        claimId,
-        kind: "due",
-        leaseMs: this.options.refreshLeaseMs,
-        now,
-        refreshBeforeExpiryMs: this.options.refreshBeforeExpiryMs,
-      })
-      if (tokens === null) {
-        return { failureNames, refreshedCount }
-      }
-      try {
-        await this.refreshClaimedTokens(tokens, claimId, now)
-        refreshedCount += 1
-      } catch (error) {
-        failureNames.push(error instanceof Error ? error.name : "UnknownError")
-      }
-    }
+    return this.refreshService.refreshDueConnections()
   }
 
   async refreshAccessToken(
     installedAppId: InstalledAppId,
     rejectedAccessToken: string,
   ): Promise<boolean> {
-    const now = this.now()
-    const claimId = RefreshClaimIdSchema.parse(randomUUID())
-    const tokens = await this.options.store.claimTokensForRefresh({
-      claimId,
-      expectedAccessToken: rejectedAccessToken,
-      installedAppId,
-      kind: "forced",
-      leaseMs: this.options.refreshLeaseMs,
-      now,
-    })
-    if (tokens === null) {
-      return false
-    }
-    await this.refreshClaimedTokens(tokens, claimId, now)
-    return true
+    return this.refreshService.refreshAccessToken(installedAppId, rejectedAccessToken)
   }
 
   async cancelAuthorization(state: string): Promise<void> {
     await this.consumeState(state)
-  }
-
-  private async refreshClaimedTokens(
-    tokens: StoredTokens,
-    claimId: ReturnType<typeof RefreshClaimIdSchema.parse>,
-    now: Date,
-  ): Promise<void> {
-    try {
-      const grant = await this.options.client.refresh(tokens.refreshToken)
-      this.ensureScopesWithin(grant.scopes, tokens.scopes)
-      await this.options.store.saveTokens({ claimId, grant, issuedAt: now, source: "refresh" })
-    } catch (error) {
-      await this.options.store.recordRefreshFailure({
-        claimId,
-        installedAppId: tokens.installedAppId,
-        message: error instanceof Error ? error.name : "UnknownError",
-        occurredAt: now,
-      })
-      throw error
-    }
   }
 
   private async requireTokens(installedAppId: InstalledAppId): Promise<StoredTokens> {
@@ -208,7 +190,7 @@ export class OAuthService {
     return tokens
   }
 
-  private async consumeState(state: string): Promise<readonly SmartThingsScope[]> {
+  private async consumeState(state: string): Promise<OAuthAuthorization> {
     const consumed = await this.options.store.consumeState(this.hashState(state), this.now())
     if (consumed === null) {
       throw new InvalidOAuthStateError()
@@ -216,10 +198,19 @@ export class OAuthService {
     return consumed
   }
 
-  private ensureScopesWithin(scopes: readonly string[], allowedScopes: readonly string[]): void {
-    if (!areScopesWithin(scopes, allowedScopes)) {
-      throw new OAuthScopeMismatchError()
+  private isAuthorizationActive(
+    authorization: Pick<OAuthAuthorization, "policyVersion" | "privateBetaUsername">,
+  ): boolean {
+    if (authorization.policyVersion !== this.accessPolicy.policyVersion) {
+      return false
     }
+    if (this.accessPolicy.privateBetaUsernames === null) {
+      return authorization.privateBetaUsername === null
+    }
+    return (
+      authorization.privateBetaUsername !== null &&
+      this.accessPolicy.privateBetaUsernames.includes(authorization.privateBetaUsername)
+    )
   }
 
   private hashState(state: string) {

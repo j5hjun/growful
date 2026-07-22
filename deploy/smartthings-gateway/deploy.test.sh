@@ -62,6 +62,7 @@ mkdir -p "$release_dir" "$previous_release" "$fake_bin"
 cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$release_dir/"
 cp "$source_dir/compose.yaml" "$previous_release/"
 grep -Fq 'stop_grace_period: 120s' "$source_dir/compose.yaml"
+grep -Fq "fetch('http://127.0.0.1:8100/readyz')" "$source_dir/compose.yaml"
 touch "$deployment_root/.env"
 touch "$deployment_root/.env.rollback.stale"
 printf '%s\n' "$previous_image_reference" 'previous' "$previous_release" '1' >"$release_state_file"
@@ -78,6 +79,8 @@ printf '%s\n' \
   'elif [[ "$1" == "compose" && "${FAIL_STOP:-}" == "1" && "$*" == *" stop gateway"* ]]; then' \
   '  exit 1' \
   'elif [[ "$1" == "compose" && "${FAIL_ROLLBACK:-}" == "1" && "$*" == *" up -d --no-deps gateway"* ]]; then' \
+  '  exit 1' \
+  'elif [[ "$1" == "compose" && "${FAIL_ROLLBACK_PREPARATION:-}" == "1" && "$*" == *" run --rm --no-deps gateway node dist/prepare-rollback.js"* ]]; then' \
   '  exit 1' \
   'elif [[ "$1" == "inspect" ]]; then' \
   '  if [[ "$*" == *RestartCount* ]]; then' \
@@ -120,7 +123,11 @@ printf '%s\n' \
   '  touch "$FAIL_ONCE_MARKER"' \
   '  exit 22' \
   'fi' \
-  'printf "{\"status\":\"ok\"}\n"' >"$fake_bin/curl"
+  'if [[ "$*" == */readyz ]]; then' \
+  '  printf "{\"status\":\"ready\"}\n"' \
+  'else' \
+  '  printf "{\"status\":\"ok\"}\n"' \
+  'fi' >"$fake_bin/curl"
 
 # Dollar expressions below belong to the generated fake executable.
 # shellcheck disable=SC2016
@@ -206,6 +213,8 @@ if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$broken_ima
 fi
 
 grep -Eq '^broken\|compose .* up -d --no-deps gateway$' "$fake_log"
+grep -Eq '^broken\|compose .* stop gateway$' "$fake_log"
+grep -Eq '^broken\|compose .* run --rm --no-deps gateway node dist/prepare-rollback\.js$' "$fake_log"
 grep -Fq "previous|image inspect $previous_image_reference" "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 grep -Fq 'previous|rollback-scope=exact' "$fake_log"
@@ -216,13 +225,28 @@ assert_release_state "$previous_image_reference" previous "$previous_release" 1
 assert_deployment_sequence 3 broken "$broken_image_reference"
 
 : >"$fake_log"
+if FAIL_ROLLBACK_PREPARATION=1 DEPLOYMENT_ROOT="$deployment_root" \
+  PUBLIC_BASE_URL="https://smartthings.growful.click" \
+  bash "$release_dir/deploy.sh" "$public_broken_image_reference" public-broken 4; then
+  printf 'deployment with failed rollback credential revocation unexpectedly succeeded\n' >&2
+  exit 1
+fi
+grep -Eq '^public-broken\|compose .* run --rm --no-deps gateway node dist/prepare-rollback\.js$' "$fake_log"
+if grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"; then
+  printf 'previous gateway started after rollback credential revocation failed\n' >&2
+  exit 1
+fi
+assert_release_state "$previous_image_reference" previous "$previous_release" 1
+assert_deployment_sequence 4 public-broken "$public_broken_image_reference"
+
+: >"$fake_log"
 if DEPLOYMENT_ROOT="$deployment_root" PUBLIC_BASE_URL="https://smartthings.growful.click" \
   bash "$release_dir/deploy.sh" "$public_broken_image_reference" public-broken 4; then
   printf 'deployment with a broken public route unexpectedly succeeded\n' >&2
   exit 1
 fi
 
-grep -Eq '^public-broken\|curl .*smartthings\.growful\.click/healthz$' "$fake_log"
+grep -Eq '^public-broken\|curl .*smartthings\.growful\.click/readyz$' "$fake_log"
 grep -Eq '^previous\|compose .* up -d --no-deps gateway$' "$fake_log"
 assert_release_state "$previous_image_reference" previous "$previous_release" 1
 assert_deployment_sequence 4 public-broken "$public_broken_image_reference"
@@ -305,7 +329,7 @@ assert_deployment_sequence 7 broken "$broken_image_reference"
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/deploy.sh" "$healthy_image_reference" healthy 8
 
 grep -Eq '^healthy\|compose .* up -d --no-deps gateway$' "$fake_log"
-grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/healthz$' "$fake_log"
+grep -Eq '^healthy\|curl .*127\.0\.0\.1:8100/readyz$' "$fake_log"
 assert_release_state "$healthy_image_reference" healthy "$release_dir" 8
 assert_deployment_sequence 8 healthy "$healthy_image_reference"
 test "$(readlink "$deployment_root/current")" = "$release_dir"

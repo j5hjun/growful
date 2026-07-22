@@ -1,5 +1,8 @@
 import {
+  type ConnectionAccessPolicy,
+  type ConnectionAuthentication,
   type InstalledAppId,
+  type OAuthAuthorization,
   type OAuthStateHash,
   type OAuthStore,
   type RefreshClaim,
@@ -17,13 +20,18 @@ import {
 } from "../../src/security/growful-token.js"
 
 type StoredOAuthState = {
+  readonly consentedAt: Date
   readonly expiresAt: Date
+  readonly policyVersion: string
+  readonly privateBetaUsername: string | null
   readonly requestedScopes: readonly SmartThingsScope[]
 }
 
 type MemoryConnection = {
   growfulTokenCreatedAt: Date
   growfulTokenHash: GrowfulTokenHash
+  policyVersion: string
+  privateBetaUsername: string | null
   refreshClaimedUntil: Date | null
   refreshClaimId: RefreshClaimId | null
   tokens: StoredTokens
@@ -38,10 +46,14 @@ export class MemoryOAuthStore implements OAuthStore {
   readonly failures: RefreshFailure[] = []
   readonly states = new Map<OAuthStateHash, StoredOAuthState>()
 
-  async authenticate(growfulTokenHash: GrowfulTokenHash): Promise<InstalledAppId | null> {
+  async authenticate(growfulTokenHash: GrowfulTokenHash): Promise<ConnectionAuthentication | null> {
     for (const [installedAppId, connection] of this.connections) {
       if (connection.growfulTokenHash === growfulTokenHash) {
-        return installedAppId
+        return {
+          installedAppId,
+          policyVersion: connection.policyVersion,
+          privateBetaUsername: connection.privateBetaUsername,
+        }
       }
     }
     return null
@@ -75,19 +87,24 @@ export class MemoryOAuthStore implements OAuthStore {
     return null
   }
 
-  async consumeState(
-    stateHash: OAuthStateHash,
-    now: Date,
-  ): Promise<readonly SmartThingsScope[] | null> {
+  async consumeState(stateHash: OAuthStateHash, now: Date): Promise<OAuthAuthorization | null> {
     const state = this.states.get(stateHash)
     this.states.delete(stateHash)
-    return state !== undefined && state.expiresAt.getTime() >= now.getTime()
-      ? state.requestedScopes
-      : null
+    return state !== undefined && state.expiresAt.getTime() > now.getTime() ? state : null
   }
 
   async deleteConnection(installedAppId: InstalledAppId): Promise<boolean> {
     return this.connections.delete(installedAppId)
+  }
+
+  async deleteExpiredStates(now: Date): Promise<number> {
+    let deletedCount = 0
+    for (const [stateHash, state] of this.states) {
+      if (state.expiresAt.getTime() <= now.getTime() && this.states.delete(stateHash)) {
+        deletedCount += 1
+      }
+    }
+    return deletedCount
   }
 
   async getTokens(installedAppId: InstalledAppId): Promise<StoredTokens | null> {
@@ -99,6 +116,23 @@ export class MemoryOAuthStore implements OAuthStore {
     if (connection?.refreshClaimId === failure.claimId) {
       this.failures.push(failure)
     }
+  }
+
+  async revokeUnauthorizedConnections(accessPolicy: ConnectionAccessPolicy): Promise<number> {
+    let deletedCount = 0
+    for (const [installedAppId, connection] of this.connections) {
+      const inactiveInvite =
+        accessPolicy.privateBetaUsernames !== null &&
+        (connection.privateBetaUsername === null ||
+          !accessPolicy.privateBetaUsernames.includes(connection.privateBetaUsername))
+      if (
+        (connection.policyVersion !== accessPolicy.policyVersion || inactiveInvite) &&
+        this.connections.delete(installedAppId)
+      ) {
+        deletedCount += 1
+      }
+    }
+    return deletedCount
   }
 
   async replaceGrowfulToken(
@@ -118,9 +152,9 @@ export class MemoryOAuthStore implements OAuthStore {
   async saveState(
     stateHash: OAuthStateHash,
     expiresAt: Date,
-    requestedScopes: readonly SmartThingsScope[],
+    authorization: OAuthAuthorization,
   ): Promise<void> {
-    this.states.set(stateHash, { expiresAt, requestedScopes })
+    this.states.set(stateHash, { ...authorization, expiresAt })
   }
 
   async saveTokens(input: SaveTokensInput): Promise<StoredTokens> {
@@ -148,6 +182,14 @@ export class MemoryOAuthStore implements OAuthStore {
     this.connections.set(input.grant.installedAppId, {
       growfulTokenCreatedAt,
       growfulTokenHash,
+      policyVersion:
+        input.source === "authorization"
+          ? input.authorization.policyVersion
+          : (existing?.policyVersion ?? "test-policy"),
+      privateBetaUsername:
+        input.source === "authorization"
+          ? input.authorization.privateBetaUsername
+          : (existing?.privateBetaUsername ?? null),
       refreshClaimedUntil: null,
       refreshClaimId: null,
       tokens,
@@ -158,10 +200,16 @@ export class MemoryOAuthStore implements OAuthStore {
   seedTokens(
     tokens: StoredTokens,
     growfulTokenHash: GrowfulTokenHash = hashGrowfulToken(memoryStoreGrowfulToken),
+    identity: { readonly policyVersion: string; readonly privateBetaUsername: string | null } = {
+      policyVersion: "test-policy",
+      privateBetaUsername: null,
+    },
   ): void {
     this.connections.set(tokens.installedAppId, {
       growfulTokenCreatedAt: new Date("2026-07-19T00:00:00.000Z"),
       growfulTokenHash,
+      policyVersion: identity.policyVersion,
+      privateBetaUsername: identity.privateBetaUsername,
       refreshClaimedUntil: null,
       refreshClaimId: null,
       tokens,

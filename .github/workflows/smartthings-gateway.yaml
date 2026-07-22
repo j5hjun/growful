@@ -301,11 +301,30 @@ jobs:
           health_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/healthz")"
           test "$health_response" = '{"status":"ok"}'
 
+          readiness_response="$(curl --fail --silent --show-error --retry 5 --retry-all-errors "$public_base_url/readyz")"
+          test "$readiness_response" = '{"status":"ready"}'
+
           connection_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/connection")"
           test "$connection_status" = '401'
 
-          oauth_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/oauth/start")"
-          test "$oauth_status" = '200'
+          oauth_headers="$(mktemp)"
+          trap 'rm -f "$oauth_headers"' EXIT
+          oauth_status="$(curl --silent --show-error --dump-header "$oauth_headers" --output /dev/null --write-out '%{http_code}' "$public_base_url/oauth/start")"
+          access_mode="$(sed -n 's/^SERVICE_ACCESS_MODE=//p' "$HOME/app/smartthings-gateway/.env" | tail -n 1)"
+          access_mode="${access_mode:-private_beta}"
+          case "$access_mode" in
+            private_beta)
+              test "$oauth_status" = '401'
+              grep --ignore-case --fixed-strings 'www-authenticate: Basic realm="Growful private beta", charset="UTF-8"' "$oauth_headers" >/dev/null
+              ;;
+            public)
+              test "$oauth_status" = '200'
+              ;;
+            *)
+              printf 'unsupported SERVICE_ACCESS_MODE: %s\n' "$access_mode" >&2
+              exit 1
+              ;;
+          esac
 
           api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$public_base_url/v1/devices")"
           test "$api_status" = '401'

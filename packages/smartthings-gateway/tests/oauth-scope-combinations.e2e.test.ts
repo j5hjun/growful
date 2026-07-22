@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it } from "vitest"
 import { createApp } from "../src/http/app.js"
 import { OAuthService } from "../src/oauth/oauth-service.js"
 import type { SmartThingsScope } from "../src/oauth/smartthings-scope.js"
+import { allowAllGrowfulAbuseControl } from "./fixtures/abuse-control.js"
 import { FakeSmartThingsClient } from "./fixtures/fake-smartthings-client.js"
 import { MemoryOAuthStore } from "./fixtures/memory-oauth-store.js"
+import { publicOAuthAccess } from "./fixtures/oauth-access.js"
+import { readyProbe } from "./fixtures/readiness.js"
 
 const apps: ReturnType<typeof createApp>[] = []
 const authorizationOrigin = "https://api.smartthings.test"
@@ -132,7 +135,15 @@ function createFixture() {
     stateGenerator: () => "exhaustive-selection-test-state",
     store: new MemoryOAuthStore(),
   })
-  const app = createApp({ authorizationOrigin, redirectOrigin, service })
+  const app = createApp({
+    abuseControl: allowAllGrowfulAbuseControl,
+    authorizationOrigin,
+    oauthAccess: publicOAuthAccess,
+    readinessProbe: readyProbe,
+    redirectOrigin,
+    service,
+    smartThingsAppId: "growful-app",
+  })
   apps.push(app)
   return app
 }
@@ -155,7 +166,7 @@ describe("SmartThings OAuth scope combinations", () => {
           origin: redirectOrigin,
         },
         method: "POST",
-        payload,
+        payload: `${payload}&policyConsent=accepted`,
         url: "/oauth/start",
       })
 
@@ -181,7 +192,7 @@ describe("SmartThings OAuth scope combinations", () => {
         origin: redirectOrigin,
       },
       method: "POST",
-      payload: `deviceRange=${deviceRange}`,
+      payload: `deviceRange=${deviceRange}&policyConsent=accepted`,
       url: "/oauth/start",
     })
 

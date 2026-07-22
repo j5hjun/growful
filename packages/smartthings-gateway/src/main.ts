@@ -1,6 +1,21 @@
+import { PostgresGrowfulAbuseControl } from "./abuse/abuse-control.js"
+import { AuditIntegrityMonitor } from "./audit/audit-integrity-monitor.js"
+import { AuditedOAuthStore } from "./audit/audited-oauth-store.js"
+import { verifyPostgresAuditIntegrity } from "./audit/postgres-audit-integrity.js"
+import { PostgresAuditSink } from "./audit/postgres-audit-sink.js"
 import { loadConfig } from "./config.js"
-import { createApp, registerSmartThingsProxy } from "./http/app.js"
+import { PostgresReadinessProbe } from "./health/postgres-readiness.js"
+import { createApp } from "./http/app.js"
+import {
+  GrowfulRequestQuota,
+  PostgresGrowfulRequestQuotaStore,
+} from "./http/growful-request-quota.js"
 import { SmartThingsProxy } from "./http/smartthings-proxy.js"
+import { registerSmartThingsProxy } from "./http/smartthings-proxy-route.js"
+import {
+  PostgresSmartThingsRateLimitBackoffStore,
+  SmartThingsRateLimitBackoff,
+} from "./http/smartthings-rate-limit-backoff.js"
 import { OAuthService } from "./oauth/oauth-service.js"
 import { startRefreshWorker } from "./oauth/refresh-worker.js"
 import { startGatewayRuntime } from "./runtime.js"
@@ -10,13 +25,25 @@ import { PostgresOAuthStore } from "./storage/postgres-oauth-store.js"
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env)
-  const database = createDatabase(config.databaseUrl)
+  const database = createDatabase(config.databaseUrl, {
+    onIdleClientError(error) {
+      console.error(
+        JSON.stringify({
+          event: "database.idle_client.failed",
+          errorName: error.name,
+        }),
+      )
+    },
+  })
   let runtimeOwnsDatabase = false
   try {
     await runMigrations(database)
-    const store = new PostgresOAuthStore({
-      database,
-      encryptionKeyBase64: config.encryptionKeyBase64,
+    const store = new AuditedOAuthStore({
+      auditSink: new PostgresAuditSink({ database }),
+      store: new PostgresOAuthStore({
+        database,
+        encryptionKeyBase64: config.encryptionKeyBase64,
+      }),
     })
     const client = new HttpSmartThingsClient({
       authorizationUrl: config.authorizationUrl,
@@ -26,27 +53,61 @@ async function main(): Promise<void> {
       tokenUrl: config.tokenUrl,
     })
     const service = new OAuthService({
+      accessPolicy: {
+        policyVersion: config.serviceAccess.policyVersion,
+        privateBetaUsernames:
+          config.serviceAccess.mode === "private_beta"
+            ? config.serviceAccess.invites.map((invite) => invite.username)
+            : null,
+      },
       client,
       refreshBeforeExpiryMs: config.refreshBeforeExpiryMs,
       refreshLeaseMs: config.refreshLeaseMs,
       store,
     })
+    await service.revokeUnauthorizedConnections()
+    const abuseControl = new PostgresGrowfulAbuseControl({ database })
+    const auditIntegrityMonitor = new AuditIntegrityMonitor(() =>
+      verifyPostgresAuditIntegrity(database),
+    )
     const app = createApp({
+      abuseControl,
       authorizationOrigin: config.authorizationUrl.origin,
       logger: {
         level: config.logLevel,
         redact: ["req.headers.authorization", "req.headers.cookie"],
       },
+      oauthAccess: config.serviceAccess,
+      readinessProbe: new PostgresReadinessProbe({
+        auditIntegrityProbe: auditIntegrityMonitor,
+        database,
+      }),
       redirectOrigin: config.redirectUri.origin,
       service,
+      smartThingsAppId: config.smartThingsAppId,
     })
     registerSmartThingsProxy(app, {
+      abuseControl,
       proxy: new SmartThingsProxy({
         apiBaseUrl: config.apiBaseUrl,
         service,
         timeoutMs: config.apiTimeoutMs,
       }),
+      rateLimitBackoff: new SmartThingsRateLimitBackoff({
+        store: new PostgresSmartThingsRateLimitBackoffStore({ database }),
+      }),
+      requestQuota: new GrowfulRequestQuota({
+        store: new PostgresGrowfulRequestQuotaStore({ database }),
+      }),
       service,
+    })
+    await auditIntegrityMonitor.refresh(app.log)
+    const stopAuditIntegrityMonitor = auditIntegrityMonitor.start({
+      intervalMs: config.refreshCheckIntervalMs,
+      logger: app.log,
+    })
+    app.addHook("onClose", async () => {
+      await stopAuditIntegrityMonitor()
     })
     runtimeOwnsDatabase = true
     await startGatewayRuntime({

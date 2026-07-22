@@ -1,4 +1,5 @@
 export interface RefreshService {
+  purgeExpiredAuthorizationStates(): Promise<number>
   refreshDueConnections(): Promise<{
     readonly failureNames: readonly string[]
     readonly refreshedCount: number
@@ -19,6 +20,12 @@ export type RefreshWorkerOptions = {
 export function startRefreshWorker(options: RefreshWorkerOptions): () => Promise<void> {
   let activeRun: Promise<void> | undefined
   const execute = async (): Promise<void> => {
+    try {
+      await options.service.purgeExpiredAuthorizationStates()
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : "UnknownError"
+      options.logger.error({ errorName }, "oauth.state.cleanup.failed")
+    }
     try {
       const result = await options.service.refreshDueConnections()
       for (const errorName of result.failureNames) {

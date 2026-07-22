@@ -37,7 +37,16 @@ printf '%s\n' \
   'fi' \
   'printf "00000000000000000000000000000000"' >"$fake_bin/base64"
 
-printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/curl"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  "url=\"\${!#}\"" \
+  "if [[ \"\$url\" == *\"\${FAKE_CURL_FAIL_SUFFIX:-__never__}\" ]]; then" \
+  '  exit 22' \
+  'fi' \
+  "content_type=\"\${FAKE_CURL_CONTENT_TYPE:-text/html; charset=utf-8}\"" \
+  "effective_url=\"\${FAKE_CURL_EFFECTIVE_URL:-\$url}\"" \
+  "printf \"200\\t%s\\t%s\" \"\$content_type\" \"\$effective_url\"" >"$fake_bin/curl"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$fake_bin/flock"
 chmod +x "$fake_bin/base64" "$fake_bin/curl" "$fake_bin/docker" "$fake_bin/flock"
 export PATH="$fake_bin:$PATH"
@@ -52,9 +61,19 @@ write_environment() {
     'OAUTH_CLIENT_ID=test-client' \
     'OAUTH_CLIENT_SECRET=test-secret' \
     'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
+    'PRIVATE_BETA_INVITES_JSON=[{"username":"test-beta-user","passwordHash":"dca6861589d640c028853cee4c51e8c222c3a6b52ad396864e1cf0c742571f42"}]' \
+    'PUBLIC_OPERATOR_NAME=Growful' \
+    'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
+    'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
+    'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
+    'REFRESH_CHECK_INTERVAL_SECONDS=300' \
     'REFRESH_LEASE_SECONDS=120' \
+    'SERVICE_ACCESS_MODE=private_beta' \
     'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
     'SMARTTHINGS_API_URL=https://api.smartthings.com' \
+    'SMARTTHINGS_APP_ID=test-smartthings-app' \
+    'SMARTTHINGS_AUTHORIZE_URL=https://api.smartthings.com/oauth/authorize' \
+    'SMARTTHINGS_TOKEN_URL=https://api.smartthings.com/oauth/token' \
     "TOKEN_ENCRYPTION_KEY=$encryption_key" >"$deployment_root/.env"
   chmod 600 "$deployment_root/.env"
 }
@@ -63,10 +82,93 @@ valid_key='MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
 write_environment "$valid_key" 8100
 DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
 
+if FAKE_CURL_FAIL_SUFFIX=/privacy DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'unreachable privacy policy unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+if FAKE_CURL_FAIL_SUFFIX=/terms DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'unreachable terms document unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+if FAKE_CURL_CONTENT_TYPE=application/json DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'non-HTML policy document unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+if FAKE_CURL_EFFECTIVE_URL=http://smartthings.growful.click/privacy \
+  DEPLOYMENT_ROOT="$deployment_root" \
+  bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'policy redirect to HTTP unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+
+write_environment "$valid_key" 8100
+sed -i.bak '/^PUBLIC_PRIVACY_POLICY_URL=/d' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'private beta without policy disclosures unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak '/^PRIVATE_BETA_INVITES_JSON=/d' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'private beta without an invitation list unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's/^REFRESH_CHECK_INTERVAL_SECONDS=.*/REFRESH_CHECK_INTERVAL_SECONDS=301/' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'unbounded OAuth state cleanup interval unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak \
+  -e 's/^SERVICE_ACCESS_MODE=.*/SERVICE_ACCESS_MODE=public/' \
+  -e '/^PRIVATE_BETA_/d' \
+  "$deployment_root/.env"
+printf '%s\n' \
+  'SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE=smartthings-case-123' \
+  'SMARTTHINGS_PUBLIC_USE_APPROVED_AT=2026-07-22' >>"$deployment_root/.env"
+DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test
+rm -f "$deployment_root/.env.bak"
+
+sed -i.bak '/^SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE=/d' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'public mode without SmartThings approval unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
 write_environment "$valid_key" 8100
 sed -i.bak 's#^SMARTTHINGS_API_URL=.*#SMARTTHINGS_API_URL=https://example.com#' "$deployment_root/.env"
 if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
   printf 'arbitrary SmartThings API host unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's#^SMARTTHINGS_AUTHORIZE_URL=.*#SMARTTHINGS_AUTHORIZE_URL=https://example.com/oauth/authorize#' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'arbitrary SmartThings authorization host unexpectedly passed preflight\n' >&2
+  exit 1
+fi
+rm -f "$deployment_root/.env.bak"
+
+write_environment "$valid_key" 8100
+sed -i.bak 's#^SMARTTHINGS_TOKEN_URL=.*#SMARTTHINGS_TOKEN_URL=https://example.com/oauth/token#' "$deployment_root/.env"
+if DEPLOYMENT_ROOT="$deployment_root" bash "$release_dir/preflight.sh" "$test_image_reference" test; then
+  printf 'arbitrary SmartThings token host unexpectedly passed preflight\n' >&2
   exit 1
 fi
 rm -f "$deployment_root/.env.bak"

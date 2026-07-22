@@ -13,6 +13,8 @@
     ]
   },
   "scripts": {
+    "abuse:manage": "node dist/manage-abuse.js",
+    "audit:verify": "node dist/verify-audit.js",
     "build": "tsc -p tsconfig.build.json",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "dev": "tsx watch src/main.ts",
@@ -20,11 +22,12 @@
     "lint:fix": "biome check --write .",
     "migrate": "node dist/migrate.js",
     "start": "node dist/main.js",
-    "test": "vitest run --exclude tests/postgres-oauth-store.integration.test.ts",
-    "test:integration": "vitest run tests/postgres-oauth-store.integration.test.ts",
+    "test": "vitest run --exclude tests/abuse-control.integration.test.ts --exclude tests/audit-events.integration.test.ts --exclude tests/audited-http.integration.test.ts --exclude tests/growful-request-quota.integration.test.ts --exclude tests/manage-abuse.integration.test.ts --exclude tests/postgres-oauth-store.integration.test.ts --exclude tests/oauth-state-retention.integration.test.ts --exclude tests/private-beta-invite-schema.integration.test.ts --exclude tests/readiness.integration.test.ts --exclude tests/smartthings-rate-limit-backoff.integration.test.ts",
+    "test:integration": "vitest run --no-file-parallelism tests/abuse-control.integration.test.ts tests/audit-events.integration.test.ts tests/audited-http.integration.test.ts tests/growful-request-quota.integration.test.ts tests/manage-abuse.integration.test.ts tests/postgres-oauth-store.integration.test.ts tests/oauth-state-retention.integration.test.ts tests/private-beta-invite-schema.integration.test.ts tests/readiness.integration.test.ts tests/smartthings-rate-limit-backoff.integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^11.1.0",
     "fastify": "^5.10.0",
     "ky": "^2.0.2",
     "kysely": "^0.29.4",

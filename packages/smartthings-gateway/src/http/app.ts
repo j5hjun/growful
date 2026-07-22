@@ -1,6 +1,8 @@
-import type { IncomingMessage } from "node:http"
 import Fastify, { type FastifyInstance, type FastifyServerOptions, LogController } from "fastify"
 import { z } from "zod"
+import type { GrowfulAbuseControl } from "../abuse/abuse-control.js"
+import { hashAuditSubject } from "../audit/audit-event.js"
+import type { ReadinessProbe } from "../health/readiness.js"
 import {
   InvalidOAuthStateError,
   OAuthConnectionRequiredError,
@@ -9,103 +11,63 @@ import {
 } from "../oauth/oauth-service.js"
 import { SmartThingsTokenRequestError } from "../smartthings/smartthings-client.js"
 import {
+  InvalidSmartThingsWebhookSignatureError,
+  type SmartThingsWebhookKeyProvider,
+} from "../smartthings/webhook-verifier.js"
+import {
   getGrowfulConnectionId,
   registerGrowfulAuthentication,
   requireGrowfulAuthentication,
 } from "./growful-auth.js"
-import { InvalidOAuthOriginError, registerOAuthRoutes } from "./oauth-routes.js"
+import { HttpRequestRateLimitError, registerHttpRateLimiting } from "./http-rate-limit.js"
+import {
+  InvalidOAuthOriginError,
+  type OAuthAccessPolicy,
+  registerOAuthRoutes,
+} from "./oauth-routes.js"
+import { registerPortalRoutes } from "./portal-routes.js"
 import {
   SmartThingsGatewayResponseTooLargeError,
   SmartThingsGatewayTimeoutError,
   SmartThingsGatewayUnavailableError,
-  type SmartThingsProxy,
 } from "./smartthings-proxy.js"
+import { ProxyRequestBodyTooLargeError } from "./smartthings-proxy-route.js"
+import {
+  InvalidSmartThingsWebhookRequestError,
+  registerSmartThingsWebhookRoute,
+  SmartThingsConfirmationRateLimitError,
+  SmartThingsConfirmationRequestError,
+  type SmartThingsConfirmationRequester,
+} from "./smartthings-webhook.js"
 
-const pathsWithSensitiveRequestData = new Set(["/healthz", "/oauth/callback", "/oauth/start"])
-const allowedProxyMethods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-const allowedProxyMethodSet = new Set(allowedProxyMethods)
-const proxyBodySchema = z.union([z.instanceof(Buffer), z.undefined()])
-const encodedBytePattern = /%[0-9a-f]{2}/i
-
-function isWithinProxyNamespace(rawUrl: string): boolean {
-  const queryIndex = rawUrl.indexOf("?")
-  let decodedPath = queryIndex < 0 ? rawUrl : rawUrl.slice(0, queryIndex)
-  for (let depth = 0; depth < 4 && encodedBytePattern.test(decodedPath); depth += 1) {
-    try {
-      decodedPath = decodeURIComponent(decodedPath)
-    } catch {
-      return false
-    }
-  }
-  if (encodedBytePattern.test(decodedPath)) {
-    return false
-  }
-
-  const normalizedSegments: string[] = []
-  for (const segment of decodedPath.replaceAll("\\", "/").split("/")) {
-    if (segment === "" || segment === ".") {
-      continue
-    }
-    if (segment === "..") {
-      normalizedSegments.pop()
-      continue
-    }
-    normalizedSegments.push(segment)
-  }
-  return normalizedSegments[0] === "v1"
-}
-
-const proxyUrlSchema = z
-  .string()
-  .regex(/^\/v1(?:\/|\?|$)/)
-  .refine(isWithinProxyNamespace)
+const pathsWithSensitiveRequestData = new Set([
+  "/healthz",
+  "/readyz",
+  "/oauth/callback",
+  "/oauth/start",
+  "/manage",
+  "/smartthings/webhook",
+])
 const requestBodyTooLargeErrorSchema = z.object({ statusCode: z.literal(413) })
-const proxyRequestBodyLimit = 1_048_576
-
-class ProxyRequestBodyTooLargeError extends Error {
-  override readonly name = "ProxyRequestBodyTooLargeError"
-
-  constructor() {
-    super("Gateway request body exceeded the limit")
-  }
-}
 
 export type AppOptions = {
+  readonly abuseControl: GrowfulAbuseControl
   readonly authorizationOrigin: string
   readonly logger?: FastifyServerOptions["logger"]
+  readonly oauthAccess: OAuthAccessPolicy
+  readonly readinessProbe: ReadinessProbe
   readonly redirectOrigin: string
   readonly service: OAuthService
-}
-
-export type SmartThingsProxyRouteOptions = {
-  readonly proxy: SmartThingsProxy
-  readonly service: OAuthService
+  readonly smartThingsAppId: string
+  readonly smartThingsConfirmationRequester?: SmartThingsConfirmationRequester
+  readonly smartThingsWebhookKeyProvider?: SmartThingsWebhookKeyProvider
+  readonly webhookNow?: () => Date
 }
 
 function containsSensitiveRequestData(pathname: string): boolean {
   return (
     pathsWithSensitiveRequestData.has(pathname) || pathname === "/v1" || pathname.startsWith("/v1/")
   )
-}
-
-async function readProxyRequestBody(body: unknown, rawRequest: IncomingMessage) {
-  const parsedBody = proxyBodySchema.parse(body)
-  if (parsedBody !== undefined || rawRequest.readableEnded) {
-    return parsedBody
-  }
-
-  const chunks: Buffer[] = []
-  let receivedBytes = 0
-  for await (const chunk of rawRequest) {
-    const parsedChunk = z.union([z.instanceof(Buffer), z.string()]).parse(chunk)
-    const buffer = Buffer.from(parsedChunk)
-    receivedBytes += buffer.length
-    if (receivedBytes > proxyRequestBodyLimit) {
-      throw new ProxyRequestBodyTooLargeError()
-    }
-    chunks.push(buffer)
-  }
-  return chunks.length === 0 ? undefined : Buffer.concat(chunks)
 }
 
 export function createApp(options: AppOptions): FastifyInstance {
@@ -115,6 +77,7 @@ export function createApp(options: AppOptions): FastifyInstance {
         containsSensitiveRequestData(new URL(request.url, "http://localhost").pathname),
     }),
     logger: options.logger ?? false,
+    trustProxy: 1,
   })
   app.addContentTypeParser<Buffer>(
     "application/x-www-form-urlencoded",
@@ -123,12 +86,46 @@ export function createApp(options: AppOptions): FastifyInstance {
       done(null, body)
     },
   )
+  app.removeContentTypeParser("application/json")
+  app.addContentTypeParser<Buffer>(
+    "application/json",
+    { parseAs: "buffer" },
+    (_request, body, done) => {
+      done(null, body)
+    },
+  )
   registerGrowfulAuthentication(app)
   app.get("/healthz", async () => ({ status: "ok" as const }))
-  registerOAuthRoutes(app, {
-    authorizationOrigin: options.authorizationOrigin,
-    redirectOrigin: options.redirectOrigin,
-    service: options.service,
+  app.get("/readyz", async (_request, reply) => {
+    const status = await options.readinessProbe.check()
+    reply.header("Cache-Control", "no-store")
+    switch (status) {
+      case "ready":
+        return reply.send({ status })
+      case "unavailable":
+        return reply.status(503).send({ status })
+      default: {
+        const unreachable: never = status
+        return unreachable
+      }
+    }
+  })
+  registerPortalRoutes(app, options.oauthAccess)
+  app.register(async (rateLimitedApp) => {
+    await registerHttpRateLimiting(rateLimitedApp)
+    registerOAuthRoutes(rateLimitedApp, {
+      authorizationOrigin: options.authorizationOrigin,
+      oauthAccess: options.oauthAccess,
+      redirectOrigin: options.redirectOrigin,
+      service: options.service,
+    })
+    registerSmartThingsWebhookRoute(rateLimitedApp, {
+      confirmationRequester: options.smartThingsConfirmationRequester,
+      now: options.webhookNow,
+      publicKeyProvider: options.smartThingsWebhookKeyProvider,
+      service: options.service,
+      smartThingsAppId: options.smartThingsAppId,
+    })
   })
   app.get(
     "/connection",
@@ -136,10 +133,22 @@ export function createApp(options: AppOptions): FastifyInstance {
       onRequest: async (request, reply) =>
         requireGrowfulAuthentication(request, reply, options.service),
     },
-    async (request, reply) =>
-      reply
-        .header("Cache-Control", "no-store")
-        .send(await options.service.getConnectionStatus(getGrowfulConnectionId(request))),
+    async (request, reply) => {
+      const installedAppId = getGrowfulConnectionId(request)
+      const block = await options.abuseControl.getBlock(installedAppId)
+      return reply.header("Cache-Control", "no-store").send({
+        ...(await options.service.getConnectionStatus(installedAppId)),
+        serviceAccess:
+          block === null
+            ? { status: "active" as const }
+            : {
+                blockedAt: block.blockedAt,
+                reason: block.reason,
+                status: "blocked" as const,
+              },
+        supportReference: hashAuditSubject(installedAppId),
+      })
+    },
   )
   app.post(
     "/token/rotate",
@@ -180,6 +189,27 @@ export function createApp(options: AppOptions): FastifyInstance {
     if (error instanceof SmartThingsTokenRequestError) {
       return reply.status(502).send({ error: "token_exchange_failed" as const })
     }
+    if (error instanceof InvalidSmartThingsWebhookSignatureError) {
+      return reply.status(401).send({ error: "invalid_webhook_signature" as const })
+    }
+    if (error instanceof InvalidSmartThingsWebhookRequestError) {
+      return reply.status(400).send({ error: "invalid_webhook_request" as const })
+    }
+    if (error instanceof SmartThingsConfirmationRateLimitError) {
+      return reply
+        .header("Retry-After", String(error.retryAfterSeconds))
+        .status(429)
+        .send({ error: "smartthings_confirmation_rate_limited" as const })
+    }
+    if (error instanceof SmartThingsConfirmationRequestError) {
+      return reply.status(502).send({ error: "smartthings_confirmation_failed" as const })
+    }
+    if (error instanceof HttpRequestRateLimitError) {
+      return reply
+        .header("Cache-Control", "no-store")
+        .status(429)
+        .send({ error: "request_rate_limited" as const })
+    }
     if (error instanceof OAuthConnectionRequiredError) {
       return reply.status(503).send({ error: "oauth_connection_required" as const })
     }
@@ -203,54 +233,4 @@ export function createApp(options: AppOptions): FastifyInstance {
   })
 
   return app
-}
-
-export function registerSmartThingsProxy(
-  app: FastifyInstance,
-  options: SmartThingsProxyRouteOptions,
-): void {
-  app.removeAllContentTypeParsers()
-  app.addContentTypeParser<Buffer>("*", { parseAs: "buffer" }, (_request, body, done) => {
-    done(null, body)
-  })
-  app.all(
-    "/v1/*",
-    {
-      onRequest: async (request, reply) => {
-        const unauthorizedReply = await requireGrowfulAuthentication(
-          request,
-          reply,
-          options.service,
-        )
-        if (unauthorizedReply !== undefined) {
-          return unauthorizedReply
-        }
-        if (!allowedProxyMethodSet.has(request.method)) {
-          return reply
-            .header("Allow", allowedProxyMethods.join(", "))
-            .status(405)
-            .send({ error: "method_not_allowed" as const })
-        }
-      },
-    },
-    async (request, reply) => {
-      const response = await options.proxy.forward(
-        {
-          body: await readProxyRequestBody(request.body, request.raw),
-          headers: request.headers,
-          method: request.method,
-          rawUrl: proxyUrlSchema.parse(request.raw.url),
-        },
-        getGrowfulConnectionId(request),
-      )
-      for (const [header, value] of Object.entries(response.headers)) {
-        reply.raw.setHeader(header, typeof value === "string" ? value : [...value])
-      }
-      reply.raw.statusCode = response.statusCode
-      reply.raw.sendDate = false
-      reply.hijack()
-      reply.raw.end(request.method === "HEAD" ? undefined : response.body)
-      return reply
-    },
-  )
 }

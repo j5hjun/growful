@@ -1,18 +1,31 @@
 import type { FastifyInstance } from "fastify"
-import { createApp, registerSmartThingsProxy } from "../../src/http/app.js"
+import type { GrowfulAbuseControl } from "../../src/abuse/abuse-control.js"
+import { createApp } from "../../src/http/app.js"
+import { GrowfulRequestQuota } from "../../src/http/growful-request-quota.js"
 import { SmartThingsProxy } from "../../src/http/smartthings-proxy.js"
+import { registerSmartThingsProxy } from "../../src/http/smartthings-proxy-route.js"
+import {
+  SmartThingsRateLimitBackoff,
+  type SmartThingsRateLimitBackoffStore,
+} from "../../src/http/smartthings-rate-limit-backoff.js"
 import { OAuthService } from "../../src/oauth/oauth-service.js"
+import { allowAllGrowfulAbuseControl } from "./abuse-control.js"
 import type { FakeSmartThingsApi } from "./fake-smartthings-api.js"
 import { FakeSmartThingsClient } from "./fake-smartthings-client.js"
 import { MemoryOAuthStore, memoryStoreGrowfulToken } from "./memory-oauth-store.js"
+import { publicOAuthAccess } from "./oauth-access.js"
+import { readyProbe } from "./readiness.js"
 
 export const gatewayAuthorization = `Bearer ${memoryStoreGrowfulToken}`
 export const now = new Date("2026-07-19T00:00:00.000Z")
 
 export type GatewayProxyFixtureOptions = {
+  readonly abuseControl?: GrowfulAbuseControl
   readonly api: FakeSmartThingsApi
   readonly apps: FastifyInstance[]
   readonly maxResponseBytes?: number
+  readonly rateLimitStore?: SmartThingsRateLimitBackoffStore
+  readonly requestQuota?: GrowfulRequestQuota
   readonly timeoutMs?: number
 }
 
@@ -47,11 +60,25 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
       : { ...proxyOptions, maxResponseBytes: options.maxResponseBytes },
   )
   const app = createApp({
+    abuseControl: options.abuseControl ?? allowAllGrowfulAbuseControl,
     authorizationOrigin: "https://api.smartthings.test",
+    oauthAccess: publicOAuthAccess,
+    readinessProbe: readyProbe,
     redirectOrigin: "https://smartthings.growful.click",
     service,
+    smartThingsAppId: "growful-app",
   })
-  registerSmartThingsProxy(app, { proxy, service })
+  const rateLimitBackoff =
+    options.rateLimitStore === undefined
+      ? new SmartThingsRateLimitBackoff()
+      : new SmartThingsRateLimitBackoff({ store: options.rateLimitStore })
+  registerSmartThingsProxy(app, {
+    abuseControl: options.abuseControl ?? allowAllGrowfulAbuseControl,
+    proxy,
+    rateLimitBackoff,
+    requestQuota: options.requestQuota ?? new GrowfulRequestQuota(),
+    service,
+  })
   options.apps.push(app)
   return { app, client, store }
 }

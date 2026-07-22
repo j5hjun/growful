@@ -13,12 +13,12 @@ services:
         - CMD
         - node
         - -e
-        - fetch('http://127.0.0.1:8100/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+        - fetch('http://127.0.0.1:8100/readyz').then(async r=>{if(!r.ok||await r.text()!=='{"status":"ready"}')process.exit(1)}).catch(()=>process.exit(1))
       interval: 10s
       timeout: 5s
       retries: 6
     ports:
-      - "127.0.0.1:8100:8100"
+      - "127.0.0.1:${SMARTTHINGS_GATEWAY_HOST_PORT:-8100}:8100"
 
   postgres:
     image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193

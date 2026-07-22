@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { z } from "zod"
 import type { OAuthService } from "../oauth/oauth-service.js"
+import { type OAuthAccessPolicy, PrivateBetaAccessGate } from "../private-beta/http-access.js"
+import { httpRateLimitPolicies } from "./http-rate-limit.js"
 import { renderOAuthCompletion } from "./oauth-completion.js"
 import {
   type OAuthDeviceRange,
@@ -14,8 +16,11 @@ const callbackQuerySchema = z.union([
   z.object({ error: z.literal("access_denied"), state: z.string().min(1) }),
 ])
 
+export type { OAuthAccessPolicy } from "../private-beta/http-access.js"
+
 export type OAuthRouteOptions = {
   readonly authorizationOrigin: string
+  readonly oauthAccess: OAuthAccessPolicy
   readonly redirectOrigin: string
   readonly service: OAuthService
 }
@@ -31,6 +36,7 @@ export class InvalidOAuthOriginError extends Error {
 function sendOAuthScopeSelectionPage(
   reply: FastifyReply,
   authorizationOrigin: string,
+  access: OAuthAccessPolicy,
   options: {
     readonly deviceRange?: OAuthDeviceRange
     readonly showSelectionError: boolean
@@ -53,21 +59,34 @@ function sendOAuthScopeSelectionPage(
     .send(
       renderOAuthScopeSelection({
         deviceRange: options.deviceRange ?? "selected",
+        disclosures: access,
         showSelectionError: options.showSelectionError,
       }),
     )
 }
 
 export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOptions): void {
-  app.get("/oauth/start", async (_request, reply) =>
-    sendOAuthScopeSelectionPage(reply, options.authorizationOrigin),
+  const privateBetaAccess = new PrivateBetaAccessGate(options.oauthAccess)
+  app.get(
+    "/oauth/start",
+    {
+      config: { rateLimit: httpRateLimitPolicies.oauthStart },
+      onRequest: async (request, reply) => privateBetaAccess.require(request, reply),
+    },
+    async (_request, reply) =>
+      sendOAuthScopeSelectionPage(reply, options.authorizationOrigin, options.oauthAccess),
   )
 
   app.post(
     "/oauth/start",
     {
       bodyLimit: 4_096,
-      onRequest: async (request) => {
+      config: { rateLimit: httpRateLimitPolicies.oauthStart },
+      onRequest: async (request, reply) => {
+        const accessDenied = privateBetaAccess.require(request, reply)
+        if (accessDenied !== undefined) {
+          return accessDenied
+        }
         if (request.headers.origin !== options.redirectOrigin) {
           throw new InvalidOAuthOriginError()
         }
@@ -77,13 +96,26 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
     async (request, reply) => {
       const scopes = parseOAuthScopeSelection(request.body)
       if (scopes === null) {
-        return sendOAuthScopeSelectionPage(reply, options.authorizationOrigin, {
-          deviceRange: parseOAuthDeviceRangeSelection(request.body) ?? "selected",
-          showSelectionError: true,
-          statusCode: 400,
-        })
+        return sendOAuthScopeSelectionPage(
+          reply,
+          options.authorizationOrigin,
+          options.oauthAccess,
+          {
+            deviceRange: parseOAuthDeviceRangeSelection(request.body) ?? "selected",
+            showSelectionError: true,
+            statusCode: 400,
+          },
+        )
       }
-      const authorizationUrl = await options.service.startAuthorization(scopes)
+      const privateBetaUsername = privateBetaAccess.getUsername(request)
+      if (privateBetaUsername === undefined) {
+        return privateBetaAccess.require(request, reply)
+      }
+      const authorizationUrl = await options.service.startAuthorization({
+        policyVersion: options.oauthAccess.policyVersion,
+        privateBetaUsername,
+        requestedScopes: scopes,
+      })
       return reply.redirect(authorizationUrl.toString())
     },
   )

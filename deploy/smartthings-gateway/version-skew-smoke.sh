@@ -34,6 +34,7 @@ printf '%s\n' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
   'SMARTTHINGS_API_URL=https://api.smartthings.com' \
   'SMARTTHINGS_API_TIMEOUT_SECONDS=15' \
+  'SMARTTHINGS_APP_ID=gateway-version-skew-app' \
   'SMARTTHINGS_AUTHORIZE_URL=https://api.smartthings.com/oauth/authorize' \
   'SMARTTHINGS_TOKEN_URL=https://api.smartthings.com/oauth/token' \
   'SMARTTHINGS_SCOPES=r:locations:* r:devices:$ r:devices:*' \
@@ -103,6 +104,14 @@ grep --extended-regexp --invert-match \
   "$environment_file" >"$candidate_environment_file"
 cp "$candidate_environment_file" "$rollback_environment_file"
 printf '\n%s\n' \
+  'SERVICE_ACCESS_MODE=private_beta' \
+  'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-version-skew-beta","passwordHash":"5ddf8b91211dce99eacd9d5923f5a6fa47c4943630855c921a50c47f111aa2ee"}]' \
+  'PUBLIC_OPERATOR_NAME=Growful version skew' \
+  'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
+  'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
+  'PUBLIC_TERMS_URL=https://smartthings.growful.click/terms' \
+  >>"$candidate_environment_file"
+printf '\n%s\n' \
   'SMARTTHINGS_SCOPES=r:devices:$' \
   'GATEWAY_API_TOKEN=gateway-version-skew-api-token-32-characters' \
   'OAUTH_ADMIN_TOKEN=gateway-version-skew-admin-token-32-characters' \
@@ -110,6 +119,8 @@ printf '\n%s\n' \
 test "$(grep --count '^SMARTTHINGS_SCOPES=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^GATEWAY_API_TOKEN=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^OAUTH_ADMIN_TOKEN=' "$candidate_environment_file" || true)" = "0"
+test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$candidate_environment_file" || true)" = "1"
+test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$rollback_environment_file" || true)" = "0"
 test "$(grep --fixed-strings --line-regexp --count 'SMARTTHINGS_SCOPES=r:devices:$' "$rollback_environment_file")" = "1"
 
 run_migrations "$candidate_image" "$candidate_environment_file"
@@ -121,8 +132,9 @@ test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gat
 start_and_verify "$candidate" "$candidate_image" "$candidate_environment_file"
 rollback_state="$(docker exec "$candidate" node -e '
 fetch("http://127.0.0.1:8100/oauth/start", {
-  body: "deviceRange=selected&scenePermissions=read",
+  body: "deviceRange=selected&scenePermissions=read&policyConsent=accepted",
   headers: {
+    authorization: `Basic ${Buffer.from("gateway-version-skew-beta:gateway-version-skew-beta-password").toString("base64")}`,
     "content-type": "application/x-www-form-urlencoded",
     origin: "https://smartthings.growful.click",
   },
@@ -140,15 +152,31 @@ test -n "$rollback_state"
 test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
   --tuples-only --no-align \
   --command "select count(*) from oauth_states where requested_scopes = 'r:scenes:*'")" = "1"
+rollback_token="grw_st_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+rollback_token_hash="$(printf '%s' "$rollback_token" | openssl dgst -sha256 -r | cut -d' ' -f1)"
+docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --command "insert into smart_things_connections (installed_app_id, growful_token_hash, growful_token_created_at, consented_at, policy_version, private_beta_username, access_token_ciphertext, refresh_token_ciphertext, expires_at, scope, token_type, updated_at) values ('candidate-installed-app', '$rollback_token_hash', now(), now(), repeat('b', 64), 'gateway-version-skew-beta', 'candidate-access', 'candidate-refresh', now() + interval '1 day', 'r:devices:*', 'bearer', now())" \
+  >/dev/null
 docker rm --force "$candidate" >/dev/null
+docker run --rm --network "$network" --env-file "$candidate_environment_file" \
+  "$candidate_image" node dist/prepare-rollback.js
+test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --tuples-only --no-align --command "select count(*) from oauth_states")" = "0"
+test "$(docker exec "$postgres" psql --username gateway --dbname smartthings_gateway \
+  --tuples-only --no-align --command "select count(*) from smart_things_connections")" = "0"
 
 start_and_verify "$previous" "$previous_image" "$rollback_environment_file"
+test "$(docker exec "$previous" node -e '
+fetch("http://127.0.0.1:8100/connection", {
+  headers: { authorization: `Bearer ${process.argv[1]}` },
+}).then((response) => process.stdout.write(String(response.status))).catch(() => process.exit(1))
+' -- "$rollback_token")" = "401"
 docker exec "$previous" node -e '
 const state = process.argv[1]
 fetch(`http://127.0.0.1:8100/oauth/callback?error=access_denied&state=${encodeURIComponent(state)}`)
   .then(async (response) => {
-    const body = await response.text()
-    if (response.status !== 400 || body !== "{\"error\":\"authorization_denied\"}") process.exit(1)
+    const body = await response.json().catch(() => null)
+    if (response.status !== 400 || body?.error !== "invalid_oauth_state") process.exit(1)
   })
   .catch(() => process.exit(1))
 ' -- "$rollback_state"

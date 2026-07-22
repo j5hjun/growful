@@ -5,11 +5,12 @@ import {
   renderOAuthScopeSelection,
 } from "../src/http/oauth-scope-selection.js"
 import { smartThingsScopes } from "../src/oauth/smartthings-scope.js"
+import { testDisclosures } from "./fixtures/oauth-access.js"
 
 describe("parseOAuthScopeSelection", () => {
   const everyPermission = [
     {
-      body: "deviceRange=selected&devicePermissions=read&devicePermissions=control&devicePermissions=write&hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write",
+      body: "deviceRange=selected&devicePermissions=read&devicePermissions=control&devicePermissions=write&hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write&policyConsent=accepted",
       expected: [
         "r:devices:$",
         "x:devices:$",
@@ -26,7 +27,7 @@ describe("parseOAuthScopeSelection", () => {
       label: "every permission with selected devices",
     },
     {
-      body: "deviceRange=all&devicePermissions=read&devicePermissions=control&devicePermissions=write&hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write",
+      body: "deviceRange=all&devicePermissions=read&devicePermissions=control&devicePermissions=write&hubPermissions=read&locationPermissions=read&locationPermissions=write&locationPermissions=execute&scenePermissions=read&scenePermissions=execute&rulePermissions=read&rulePermissions=write&policyConsent=accepted",
       expected: [
         "r:devices:*",
         "x:devices:*",
@@ -57,20 +58,20 @@ describe("parseOAuthScopeSelection", () => {
   })
 
   it.each([
-    ["hub", "deviceRange=selected&hubPermissions=read", ["r:hubs:*"]],
+    ["hub", "deviceRange=selected&hubPermissions=read&policyConsent=accepted", ["r:hubs:*"]],
     [
       "location",
-      "deviceRange=selected&locationPermissions=read&locationPermissions=write&locationPermissions=execute",
+      "deviceRange=selected&locationPermissions=read&locationPermissions=write&locationPermissions=execute&policyConsent=accepted",
       ["r:locations:*", "w:locations:*", "x:locations:*"],
     ],
     [
       "scene",
-      "deviceRange=selected&scenePermissions=read&scenePermissions=execute",
+      "deviceRange=selected&scenePermissions=read&scenePermissions=execute&policyConsent=accepted",
       ["r:scenes:*", "x:scenes:*"],
     ],
     [
       "rule",
-      "deviceRange=selected&rulePermissions=read&rulePermissions=write",
+      "deviceRange=selected&rulePermissions=read&rulePermissions=write&policyConsent=accepted",
       ["r:rules:*", "w:rules:*"],
     ],
   ])("accepts a %s-only selection", (_label, body, expected) => {
@@ -99,6 +100,12 @@ describe("parseOAuthScopeSelection", () => {
     expect(scopes).toBeNull()
   })
 
+  it("rejects a permission selection without policy consent", () => {
+    expect(
+      parseOAuthScopeSelection(Buffer.from("deviceRange=all&devicePermissions=read")),
+    ).toBeNull()
+  })
+
   it("rejects unrecognized form fields", () => {
     // Given
     const body = Buffer.from("deviceRange=all&devicePermissions=read&scope=x%3Adevices%3A%2A")
@@ -122,7 +129,7 @@ describe("parseOAuthScopeSelection", () => {
   })
 
   it("renders controls for all supported resource permissions", () => {
-    const html = renderOAuthScopeSelection()
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
 
     for (const control of [
       'name="devicePermissions" value="read"',
@@ -145,7 +152,7 @@ describe("parseOAuthScopeSelection", () => {
   })
 
   it("defaults to read-only access for selected devices", () => {
-    const html = renderOAuthScopeSelection()
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
 
     expect(html).toContain('name="deviceRange" value="selected" checked')
     expect(html).toContain('name="devicePermissions" value="read" checked')
@@ -155,7 +162,7 @@ describe("parseOAuthScopeSelection", () => {
   })
 
   it("explains which resources each permission group affects", () => {
-    const html = renderOAuthScopeSelection()
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
 
     for (const hint of [
       "위에서 고른 디바이스 범위에 적용됩니다.",
@@ -169,7 +176,11 @@ describe("parseOAuthScopeSelection", () => {
   })
 
   it("preserves the submitted all-device range on the global validation error", () => {
-    const html = renderOAuthScopeSelection({ deviceRange: "all", showSelectionError: true })
+    const html = renderOAuthScopeSelection({
+      deviceRange: "all",
+      disclosures: testDisclosures,
+      showSelectionError: true,
+    })
 
     expect(html).toContain('name="deviceRange" value="selected">')
     expect(html).toContain('name="deviceRange" value="all" checked>')

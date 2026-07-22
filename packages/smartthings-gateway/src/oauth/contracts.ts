@@ -44,6 +44,24 @@ export type ConnectionStatus = {
   readonly lastRefreshedAt: string | null
 }
 
+export type ConnectionAccessPolicy = {
+  readonly policyVersion: string
+  readonly privateBetaUsernames: readonly string[] | null
+}
+
+export type ConnectionAuthentication = {
+  readonly installedAppId: InstalledAppId
+  readonly policyVersion: string
+  readonly privateBetaUsername: string | null
+}
+
+export type OAuthAuthorization = {
+  readonly consentedAt: Date
+  readonly policyVersion: string
+  readonly privateBetaUsername: string | null
+  readonly requestedScopes: readonly SmartThingsScope[]
+}
+
 export type RefreshClaim =
   | {
       readonly claimId: RefreshClaimId
@@ -67,6 +85,7 @@ export type SaveTokensInput =
       readonly growfulTokenCreatedAt: Date
       readonly growfulTokenHash: GrowfulTokenHash
       readonly issuedAt: Date
+      readonly authorization: OAuthAuthorization
       readonly source: "authorization"
     }
   | {
@@ -84,12 +103,14 @@ export type RefreshFailure = {
 }
 
 export interface OAuthStore {
-  authenticate(growfulTokenHash: GrowfulTokenHash): Promise<InstalledAppId | null>
+  authenticate(growfulTokenHash: GrowfulTokenHash): Promise<ConnectionAuthentication | null>
   claimTokensForRefresh(claim: RefreshClaim): Promise<StoredTokens | null>
-  consumeState(stateHash: OAuthStateHash, now: Date): Promise<readonly SmartThingsScope[] | null>
+  consumeState(stateHash: OAuthStateHash, now: Date): Promise<OAuthAuthorization | null>
   deleteConnection(installedAppId: InstalledAppId): Promise<boolean>
+  deleteExpiredStates(now: Date): Promise<number>
   getTokens(installedAppId: InstalledAppId): Promise<StoredTokens | null>
   recordRefreshFailure(failure: RefreshFailure): Promise<void>
+  revokeUnauthorizedConnections(accessPolicy: ConnectionAccessPolicy): Promise<number>
   replaceGrowfulToken(
     installedAppId: InstalledAppId,
     growfulTokenHash: GrowfulTokenHash,
@@ -98,7 +119,7 @@ export interface OAuthStore {
   saveState(
     stateHash: OAuthStateHash,
     expiresAt: Date,
-    requestedScopes: readonly SmartThingsScope[],
+    authorization: OAuthAuthorization,
   ): Promise<void>
   saveTokens(input: SaveTokensInput): Promise<StoredTokens>
 }
