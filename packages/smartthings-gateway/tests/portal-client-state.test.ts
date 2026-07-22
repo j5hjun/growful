@@ -208,4 +208,26 @@ describe("Growful portal connection states", () => {
     expect(statusRequestCount).toBe(1)
     expect(rotatedOutput.textContent).toBe(`grw_st_${"B".repeat(43)}`)
   })
+
+  it("restores the rotation trigger focus after a recoverable rotation error", async () => {
+    const fixture = createPortalBrowserFixture()
+    const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+    runPortalClient(fixture, async (path) =>
+      path === "/token/rotate" ? response(429) : response(200, activeConnection()),
+    )
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    await rotate.dispatch("click")
+    await rotateForm.dispatch("submit", { preventDefault() {}, submitter: rotateConfirm })
+
+    expect(errorMessage.textContent).toBe("요청이 너무 많습니다. 잠시 후 다시 확인하세요.")
+    expect(rotate.focusCount).toBe(1)
+  })
 })

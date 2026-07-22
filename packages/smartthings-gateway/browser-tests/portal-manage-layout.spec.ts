@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test"
+import { renderOAuthCompletion } from "../src/http/oauth-completion.js"
 import { portalClientScript } from "../src/http/portal-client.js"
 import { renderPortalManagement } from "../src/http/portal-manage.js"
+import { tokenSafetyClientScript } from "../src/http/token-safety.js"
+import { GrowfulTokenSchema } from "../src/security/growful-token.js"
 
 function portalAccess() {
   return {
@@ -109,15 +112,34 @@ test("management states share a flexible three-row frame and fixed action slot",
   expect(revealBox.width).toBeLessThan(initialFrame.width / 2)
 })
 
-test("token rotation requires confirmation and returns from the one-time result", async ({
+test("one-time token flows confirm rotation and keep recovery navigation available", async ({
   page,
 }) => {
   // Given
   const tokenA = `grw_st_${"A".repeat(43)}`
   const tokenB = `grw_st_${"B".repeat(43)}`
   let rotationRequests = 0
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        async writeText() {
+          if ((globalThis as typeof globalThis & { clipboardFailure?: boolean }).clipboardFailure) {
+            throw new Error("clipboard unavailable")
+          }
+        },
+      },
+    })
+  })
   await page.route("https://growful.test/**", async (route) => {
     const { pathname } = new URL(route.request().url())
+    if (pathname === "/oauth") {
+      await route.fulfill({
+        body: renderOAuthCompletion(GrowfulTokenSchema.parse(tokenA)),
+        contentType: "text/html",
+      })
+      return
+    }
     if (pathname === "/manage") {
       await route.fulfill({
         body: renderPortalManagement(portalAccess()),
@@ -127,6 +149,10 @@ test("token rotation requires confirmation and returns from the one-time result"
     }
     if (pathname === "/portal.js") {
       await route.fulfill({ body: portalClientScript, contentType: "text/javascript" })
+      return
+    }
+    if (pathname === "/token-safety.js") {
+      await route.fulfill({ body: tokenSafetyClientScript, contentType: "text/javascript" })
       return
     }
     if (pathname === "/connection") {
@@ -183,4 +209,29 @@ test("token rotation requires confirmation and returns from the one-time result"
   await expect(result).toBeHidden()
   await expect(page.locator("[data-rotated-token]")).toHaveText("")
   await expect(page.locator("[data-portal-status]")).toBeFocused()
+
+  // When
+  await page.goto("https://growful.test/oauth")
+  await page.keyboard.press("Tab")
+
+  // Then
+  const oauthCopy = page.locator("[data-copy-token]")
+  const manageAction = page.locator("[data-action=manage-issued-token]")
+  await expect(oauthCopy).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(manageAction).toBeFocused()
+  await oauthCopy.click()
+  await expect(page.locator("[data-token-copy-feedback]")).toBeVisible()
+
+  // When
+  await page.evaluate(() => {
+    ;(globalThis as typeof globalThis & { clipboardFailure?: boolean }).clipboardFailure = true
+  })
+  await oauthCopy.click()
+
+  // Then
+  await expect(page.locator("[data-token-copy-error]")).toBeVisible()
+  await expect(page.locator("[data-token-value]")).toBeFocused()
+  await manageAction.click()
+  await expect(page).toHaveURL("https://growful.test/manage")
 })

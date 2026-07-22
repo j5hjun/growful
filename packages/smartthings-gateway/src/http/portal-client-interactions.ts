@@ -181,6 +181,7 @@ export function bindPortalInteractions(
     } catch (error) {
       if (requestGeneration !== tokenGeneration) return
       handleRequestError(error)
+      if (!elements.statusSection.hidden) elements.rotateTokenButton.focus()
     } finally {
       elements.rotateTokenButton.disabled = false
       elements.forgetTokenButton.disabled = false
