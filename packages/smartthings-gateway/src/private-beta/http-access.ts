@@ -1,11 +1,14 @@
 import type { FastifyReply, FastifyRequest } from "fastify"
 import type { ServiceDisclosures } from "../config.js"
 import type { OAuthAuthorization } from "../oauth/contracts.js"
+import { renderPrivateBetaAccessGuidance } from "./access-guidance.js"
 import type { PrivateBetaInviteAccess } from "./invite-access.js"
 
 const maximumPrivateBetaFailures = 5
 const privateBetaFailureWindowMs = 60_000
 const maximumPrivateBetaRateLimitBuckets = 1_024
+const privateBetaAccessContentSecurityPolicy =
+  "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 
 type PrivateBetaFailureBucket = {
   failures: number
@@ -25,6 +28,31 @@ type OAuthRequestAccess = Pick<
   OAuthAuthorization,
   "privateBetaInviteGeneration" | "privateBetaUsername"
 >
+
+function acceptsHtml(accept: string | undefined): boolean {
+  if (accept === undefined) return false
+  return accept.split(",").some((mediaRange) => {
+    const [mediaType, ...parameters] = mediaRange
+      .split(";")
+      .map((part) => part.trim().toLowerCase())
+    if (mediaType !== "text/html" && mediaType !== "application/xhtml+xml") return false
+    const quality = parameters.find((parameter) => parameter.startsWith("q="))
+    return quality === undefined || Number(quality.slice(2)) > 0
+  })
+}
+
+function prepareAccessErrorReply(reply: FastifyReply): FastifyReply {
+  return reply
+    .header("Cache-Control", "no-store")
+    .header("Content-Security-Policy", privateBetaAccessContentSecurityPolicy)
+    .header("Cross-Origin-Opener-Policy", "same-origin")
+    .header("Cross-Origin-Resource-Policy", "same-origin")
+    .header("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+    .header("Referrer-Policy", "no-referrer")
+    .header("Vary", "Accept")
+    .header("X-Content-Type-Options", "nosniff")
+    .header("X-Frame-Options", "DENY")
+}
 
 class PrivateBetaAccessRateLimiter {
   private readonly buckets = new Map<string, PrivateBetaFailureBucket>()
@@ -96,21 +124,29 @@ export class PrivateBetaAccessGate {
     const rateLimitKey = request.ip
     const retryAfterSeconds = this.rateLimiter.check(rateLimitKey)
     if (retryAfterSeconds !== null) {
-      return reply
-        .header("Cache-Control", "no-store")
+      const errorReply = prepareAccessErrorReply(reply)
         .header("Retry-After", String(retryAfterSeconds))
         .status(429)
-        .send({ error: "private_beta_access_rate_limited" as const })
+      if (acceptsHtml(request.headers.accept)) {
+        return errorReply
+          .type("text/html; charset=utf-8")
+          .send(renderPrivateBetaAccessGuidance({ kind: "rate_limited", retryAfterSeconds }))
+      }
+      return errorReply.send({ error: "private_beta_access_rate_limited" as const })
     }
     if ((await this.getAuthorizationAccess(request)) !== undefined) {
       this.rateLimiter.recordSuccess(rateLimitKey)
       return undefined
     }
     this.rateLimiter.recordFailure(rateLimitKey)
-    return reply
-      .header("Cache-Control", "no-store")
+    const errorReply = prepareAccessErrorReply(reply)
       .header("WWW-Authenticate", 'Basic realm="Growful private beta", charset="UTF-8"')
       .status(401)
-      .send({ error: "private_beta_access_required" as const })
+    if (acceptsHtml(request.headers.accept)) {
+      return errorReply
+        .type("text/html; charset=utf-8")
+        .send(renderPrivateBetaAccessGuidance({ kind: "authentication_failed" }))
+    }
+    return errorReply.send({ error: "private_beta_access_required" as const })
   }
 }
