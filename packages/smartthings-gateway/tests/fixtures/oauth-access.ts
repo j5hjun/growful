@@ -29,11 +29,14 @@ export function privateBetaOAuthAccess(invites: readonly PrivateBetaInvite[]): O
 export function oauthAuthorization(
   requestedScopes: readonly SmartThingsScope[],
   privateBetaUsername: string | null = null,
+  privateBetaInviteGeneration: string | null = privateBetaUsername === null
+    ? null
+    : "test-invite-generation",
 ): OAuthAuthorization {
   return {
     consentedAt: new Date("2026-07-19T00:00:00.000Z"),
     policyVersion: testDisclosures.policyVersion,
-    privateBetaInviteGeneration: privateBetaUsername === null ? null : "test-invite-generation",
+    privateBetaInviteGeneration,
     privateBetaUsername,
     requestedScopes,
   }

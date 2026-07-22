@@ -107,13 +107,13 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
           },
         )
       }
-      const privateBetaUsername = await privateBetaAccess.getUsername(request)
-      if (privateBetaUsername === undefined) {
+      const authorizationAccess = await privateBetaAccess.getAuthorizationAccess(request)
+      if (authorizationAccess === undefined) {
         return privateBetaAccess.require(request, reply)
       }
       const authorizationUrl = await options.service.startAuthorization({
         policyVersion: options.oauthAccess.policyVersion,
-        privateBetaUsername,
+        ...authorizationAccess,
         requestedScopes: scopes,
       })
       return reply.redirect(authorizationUrl.toString())

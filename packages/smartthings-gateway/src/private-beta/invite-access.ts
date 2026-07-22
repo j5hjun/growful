@@ -9,13 +9,16 @@ import {
 } from "./invite.js"
 
 export interface PrivateBetaInviteAccess {
-  authenticate(authorization: string | undefined): Promise<string | null>
+  authenticate(authorization: string | undefined): Promise<AuthenticatedPrivateBetaInvite | null>
   isUsernameActive(username: string): Promise<boolean>
   listActiveUsernames(): Promise<readonly string[]>
   resolveActiveInvite(username: string): Promise<ActivePrivateBetaInvite | null>
 }
 
 export type ActivePrivateBetaInvite = { readonly generation: string }
+export type AuthenticatedPrivateBetaInvite = ActivePrivateBetaInvite & {
+  readonly username: string
+}
 
 export function getConfiguredPrivateBetaInviteGeneration(invite: PrivateBetaInvite): string {
   return createHash("sha256")
@@ -26,8 +29,13 @@ export function getConfiguredPrivateBetaInviteGeneration(invite: PrivateBetaInvi
 export class ConfiguredPrivateBetaInviteAccess implements PrivateBetaInviteAccess {
   constructor(private readonly invites: readonly PrivateBetaInvite[]) {}
 
-  async authenticate(authorization: string | undefined): Promise<string | null> {
-    return getPrivateBetaInviteUsername(authorization, this.invites)
+  async authenticate(
+    authorization: string | undefined,
+  ): Promise<AuthenticatedPrivateBetaInvite | null> {
+    const username = getPrivateBetaInviteUsername(authorization, this.invites)
+    if (username === null) return null
+    const invite = await this.resolveActiveInvite(username)
+    return invite === null ? null : { ...invite, username }
   }
 
   async isUsernameActive(username: string): Promise<boolean> {
@@ -60,27 +68,35 @@ export class PostgresPrivateBetaInviteAccess implements PrivateBetaInviteAccess 
     this.database = options.database
   }
 
-  async authenticate(authorization: string | undefined): Promise<string | null> {
+  async authenticate(
+    authorization: string | undefined,
+  ): Promise<AuthenticatedPrivateBetaInvite | null> {
     const attempt = parsePrivateBetaCredentialAttempt(authorization)
     if (attempt === null) {
       return null
     }
     const storedInvite = await this.database
       .selectFrom("privateBetaInvites")
-      .select(["passwordHash", "revokedAt"])
+      .select(["generationId", "passwordHash", "revokedAt"])
       .where("username", "=", attempt.username)
       .executeTakeFirst()
     const configuredInvite = this.configuredInvites.find(
       (invite) => invite.username === attempt.username,
     )
-    const passwordHash =
+    const activeInvite =
       storedInvite === undefined
-        ? configuredInvite?.passwordHash
+        ? configuredInvite === undefined
+          ? null
+          : {
+              generation: getConfiguredPrivateBetaInviteGeneration(configuredInvite),
+              passwordHash: configuredInvite.passwordHash,
+            }
         : storedInvite.revokedAt === null
-          ? storedInvite.passwordHash
-          : undefined
-    return matchesPrivateBetaCredentialDigest(attempt.credentialDigest, passwordHash)
-      ? attempt.username
+          ? { generation: storedInvite.generationId, passwordHash: storedInvite.passwordHash }
+          : null
+    return activeInvite !== null &&
+      matchesPrivateBetaCredentialDigest(attempt.credentialDigest, activeInvite.passwordHash)
+      ? { generation: activeInvite.generation, username: attempt.username }
       : null
   }
 

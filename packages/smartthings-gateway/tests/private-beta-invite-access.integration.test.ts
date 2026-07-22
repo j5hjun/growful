@@ -45,7 +45,10 @@ describe("PostgreSQL private beta invitation access", () => {
       username,
     })
     const authorization = basicAuthorization(username, credential.secret)
-    await expect(access.authenticate(authorization)).resolves.toBe(username)
+    await expect(access.authenticate(authorization)).resolves.toEqual({
+      generation: expect.any(String),
+      username,
+    })
 
     // When
     await manager.revoke({
@@ -69,7 +72,10 @@ describe("PostgreSQL private beta invitation access", () => {
     const manager = new PostgresPrivateBetaInviteManager({ configuredInvites, database })
     const access = new PostgresPrivateBetaInviteAccess({ configuredInvites, database })
     const authorization = basicAuthorization(username, credentialSecret)
-    await expect(access.authenticate(authorization)).resolves.toBe(username)
+    await expect(access.authenticate(authorization)).resolves.toEqual({
+      generation: expect.any(String),
+      username,
+    })
 
     // When
     await manager.revoke({

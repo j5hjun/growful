@@ -92,11 +92,8 @@ export class OAuthService {
     return authentication.installedAppId
   }
 
-  async startAuthorization(
-    authorization: Omit<OAuthAuthorization, "consentedAt" | "privateBetaInviteGeneration">,
-  ): Promise<URL> {
-    const activeAccess = await this.resolveAuthorizationAccess(authorization)
-    if (activeAccess === null) {
+  async startAuthorization(authorization: Omit<OAuthAuthorization, "consentedAt">): Promise<URL> {
+    if (!(await this.isAuthorizationActive(authorization))) {
       throw new InvalidOAuthStateError()
     }
     const state = this.stateGenerator()
@@ -104,7 +101,6 @@ export class OAuthService {
     const storedAuthorization: OAuthAuthorization = {
       ...authorization,
       consentedAt: now,
-      privateBetaInviteGeneration: activeAccess.privateBetaInviteGeneration,
     }
     await this.options.store.saveState(
       this.hashState(state),

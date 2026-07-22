@@ -131,8 +131,11 @@ describe("private beta OAuth and invitation revocation concurrency", () => {
         encryptionKeyBase64: Buffer.alloc(32, 9).toString("base64"),
       }),
     })
+    const activeInvite = await inviteAccess.resolveActiveInvite(username)
+    expect(activeInvite).not.toBeNull()
     const authorizationUrl = await service.startAuthorization({
       policyVersion: testDisclosures.policyVersion,
+      privateBetaInviteGeneration: activeInvite?.generation ?? "missing-generation",
       privateBetaUsername: username,
       requestedScopes: ["r:devices:*"],
     })

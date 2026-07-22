@@ -29,14 +29,12 @@ function createService(
   username: string,
   client: FakeSmartThingsClient,
   stateGenerator: () => string,
-): OAuthService {
-  return new OAuthService({
+): { readonly inviteAccess: PostgresPrivateBetaInviteAccess; readonly service: OAuthService } {
+  const inviteAccess = new PostgresPrivateBetaInviteAccess({ configuredInvites: [], database })
+  const service = new OAuthService({
     accessPolicy: {
       policyVersion: testDisclosures.policyVersion,
-      privateBetaAccess: new PostgresPrivateBetaInviteAccess({
-        configuredInvites: [],
-        database,
-      }),
+      privateBetaAccess: inviteAccess,
     },
     client,
     refreshBeforeExpiryMs: 3_600_000,
@@ -47,6 +45,7 @@ function createService(
       encryptionKeyBase64: Buffer.alloc(32, username === poolUsername ? 8 : 7).toString("base64"),
     }),
   })
+  return { inviteAccess, service }
 }
 
 async function removeUsername(username: string): Promise<void> {
@@ -96,15 +95,18 @@ describe("private beta OAuth invitation generations", () => {
     client.exchangeGrant = { ...client.exchangeGrant, scopes: ["r:devices:*"] }
     const states = Array.from({ length: completionCount }, (_, index) => `pool-state-${index}`)
     let stateIndex = 0
-    const service = createService(
+    const { inviteAccess, service } = createService(
       poolUsername,
       client,
       () => states[stateIndex++] ?? "unexpected-pool-state",
     )
+    const activeInvite = await inviteAccess.resolveActiveInvite(poolUsername)
+    expect(activeInvite).not.toBeNull()
     const authorizationUrls = await Promise.all(
       states.map(() =>
         service.startAuthorization({
           policyVersion: testDisclosures.policyVersion,
+          privateBetaInviteGeneration: activeInvite?.generation ?? "missing-generation",
           privateBetaUsername: poolUsername,
           requestedScopes: ["r:devices:*"],
         }),
@@ -143,9 +145,16 @@ describe("private beta OAuth invitation generations", () => {
     })
     const client = new FakeSmartThingsClient()
     client.exchangeGrant = { ...client.exchangeGrant, scopes: ["r:devices:*"] }
-    const service = createService(reissueUsername, client, () => "private-beta-reissue-state")
+    const { inviteAccess, service } = createService(
+      reissueUsername,
+      client,
+      () => "private-beta-reissue-state",
+    )
+    const activeInvite = await inviteAccess.resolveActiveInvite(reissueUsername)
+    expect(activeInvite).not.toBeNull()
     const authorizationUrl = await service.startAuthorization({
       policyVersion: testDisclosures.policyVersion,
+      privateBetaInviteGeneration: activeInvite?.generation ?? "missing-generation",
       privateBetaUsername: reissueUsername,
       requestedScopes: ["r:devices:*"],
     })
