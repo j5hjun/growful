@@ -47,12 +47,20 @@ for (const viewport of viewports) {
       }))
       const splitWords = await findSplitKoreanWords(page)
       const actions = page.locator(".actions a")
+      const phrases = page.locator("h1 .phrase, main > p .phrase")
 
       // Then
       await expect(page.locator("main h1")).toBeVisible()
       await expect(actions).toHaveCount(3)
       expect(pageMetrics.scrollWidth).toBeLessThanOrEqual(pageMetrics.clientWidth)
       expect(splitWords).toEqual([])
+      for (const phrase of await phrases.all()) {
+        const box = await phrase.boundingBox()
+        const lineHeight = await phrase.evaluate((element) =>
+          Number.parseFloat(element.ownerDocument.defaultView?.getComputedStyle(element).lineHeight ?? "0"),
+        )
+        expect(box?.height).toBeLessThanOrEqual(lineHeight + 1)
+      }
       for (const action of await actions.all()) {
         const box = await action.boundingBox()
         expect(box?.height).toBeGreaterThanOrEqual(44)

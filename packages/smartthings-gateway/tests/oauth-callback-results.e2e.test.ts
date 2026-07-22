@@ -41,7 +41,10 @@ function expectRecoveryPage(
   expect(response.headers["referrer-policy"]).toBe("no-referrer")
   expect(response.headers["x-frame-options"]).toBe("DENY")
   expect(response.headers["x-content-type-options"]).toBe("nosniff")
-  expect(response.body).toContain(`<h1>${expectedTitle}</h1>`)
+  const textNormalizedBody = response.body
+    .replaceAll('<span class="phrase">', "")
+    .replaceAll("</span>", "")
+  expect(textNormalizedBody).toContain(`<h1>${expectedTitle}</h1>`)
   expect(response.body).toContain('href="/oauth/start"')
   expect(response.body).toContain('href="/"')
   expect(response.body).toContain('href="/support"')
