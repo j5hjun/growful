@@ -78,6 +78,15 @@ export function createPortalContracts() {
     return value.status === "active" || value.status === "reauthorization_required"
   }
 
+  function isGrantedScope(value: unknown): value is string {
+    return (
+      typeof value === "string" &&
+      value.length >= 1 &&
+      value.length <= 512 &&
+      /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(value)
+    )
+  }
+
   function isConnectionStatus(value: unknown): value is ConnectionStatus {
     return (
       isPortalResponse(value) &&
@@ -86,7 +95,9 @@ export function createPortalContracts() {
       typeof value.expiresAt === "string" &&
       (value.lastRefreshedAt === null || typeof value.lastRefreshedAt === "string") &&
       Array.isArray(value.grantedScopes) &&
-      value.grantedScopes.every((scope: unknown) => typeof scope === "string") &&
+      value.grantedScopes.length >= 1 &&
+      value.grantedScopes.every(isGrantedScope) &&
+      new Set(value.grantedScopes).size === value.grantedScopes.length &&
       isServiceAccess(value.serviceAccess) &&
       typeof value.supportReference === "string" &&
       /^[a-f0-9]{64}$/.test(value.supportReference)

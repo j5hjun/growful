@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 
+import type { SmartThingsScope } from "../oauth/smartthings-scope.js"
 import type { ConnectionStatus, PortalContracts } from "./portal-client-contracts.js"
 import type { PortalElements } from "./portal-client-elements.js"
 
@@ -17,6 +18,22 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
     dateStyle: "long",
     timeStyle: "short",
   })
+  const scopeLabels: Readonly<Record<string, string>> = {
+    "r:devices:$": "SmartThings에서 선택한 디바이스 정보와 상태 읽기",
+    "r:devices:*": "연결된 모든 디바이스 정보와 상태 읽기",
+    "r:hubs:*": "연결에 허용된 허브 정보 읽기",
+    "r:locations:*": "연결에 허용된 모든 위치 정보 읽기",
+    "r:rules:*": "연결에 허용된 규칙 읽기",
+    "r:scenes:*": "연결에 허용된 장면 정보 읽기",
+    "w:devices:$": "SmartThings에서 선택한 디바이스 이름 변경·삭제",
+    "w:devices:*": "연결된 모든 디바이스 이름 변경·삭제",
+    "w:locations:*": "SmartThings 위치 만들기·정보 변경·삭제",
+    "w:rules:*": "연결에 허용된 규칙 만들기·수정·삭제",
+    "x:devices:$": "SmartThings에서 선택한 디바이스 명령 실행",
+    "x:devices:*": "연결된 모든 디바이스 명령 실행",
+    "x:locations:*": "연결에 허용된 위치 모드 변경 실행",
+    "x:scenes:*": "연결에 허용된 장면 실행",
+  } satisfies Readonly<Record<SmartThingsScope, string>>
 
   function showFeedback(message: string): void {
     elements.errorBox.hidden = true
@@ -93,7 +110,16 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
     }
     const items = connection.grantedScopes.map((scope) => {
       const item = document.createElement("li")
-      item.textContent = scope
+      const knownLabel = scopeLabels[scope]
+      const label = document.createElement("span")
+      const code = document.createElement("code")
+      label.setAttribute("class", "scope-label")
+      label.textContent = knownLabel ?? "알 수 없는 SmartThings 권한"
+      code.setAttribute("class", "scope-code")
+      code.setAttribute("aria-label", `원문 권한 코드: ${scope}`)
+      code.textContent = scope
+      item.setAttribute("data-scope-kind", knownLabel === undefined ? "unknown" : "known")
+      item.replaceChildren(label, code)
       return item
     })
     elements.scopeList.replaceChildren(...items)

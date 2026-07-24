@@ -67,7 +67,7 @@ for (const viewport of managementViewports) {
               authorizationHealth: { status: "active" },
               connected: true,
               expiresAt: "2026-07-23T00:00:00.000Z",
-              grantedScopes: [],
+              grantedScopes: ["r:devices:*"],
               lastRefreshedAt: null,
               serviceAccess: { status: "active" },
               supportReference: "d".repeat(64),

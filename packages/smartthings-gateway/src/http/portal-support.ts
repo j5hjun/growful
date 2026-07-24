@@ -43,7 +43,7 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
       <section aria-labelledby="support-topics-title">
         <h2 id="support-topics-title">문의할 수 있는 내용</h2>
         <dl class="support-topics">
-          <div data-support-topic="connection"><dt>연결과 OAuth</dt><dd>승인 화면, callback, 연결 상태 확인 또는 API 중계 오류</dd></div>
+          <div data-support-topic="connection"><dt>연결과 OAuth</dt><dd>승인 화면, 승인 후 돌아오는 단계, 연결 상태 확인 또는 API 중계 오류</dd></div>
           <div data-support-topic="token-exposure"><dt>토큰 노출 의심</dt><dd>Growful 토큰이 다른 사람이나 시스템에 노출되었을 가능성</dd></div>
           <div data-support-topic="privacy"><dt>개인정보 요청</dt><dd>자신의 연결 정보 확인, 접근 또는 삭제 요청</dd></div>
           <div data-support-topic="security"><dt>보안 신고</dt><dd>의심스러운 접근, 취약점 또는 서비스 악용 정황</dd></div>
@@ -51,24 +51,30 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
       </section>
       <section aria-labelledby="support-safe-context-title">
         <h2 id="support-safe-context-title">안전하게 전달할 정보</h2>
-        <p>가능한 경우 연결 관리 화면의 가명 <code>supportReference</code>, 문제가 발생한 대략적인 시각, 시도한 작업, HTTP 상태나 오류 종류, 브라우저·기기 종류만 전달해 주세요.</p>
+        <p>가능한 경우 연결 관리 화면의 가명 지원 참조, 문제가 발생한 대략적인 시각, 시도한 작업, HTTP 상태나 오류 종류, 브라우저·기기 종류만 전달해 주세요.</p>
         <div class="warning" role="note">
           <strong>이메일로 비밀값을 보내지 마세요.</strong>
-          <p><span class="phrase">Growful 토큰 원문,</span> <span class="phrase">SmartThings access·refresh token,</span> <span class="phrase">OAuth code·state,</span> 비밀번호, <span class="phrase">가명 supportReference</span>가 아닌 <span class="phrase">원본 계정·설치 식별자,</span> 민감한 전체 응답 본문은 요청하지 않으며 보내면 안 됩니다.</p>
+          <p><span class="phrase">Growful 토큰 원문,</span> <span class="phrase">SmartThings access·refresh token,</span> <span class="phrase">OAuth code·state,</span> 비밀번호, <span class="phrase">가명 지원 참조</span>가 아닌 <span class="phrase">원본 계정·설치 식별자,</span> 민감한 전체 응답 본문은 요청하지 않으며 보내면 안 됩니다.</p>
         </div>
       </section>
       <section aria-labelledby="support-self-service-title">
         <h2 id="support-self-service-title">먼저 직접 할 수 있는 조치</h2>
+        <div class="token-recovery" data-token-loss-recovery aria-labelledby="support-token-recovery-title">
+          <h3 id="support-token-recovery-title">Growful 토큰을 잃어버린 경우</h3>
+          <p>기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다. 새 연결을 시작하면 새 토큰을 받을 수 있지만, 분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.</p>
+          <p>기존 연결도 정리하려면 SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.</p>
+          <a class="action action-primary" href="/oauth/start" data-token-loss-reconnect>새 연결 시작</a>
+        </div>
         <ol>
           <li><a href="/manage">연결 관리</a>에서 Growful 토큰으로 상태를 확인합니다.</li>
           <li>노출이 의심되지만 연결을 유지해야 한다면 Growful 토큰을 교체합니다.</li>
-          <li>사용을 끝내거나 SmartThings 토큰까지 폐기하려면 Growful 연결을 해제합니다.</li>
+          <li>사용을 끝내거나 Gateway에 저장된 SmartThings 토큰까지 삭제하려면 Growful 연결을 해제합니다.</li>
         </ol>
         <p>Growful 연결 해제는 Gateway의 활성 연결과 저장 토큰을 삭제하지만 SmartThings 설치 자체는 삭제하지 않습니다. 필요한 경우 SmartThings에서도 설치를 별도로 삭제해야 합니다.</p>
       </section>
       <section aria-labelledby="support-boundaries-title">
         <h2 id="support-boundaries-title">현재 지원 절차의 경계</h2>
-        <p>Growful 토큰을 잃어버린 사용자의 신원을 확인하고 연결을 복구하는 절차, 개인정보 요청의 본인 확인 방식, 목표 응답시간과 보안 신고의 긴급 단계는 아직 확정되지 않았습니다. 공개 출시 전에 운영·법률 검토를 거쳐 확정해야 합니다.</p>
+        <p>분실한 토큰의 기존 연결을 찾아 정리하기 위한 본인 확인 절차, 개인정보 요청의 본인 확인 방식, 목표 응답시간과 보안 신고의 긴급 단계는 아직 확정되지 않았습니다. 공개 출시 전에 운영·법률 검토를 거쳐 확정해야 합니다.</p>
         <p>${accessBoundary}</p>
       </section>
       <section class="support-contact" aria-labelledby="support-contact-title">
@@ -97,6 +103,10 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
     .support-topics dt { font-weight: var(--weight-bold); }
     .support-topics dd { margin: 0; color: var(--text-muted); }
     .support-document ol { display: grid; gap: var(--space-2); padding-left: var(--space-6); color: var(--text-muted); }
+    .token-recovery { margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .token-recovery h3 { margin: 0 0 var(--space-3); }
+    .token-recovery p { margin-bottom: var(--space-3); }
+    .token-recovery .action { width: 100%; }
     .warning { margin: var(--space-6) 0 0; padding: var(--space-4); border-left: 1px solid var(--error); background: var(--surface-subtle); }
     .warning p { margin-bottom: 0; }
     .support-contact dl { display: grid; gap: var(--space-3); margin: 0; }
