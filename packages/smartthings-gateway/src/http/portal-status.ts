@@ -206,15 +206,17 @@ export function renderPortalStatus(
     .current-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
     .current-status > * { min-width: 0; }
     .current-status h2 { margin-bottom: var(--space-3); }
-    .status-context { display: grid; gap: var(--space-4); }
-    .status-boundary { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .status-context { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+    .status-context > * { min-width: 0; }
+    .status-boundary { min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .status-boundary h2 { font-size: var(--font-body); }
     .status-boundary dl { display: grid; gap: var(--space-3); margin: 0; }
     .status-boundary dl div { display: grid; gap: var(--space-2); }
     .status-boundary dt { color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .status-boundary dd { margin: 0; color: var(--text-muted); line-height: var(--line-body); }
     .status-title { margin-bottom: 0; color: var(--text); font-size: var(--font-h2); font-weight: var(--weight-bold); line-height: var(--line-heading); }
-    .status-check { display: grid; gap: var(--space-3); }
+    .status-check { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+    .status-check > * { min-width: 0; }
     .status-check p { margin: 0; }
     .status-check dl { margin: 0; }
     .status-check dl div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-3); }
