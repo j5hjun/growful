@@ -238,7 +238,7 @@ export function renderPortalStatus(
       .current-status, .incident-heading, .status-check dl div { grid-template-columns: 1fr; gap: var(--space-2); }
     }
     @media (max-width: 20rem) {
-      .status-document { padding-top: var(--space-6); }
+      .status-document { width: calc(100% - 1px); min-width: 0; padding-top: var(--space-6); }
       .status-document header { padding-bottom: var(--space-3); }
       .status-document .current-status { padding-top: var(--space-3); }
       .status-context { gap: var(--space-3); }

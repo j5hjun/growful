@@ -201,6 +201,11 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       .support-value { align-items: stretch; flex-direction: column; }
       button.compact { width: 100%; }
     }
+    @media (max-width: 30rem) {
+      .connection-status dl { gap: var(--space-2); margin: var(--space-4) 0; }
+      .connection-status dl > div { padding: var(--space-3); }
+      .status-actions { margin-top: var(--space-4); }
+    }
     @media (max-width: 22.5rem) {
       .connection-panel { margin-top: var(--space-4); }
       .token-recovery { margin-top: var(--space-4); }
@@ -209,7 +214,9 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       .reveal { width: 100%; }
     }
     @media (max-width: 20rem) {
-      .manage-header { padding: var(--space-4) 0 var(--space-2); }
+      .site-nav { padding-bottom: var(--space-3); }
+      .manage-header { padding: var(--space-2) 0; }
+      .manage-header > p:last-child { font-size: var(--font-small); }
       .connection-panel { margin-top: var(--space-2); }
       .token-form { padding: var(--space-3); }
       .token-recovery { padding: var(--space-3); }
