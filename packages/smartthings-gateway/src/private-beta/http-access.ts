@@ -74,7 +74,7 @@ function mediaPreference(
   return preference
 }
 
-function acceptsHtml(accept: string | undefined): boolean {
+export function acceptsHtml(accept: string | undefined): boolean {
   if (accept === undefined) return false
   const html = mediaPreference(accept, "text", "html")
   const json = mediaPreference(accept, "application", "json")

@@ -176,7 +176,7 @@ test "$valid_selection_count" = '30'
 
 invalid_selection_count=0
 for device_range in selected all; do
-  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range" --output "$invalid_selection_response" --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '400'
+  test "$(curl --silent --show-error --user 'gateway-ci-beta:gateway-ci-beta-password' --header 'Accept: text/html' --header 'Origin: https://smartthings.growful.click' --data "deviceRange=$device_range" --output "$invalid_selection_response" --write-out '%{http_code}' "$gateway_origin/oauth/start")" = '400'
   grep --quiet 'role="alert"' "$invalid_selection_response"
   ((invalid_selection_count += 1))
 done

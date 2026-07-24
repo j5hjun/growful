@@ -42,6 +42,63 @@ describe("HTTP request rate limits", () => {
     expect(responses[60]?.json()).toEqual({ error: "request_rate_limited" })
   })
 
+  it("renders safe recovery guidance for a browser rate-limited on OAuth start", async () => {
+    // Given
+    const fixture = createGatewayAppFixture({ apps })
+    const responses = []
+    const headers = {
+      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,*/*;q=0.8",
+      "content-type": "application/x-www-form-urlencoded",
+      origin: "https://smartthings.growful.click",
+      "x-forwarded-for": "192.0.2.22",
+    }
+    for (let requestIndex = 0; requestIndex < 60; requestIndex += 1) {
+      responses.push(
+        await fixture.app.inject({
+          headers,
+          method: "POST",
+          payload: "deviceRange=all&devicePermissions=read&policyConsent=accepted",
+          url: "/oauth/start",
+        }),
+      )
+    }
+    const storedStateCount = fixture.store.states.size
+
+    // When
+    const response = await fixture.app.inject({
+      headers,
+      method: "POST",
+      payload: "deviceRange=all&devicePermissions=read&policyConsent=accepted",
+      url: "/oauth/start",
+    })
+
+    // Then
+    expect(responses.every((candidate) => candidate.statusCode === 302)).toBe(true)
+    expect(response.statusCode).toBe(429)
+    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.headers["cache-control"]).toBe("no-store")
+    expect(response.headers.vary).toBe("Accept")
+    expect(response.headers["retry-after"]).toBeDefined()
+    expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
+    expect(response.headers["referrer-policy"]).toBe("no-referrer")
+    expect(response.headers["x-content-type-options"]).toBe("nosniff")
+    expect(response.headers["x-frame-options"]).toBe("DENY")
+    expect(response.headers.location).toBeUndefined()
+    expect(response.body).toContain("요청이 너무 많습니다")
+    const retryAfter = response.headers["retry-after"]
+    expect(retryAfter).toMatch(/^[1-9][0-9]*$/u)
+    expect(response.body).toContain(
+      `<time datetime="PT${retryAfter}S">약 ${retryAfter}초 뒤</time>`,
+    )
+    expect(response.body).toContain('<a class="primary" href="/">서비스 안내</a>')
+    expect(response.body).toContain(
+      '<a class="secondary" href="/oauth/start">권한 선택 다시 시작</a>',
+    )
+    expect(response.body).not.toContain('class="primary" href="/oauth/start"')
+    expect(response.body).toContain("브라우저 주소창의 전체 주소, 임시 연결 코드, 토큰")
+    expect(fixture.store.states.size).toBe(storedStateCount)
+  })
+
   it("limits repeated SmartThings webhook requests from one client", async () => {
     // Given
     const logChunks: string[] = []

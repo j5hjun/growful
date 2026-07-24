@@ -1,11 +1,15 @@
-import type { FastifyInstance, FastifyReply } from "fastify"
+import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
 import { z } from "zod"
 import {
   InvalidOAuthStateError,
   OAuthScopeMismatchError,
   type OAuthService,
 } from "../oauth/oauth-service.js"
-import { type OAuthAccessPolicy, PrivateBetaAccessGate } from "../private-beta/http-access.js"
+import {
+  acceptsHtml,
+  type OAuthAccessPolicy,
+  PrivateBetaAccessGate,
+} from "../private-beta/http-access.js"
 import { SmartThingsTokenRequestError } from "../smartthings/smartthings-client.js"
 import { HttpRequestRateLimitError, httpRateLimitPolicies } from "./http-rate-limit.js"
 import {
@@ -20,6 +24,12 @@ import {
   parseOAuthScopeSelectionSubmission,
   renderOAuthScopeSelection,
 } from "./oauth-scope-selection.js"
+import {
+  type OAuthStartErrorKind,
+  oauthStartErrorKinds,
+  parseOAuthStartRetryAfterSeconds,
+  renderOAuthStartError,
+} from "./oauth-start-error.js"
 import { tokenSafetyClientScript } from "./token-safety.js"
 
 const callbackQuerySchema = z.union([
@@ -48,6 +58,59 @@ export class InvalidOAuthOriginError extends Error {
   }
 }
 
+export class UnsupportedOAuthStartMediaTypeError extends Error {
+  override readonly name = "UnsupportedOAuthStartMediaTypeError"
+
+  constructor() {
+    super("OAuth start requires an application/x-www-form-urlencoded request")
+  }
+}
+
+const oauthStartContentSecurityPolicy =
+  "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src 'none'; font-src 'none'; connect-src 'none'; object-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+
+const oauthStartJsonErrors = {
+  [oauthStartErrorKinds.authorizationExpired]: "invalid_oauth_state",
+  [oauthStartErrorKinds.internal]: "internal_server_error",
+  [oauthStartErrorKinds.invalidOrigin]: "invalid_origin",
+  [oauthStartErrorKinds.invalidRequest]: "invalid_request",
+  [oauthStartErrorKinds.rateLimited]: "request_rate_limited",
+  [oauthStartErrorKinds.requestBodyTooLarge]: "request_body_too_large",
+  [oauthStartErrorKinds.unsupportedMediaType]: "unsupported_media_type",
+} as const satisfies Record<OAuthStartErrorKind, string>
+
+function prepareOAuthStartReply(reply: FastifyReply): FastifyReply {
+  return reply
+    .header("Cache-Control", "no-store")
+    .header("Content-Security-Policy", oauthStartContentSecurityPolicy)
+    .header("Cross-Origin-Opener-Policy", "same-origin")
+    .header("Cross-Origin-Resource-Policy", "same-origin")
+    .header("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+    .header("Referrer-Policy", "no-referrer")
+    .header("Vary", "Accept")
+    .header("X-Content-Type-Options", "nosniff")
+    .header("X-Frame-Options", "DENY")
+}
+
+function sendOAuthStartError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  kind: OAuthStartErrorKind,
+  statusCode: 400 | 403 | 413 | 415 | 429 | 500,
+) {
+  const errorReply = prepareOAuthStartReply(reply).status(statusCode)
+  if (acceptsHtml(request.headers.accept)) {
+    const retryAfterSeconds =
+      kind === oauthStartErrorKinds.rateLimited
+        ? parseOAuthStartRetryAfterSeconds(reply.getHeader("Retry-After"))
+        : undefined
+    return errorReply
+      .type("text/html; charset=utf-8")
+      .send(renderOAuthStartError(kind, { retryAfterSeconds }))
+  }
+  return errorReply.send({ error: oauthStartJsonErrors[kind] })
+}
+
 function sendOAuthScopeSelectionPage(
   reply: FastifyReply,
   authorizationOrigin: string,
@@ -66,7 +129,12 @@ function sendOAuthScopeSelectionPage(
       "Content-Security-Policy",
       `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${authorizationOrigin} https://account.smartthings.com https://account.samsung.com; base-uri 'none'; frame-ancestors 'none'`,
     )
+    .header("Cross-Origin-Opener-Policy", "same-origin")
+    .header("Cross-Origin-Resource-Policy", "same-origin")
+    .header("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
     .header("Referrer-Policy", "same-origin")
+    .header("Vary", "Accept")
+    .header("X-Content-Type-Options", "nosniff")
     .header("X-Frame-Options", "DENY")
     .type("text/html; charset=utf-8")
     .status(options.statusCode)
@@ -98,6 +166,35 @@ function sendOAuthCallbackResultPage(
     .send(renderOAuthCallbackResult(result))
 }
 
+function isOAuthStartFormContentType(contentType: string | undefined): boolean {
+  return contentType?.split(";", 1)[0]?.trim().toLowerCase() === "application/x-www-form-urlencoded"
+}
+
+function sendOAuthStartRouteError(
+  app: FastifyInstance,
+  error: FastifyError,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (error instanceof InvalidOAuthStateError) {
+    return sendOAuthStartError(request, reply, oauthStartErrorKinds.authorizationExpired, 400)
+  }
+  if (error instanceof InvalidOAuthOriginError) {
+    return sendOAuthStartError(request, reply, oauthStartErrorKinds.invalidOrigin, 403)
+  }
+  if (error instanceof UnsupportedOAuthStartMediaTypeError || error.statusCode === 415) {
+    return sendOAuthStartError(request, reply, oauthStartErrorKinds.unsupportedMediaType, 415)
+  }
+  if (error.statusCode === 413) {
+    return sendOAuthStartError(request, reply, oauthStartErrorKinds.requestBodyTooLarge, 413)
+  }
+  if (error instanceof HttpRequestRateLimitError) {
+    return sendOAuthStartError(request, reply, oauthStartErrorKinds.rateLimited, 429)
+  }
+  app.log.error("oauth.start.failed")
+  return sendOAuthStartError(request, reply, oauthStartErrorKinds.internal, 500)
+}
+
 export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOptions): void {
   const privateBetaAccess = new PrivateBetaAccessGate(options.oauthAccess)
   app.get("/token-safety.js", async (_request, reply) =>
@@ -112,6 +209,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
     "/oauth/start",
     {
       config: { rateLimit: httpRateLimitPolicies.oauthStart },
+      errorHandler: (error, request, reply) => sendOAuthStartRouteError(app, error, request, reply),
       onRequest: async (request, reply) => privateBetaAccess.require(request, reply),
     },
     async (_request, reply) =>
@@ -123,6 +221,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
     {
       bodyLimit: 4_096,
       config: { rateLimit: httpRateLimitPolicies.oauthStart },
+      errorHandler: (error, request, reply) => sendOAuthStartRouteError(app, error, request, reply),
       onRequest: async (request, reply) => {
         const accessDenied = await privateBetaAccess.require(request, reply)
         if (accessDenied !== undefined) {
@@ -133,10 +232,18 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
         }
         return undefined
       },
+      preValidation: async (request) => {
+        if (!isOAuthStartFormContentType(request.headers["content-type"])) {
+          throw new UnsupportedOAuthStartMediaTypeError()
+        }
+      },
     },
     async (request, reply) => {
       const selection = parseOAuthScopeSelectionSubmission(request.body)
       if (selection.kind === "invalid") {
+        if (!acceptsHtml(request.headers.accept)) {
+          return sendOAuthStartError(request, reply, oauthStartErrorKinds.invalidRequest, 400)
+        }
         return sendOAuthScopeSelectionPage(
           reply,
           options.authorizationOrigin,

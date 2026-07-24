@@ -190,6 +190,7 @@ describe("SmartThings OAuth scope combinations", () => {
     // When
     const response = await app.inject({
       headers: {
+        accept: "text/html",
         "content-type": "application/x-www-form-urlencoded",
         origin: redirectOrigin,
       },
@@ -215,6 +216,7 @@ describe("SmartThings OAuth scope combinations", () => {
     // When
     const response = await app.inject({
       headers: {
+        accept: "text/html",
         "content-type": "application/x-www-form-urlencoded",
         origin: redirectOrigin,
       },
