@@ -97,7 +97,7 @@ describe("Growful portal token mutations", () => {
     expect(rotatedSection.hidden).toBe(true)
     expect(rotatedOutput.textContent).toBe("")
     expect(status.hidden).toBe(false)
-    expect(status.focusCount).toBe(2)
+    expect(status.focusCount).toBe(3)
     await disconnect.dispatch("click")
     await disconnectForm.dispatch("submit", {
       preventDefault() {},

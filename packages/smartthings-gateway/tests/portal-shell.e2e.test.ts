@@ -30,6 +30,9 @@ describe("Growful portal shell", () => {
     )
     expect(response.body).not.toContain("/cdn-cgi/l/email-protection")
     expect(response.body).not.toContain("[email protected]")
+    expect(response.body).toContain(
+      "@media (forced-colors: active) { .action-primary, button.primary { border: 2px solid ButtonText; } }",
+    )
 
     const primaryNavigation = response.body.match(/<nav class="site-nav"[\s\S]*?<\/nav>/u)?.[0]
     expect(primaryNavigation).toContain("서비스 안내")

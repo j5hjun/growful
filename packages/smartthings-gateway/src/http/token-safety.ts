@@ -6,12 +6,41 @@ export function bindTokenSafetyActions(): void {
     const copyButton = region.querySelector<HTMLButtonElement>("[data-copy-token]")
     const error = region.querySelector<HTMLElement>("[data-token-copy-error]")
     const feedback = region.querySelector<HTMLElement>("[data-token-copy-feedback]")
-    const output = region.querySelector<HTMLOutputElement>("[data-token-value]")
-    if (copyButton === null || error === null || feedback === null || output === null) continue
+    const tokenValue = region.querySelector<HTMLTextAreaElement | HTMLOutputElement>(
+      "[data-token-value]",
+    )
+    if (copyButton === null || error === null || feedback === null || tokenValue === null) continue
+    const textControl = "selectionStart" in tokenValue ? tokenValue : undefined
+    const readToken = () => textControl?.value ?? tokenValue.textContent
+    const clearToken = () => {
+      if (textControl === undefined) tokenValue.textContent = ""
+      else {
+        textControl.value = ""
+        textControl.defaultValue = ""
+        textControl.textContent = ""
+      }
+    }
     let copyGeneration = 0
     let copyPending = false
     let pageHidden = false
     let tokenAcknowledged = false
+
+    if (textControl !== undefined) textControl.tabIndex = -1
+    copyButton.hidden = false
+    copyButton.disabled = false
+
+    tokenValue.addEventListener("copy", () => {
+      const token = readToken()
+      const exactSelection =
+        textControl === undefined
+          ? window.getSelection()?.toString() === token
+          : textControl.selectionStart === 0 && textControl.selectionEnd === token.length
+      if (!exactSelection) return
+      tokenAcknowledged = true
+      region.setAttribute("data-token-safety-acknowledged", "")
+      error.hidden = true
+      feedback.hidden = false
+    })
 
     region.addEventListener("token-safety-reset", () => {
       copyGeneration += 1
@@ -23,7 +52,7 @@ export function bindTokenSafetyActions(): void {
     })
 
     window.addEventListener("beforeunload", (event) => {
-      if (tokenAcknowledged || output.textContent === "") return
+      if (tokenAcknowledged || readToken() === "") return
       event.preventDefault()
       event.returnValue = ""
     })
@@ -33,7 +62,7 @@ export function bindTokenSafetyActions(): void {
       copyGeneration += 1
       tokenAcknowledged = false
       region.removeAttribute("data-token-safety-acknowledged")
-      output.textContent = ""
+      clearToken()
       copyButton.disabled = true
       error.hidden = true
       feedback.hidden = true
@@ -45,7 +74,7 @@ export function bindTokenSafetyActions(): void {
       copyPending = true
       copyButton.disabled = true
       try {
-        await navigator.clipboard.writeText(output.textContent)
+        await navigator.clipboard.writeText(readToken())
         if (requestGeneration !== copyGeneration) return
         tokenAcknowledged = true
         region.setAttribute("data-token-safety-acknowledged", "")
@@ -56,7 +85,16 @@ export function bindTokenSafetyActions(): void {
         if (requestGeneration !== copyGeneration) return
         feedback.hidden = true
         error.hidden = false
-        output.focus()
+        tokenValue.focus()
+        if (textControl === undefined) {
+          const tokenRange = document.createRange()
+          tokenRange.selectNodeContents(tokenValue)
+          const selection = window.getSelection()
+          selection?.removeAllRanges()
+          selection?.addRange(tokenRange)
+        } else {
+          textControl.select()
+        }
       } finally {
         copyPending = false
         copyButton.disabled = pageHidden

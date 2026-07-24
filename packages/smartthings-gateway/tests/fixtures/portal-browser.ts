@@ -2,6 +2,7 @@ import { runInNewContext } from "node:vm"
 import { portalClientScript } from "../../src/http/portal-client.js"
 
 export type PortalEvent = {
+  defaultPrevented?: boolean
   preventDefault?: () => void
   submitter?: PortalElement
   type?: string
@@ -21,8 +22,10 @@ export class PortalElement {
   readonly attributes = new Map<string, string>()
   readonly listeners = new Map<string, PortalListener>()
   disabled = false
+  dialogOwner: PortalElement | null = null
   focusCount = 0
   hidden = false
+  onFocus: (() => void) | null = null
   open = false
   textContent = ""
   type = "password"
@@ -34,7 +37,23 @@ export class PortalElement {
 
   async dispatch(name: string, event: PortalEvent = {}): Promise<void> {
     if (name === "click" && this.disabled) return
-    await this.listeners.get(name)?.(event)
+    const originalPreventDefault = event.preventDefault
+    const dispatchedEvent: PortalEvent = {
+      ...event,
+      defaultPrevented: false,
+      type: event.type ?? name,
+    }
+    dispatchedEvent.preventDefault = () => {
+      dispatchedEvent.defaultPrevented = true
+      originalPreventDefault?.()
+    }
+    await this.listeners.get(name)?.(dispatchedEvent)
+    if (
+      !dispatchedEvent.defaultPrevented &&
+      ((name === "cancel" && this.open) || (name === "submit" && this.dialogOwner?.open === true))
+    ) {
+      ;(name === "cancel" ? this : this.dialogOwner)?.close()
+    }
   }
 
   dispatchEvent(event: PortalEvent): boolean {
@@ -55,11 +74,15 @@ export class PortalElement {
   }
 
   close(): void {
+    if (!this.open) return
     this.open = false
+    void this.listeners.get("close")?.({ type: "close" })
   }
 
   focus(): void {
+    if (this.disabled) return
     this.focusCount += 1
+    this.onFocus?.()
   }
 
   hasAttribute(name: string): boolean {
@@ -132,6 +155,7 @@ const selectorEntries = [
   ["[data-disconnect]", "disconnect"],
   ["[data-disconnect-dialog]", "dialog"],
   ["[data-disconnect-form]", "disconnectForm"],
+  ["[data-disconnect-cancel]", "disconnectCancel"],
   ["[data-disconnect-confirm]", "confirm"],
 ] as const
 
@@ -142,6 +166,8 @@ export function createPortalBrowserFixture(missingSelector?: string) {
     [...new Set(selectors.values())].map((name) => [name, new PortalElement()]),
   )
   elements.set("input", new PortalElement())
+  getPortalElement(elements, "rotateForm").dialogOwner = getPortalElement(elements, "rotateDialog")
+  getPortalElement(elements, "disconnectForm").dialogOwner = getPortalElement(elements, "dialog")
   getPortalElement(elements, "status").hidden = true
   getPortalElement(elements, "statusBlocked").hidden = true
   getPortalElement(elements, "blockedNotice").hidden = true
@@ -149,9 +175,26 @@ export function createPortalBrowserFixture(missingSelector?: string) {
   getPortalElement(elements, "rotatedSection").hidden = true
   getPortalElement(elements, "rotatedFeedback").hidden = true
   getPortalElement(elements, "rotatedError").hidden = true
+  const selection = {
+    range: null as { selected: PortalElement | null } | null,
+    removeCount: 0,
+  }
+  const clipboard = {
+    error: null as Error | null,
+    writes: [] as string[],
+  }
+  const focus = { activeElement: null as PortalElement | null }
+  for (const element of elements.values()) {
+    element.onFocus = () => {
+      focus.activeElement = element
+    }
+  }
   return {
+    clipboard,
     confirmation: { accepted: true, messages: [] as string[] },
     elements,
+    focus,
+    selection,
     selectors,
   }
 }
@@ -171,7 +214,18 @@ export function runPortalClient(
 ): void {
   const { confirmation, elements, selectors } = fixture
   runInNewContext(portalClientScript, {
+    AbortController,
+    clearTimeout,
     document: {
+      createRange: () => {
+        const range = {
+          selected: null as PortalElement | null,
+          selectNodeContents(element: PortalElement) {
+            range.selected = element
+          },
+        }
+        return range
+      },
       createElement: () => new PortalElement(),
       getElementById: (id: string) => elements.get(id === "growful-token" ? "input" : id) ?? null,
       querySelector: (selector: string) => elements.get(selectors.get(selector) ?? "") ?? null,
@@ -190,12 +244,31 @@ export function runPortalClient(
       constructor(readonly type: string) {}
     },
     Intl,
-    navigator: { clipboard: { writeText: async () => {} } },
+    navigator: {
+      clipboard: {
+        writeText: async (value: string) => {
+          if (fixture.clipboard.error !== null) throw fixture.clipboard.error
+          fixture.clipboard.writes.push(value)
+        },
+      },
+    },
+    setTimeout,
     window: {
       addEventListener() {},
       confirm(message: string) {
         confirmation.messages.push(message)
         return confirmation.accepted
+      },
+      getSelection() {
+        return {
+          addRange(range: { selected: PortalElement | null }) {
+            fixture.selection.range = range
+          },
+          removeAllRanges() {
+            fixture.selection.removeCount += 1
+            fixture.selection.range = null
+          },
+        }
       },
     },
   })

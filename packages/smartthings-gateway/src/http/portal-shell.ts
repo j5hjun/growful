@@ -53,6 +53,7 @@ export const portalSharedStyles = `
     }
     @media (max-width: 30rem) { .portal-page-shell { padding: var(--space-6); } }
     @media (max-width: 30rem) { .site-footer .footer-meta > div { grid-template-columns: 1fr; gap: 0; } }
+    @media (forced-colors: active) { .action-primary, button.primary { border: 2px solid ButtonText; } }
     @media (prefers-reduced-motion: reduce) { .skip-link, .action, button { transition: none; } }`
 
 export function renderPortalNavigation(currentPage: PortalPageName | null): string {

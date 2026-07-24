@@ -12,10 +12,15 @@ type Listener = (event?: TokenSafetyEvent) => unknown
 class TokenElement {
   readonly attributes = new Map<string, string>()
   readonly listeners = new Map<string, Listener>()
+  defaultValue = ""
   disabled = false
   focusCount = 0
   hidden = true
+  selectionEnd = 0
+  selectionStart = 0
+  tabIndex = 0
   textContent = ""
+  value = ""
 
   addEventListener(name: string, listener: Listener): void {
     this.listeners.set(name, listener)
@@ -26,8 +31,17 @@ class TokenElement {
     await this.listeners.get("click")?.()
   }
 
+  async dispatch(name: string): Promise<void> {
+    await this.listeners.get(name)?.()
+  }
+
   focus(): void {
     this.focusCount += 1
+  }
+
+  select(): void {
+    this.selectionStart = 0
+    this.selectionEnd = this.value.length
   }
 
   removeAttribute(name: string): void {
@@ -62,7 +76,10 @@ function createFixture() {
   const error = new TokenElement()
   const feedback = new TokenElement()
   const output = new TokenElement()
-  output.textContent = `grw_st_${"A".repeat(43)}`
+  const token = `grw_st_${"A".repeat(43)}`
+  output.defaultValue = token
+  output.textContent = token
+  output.value = token
   const regionListeners = new Map<string, Listener>()
   const regionAttributes = new Map<string, string>()
   const region = {
@@ -96,15 +113,26 @@ function runTokenSafety(
 ): {
   dispatchBeforeUnload: () => Promise<{ prevented: boolean; returnValue: string }>
   dispatchPagehide: () => Promise<void>
+  getSelectedText: () => string
 } {
   const windowListeners = new Map<string, Listener>()
+  const selection = {
+    toString() {
+      return fixture.output.value.slice(fixture.output.selectionStart, fixture.output.selectionEnd)
+    },
+  }
   runInNewContext(tokenSafetyClientScript, {
-    document: { querySelectorAll: () => [fixture.region] },
+    document: {
+      querySelectorAll: () => [fixture.region],
+    },
     Error,
     navigator: { clipboard: { writeText } },
     window: {
       addEventListener(name: string, listener: Listener) {
         windowListeners.set(name, listener)
+      },
+      getSelection() {
+        return selection
       },
     },
   })
@@ -123,6 +151,9 @@ function runTokenSafety(
     async dispatchPagehide() {
       await windowListeners.get("pagehide")?.()
     },
+    getSelectedText() {
+      return selection.toString()
+    },
   }
 }
 
@@ -135,21 +166,25 @@ describe("one-time token copy safety", () => {
       copiedValues.push(value)
     })
 
+    expect(fixture.copy.hidden).toBe(false)
+    expect(fixture.copy.disabled).toBe(false)
+    expect(fixture.output.tabIndex).toBe(-1)
+
     // When
     await fixture.copy.click()
 
     // Then
-    expect(copiedValues).toEqual([fixture.output.textContent])
+    expect(copiedValues).toEqual([fixture.output.value])
     expect(fixture.feedback.hidden).toBe(false)
     expect(fixture.error.hidden).toBe(true)
     expect(fixture.output.focusCount).toBe(0)
     expect(fixture.regionAttributes.has("data-token-safety-acknowledged")).toBe(true)
   })
 
-  it("reveals the manual-copy error and focuses the token output when copying fails", async () => {
+  it("selects the exact token for keyboard recovery when clipboard copying fails", async () => {
     // Given
     const fixture = createFixture()
-    runTokenSafety(fixture, async () => {
+    const tokenSafety = runTokenSafety(fixture, async () => {
       throw new Error("clipboard unavailable")
     })
 
@@ -160,6 +195,44 @@ describe("one-time token copy safety", () => {
     expect(fixture.feedback.hidden).toBe(true)
     expect(fixture.error.hidden).toBe(false)
     expect(fixture.output.focusCount).toBe(1)
+    expect(tokenSafety.getSelectedText()).toBe(fixture.output.value)
+  })
+
+  it("acknowledges an exact manual copy after clipboard recovery", async () => {
+    // Given
+    const fixture = createFixture()
+    const tokenSafety = runTokenSafety(fixture, async () => {
+      throw new Error("clipboard unavailable")
+    })
+    await fixture.copy.click()
+
+    // When
+    await fixture.output.dispatch("copy")
+    const event = await tokenSafety.dispatchBeforeUnload()
+
+    // Then
+    expect(fixture.regionAttributes.has("data-token-safety-acknowledged")).toBe(true)
+    expect(fixture.feedback.hidden).toBe(false)
+    expect(fixture.error.hidden).toBe(true)
+    expect(event.prevented).toBe(false)
+    expect(event.returnValue).toBe("unchanged")
+  })
+
+  it("does not acknowledge a partial manual selection", async () => {
+    // Given
+    const fixture = createFixture()
+    const tokenSafety = runTokenSafety(fixture, async () => {})
+    fixture.output.selectionEnd = fixture.output.value.length - 1
+
+    // When
+    await fixture.output.dispatch("copy")
+    const event = await tokenSafety.dispatchBeforeUnload()
+
+    // Then
+    expect(fixture.regionAttributes.has("data-token-safety-acknowledged")).toBe(false)
+    expect(fixture.feedback.hidden).toBe(true)
+    expect(event.prevented).toBe(true)
+    expect(event.returnValue).toBe("")
   })
 
   it("prevents another clipboard write while an attempt is pending", async () => {
@@ -205,7 +278,7 @@ describe("one-time token copy safety", () => {
     // When
     const olderClick = fixture.copy.click()
     await fixture.region.dispatch("token-safety-reset")
-    fixture.output.textContent = `grw_st_${"B".repeat(43)}`
+    fixture.output.value = `grw_st_${"B".repeat(43)}`
     await fixture.copy.click()
 
     // Then
@@ -236,7 +309,9 @@ describe("one-time token copy safety", () => {
     await dispatchPagehide()
 
     // Then
+    expect(fixture.output.defaultValue).toBe("")
     expect(fixture.output.textContent).toBe("")
+    expect(fixture.output.value).toBe("")
     expect(fixture.copy.disabled).toBe(true)
     expect(fixture.feedback.hidden).toBe(true)
     expect(fixture.error.hidden).toBe(true)
@@ -251,7 +326,7 @@ describe("one-time token copy safety", () => {
 
     expect(event.prevented).toBe(true)
     expect(event.returnValue).toBe("")
-    expect(fixture.output.textContent).not.toBe("")
+    expect(fixture.output.value).not.toBe("")
   })
 
   it("allows leaving after the clipboard copy is confirmed", async () => {
@@ -283,7 +358,9 @@ describe("one-time token copy safety", () => {
       await pendingClick
 
       // Then
+      expect(fixture.output.defaultValue).toBe("")
       expect(fixture.output.textContent).toBe("")
+      expect(fixture.output.value).toBe("")
       expect(fixture.copy.disabled).toBe(true)
       expect(fixture.feedback.hidden).toBe(true)
       expect(fixture.error.hidden).toBe(true)

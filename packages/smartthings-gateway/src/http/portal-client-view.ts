@@ -9,6 +9,7 @@ type PortalActionState =
   | "error"
   | "initial"
   | "loading"
+  | "uncertain"
   | "unavailable"
 
 export function createPortalView(elements: PortalElements, contracts: PortalContracts) {
@@ -35,10 +36,17 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
   }
 
   function setActionState(state: PortalActionState): void {
-    const disconnected = state === "disconnected"
-    elements.reconnectAction.hidden = !disconnected
-    elements.tokenSubmit.hidden = false
-    elements.tokenSubmit.disabled = state === "loading"
+    const reconnect = state === "disconnected" || state === "uncertain"
+    const uncertain = state === "uncertain"
+    elements.reconnectAction.hidden = !reconnect
+    elements.reconnectAction.setAttribute(
+      "class",
+      uncertain ? "action action-primary" : "action action-secondary",
+    )
+    elements.tokenInput.disabled = uncertain
+    elements.tokenVisibility.disabled = uncertain
+    elements.tokenSubmit.hidden = uncertain
+    elements.tokenSubmit.disabled = state === "loading" || uncertain
     switch (state) {
       case "connected":
         elements.tokenSubmit.textContent = "상태 다시 확인"
@@ -55,6 +63,10 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
         break
       case "loading":
         elements.tokenSubmit.textContent = "확인 중…"
+        break
+      case "uncertain":
+        elements.tokenSubmit.textContent = "연결 상태 확인 불가"
+        elements.reconnectAction.textContent = "SmartThings 다시 연결"
         break
       case "unavailable":
         elements.tokenSubmit.textContent = "상태 다시 확인"
