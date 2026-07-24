@@ -113,12 +113,16 @@ export class OAuthService {
       consentedAt: now,
       privacyDeletionEpoch: null,
     }
+    const authorizationUrl = this.options.client.buildAuthorizationUrl(
+      state,
+      authorization.requestedScopes,
+    )
     await this.options.store.saveState(
       this.hashState(state),
       new Date(now.getTime() + oauthStateLifetimeMs),
       storedAuthorization,
     )
-    return this.options.client.buildAuthorizationUrl(state, authorization.requestedScopes)
+    return authorizationUrl
   }
 
   async completeAuthorization(code: string, state: string): Promise<AuthorizationCompletion> {

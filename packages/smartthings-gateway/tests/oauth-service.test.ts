@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { InstalledAppIdSchema, OAuthStateHashSchema } from "../src/oauth/contracts.js"
 import {
   InvalidOAuthStateError,
@@ -25,6 +25,17 @@ describe("OAuthService", () => {
   it("stores requested scopes with a one-time OAuth state", async () => {
     // Given
     const fixture = createFixture()
+    const calls: string[] = []
+    const buildAuthorizationUrl = fixture.client.buildAuthorizationUrl.bind(fixture.client)
+    const saveState = fixture.store.saveState.bind(fixture.store)
+    vi.spyOn(fixture.client, "buildAuthorizationUrl").mockImplementation((state, scopes) => {
+      calls.push("build_authorization_url")
+      return buildAuthorizationUrl(state, scopes)
+    })
+    vi.spyOn(fixture.store, "saveState").mockImplementation(async (...arguments_) => {
+      calls.push("save_state")
+      await saveState(...arguments_)
+    })
 
     // When
     const authorizationUrl = await fixture.service.startAuthorization(
@@ -34,6 +45,22 @@ describe("OAuthService", () => {
     // Then
     expect(authorizationUrl.searchParams.get("scope")).toBe("r:devices:$ x:devices:$")
     expect(fixture.store.states.size).toBe(1)
+    expect(calls).toEqual(["build_authorization_url", "save_state"])
+  })
+
+  it("does not store OAuth state when authorization URL construction fails", async () => {
+    // Given
+    const fixture = createFixture()
+    vi.spyOn(fixture.client, "buildAuthorizationUrl").mockImplementation(() => {
+      throw new Error("authorization-url-secret-must-not-leak")
+    })
+
+    // When
+    const start = fixture.service.startAuthorization(oauthAuthorization(["r:devices:$"]))
+
+    // Then
+    await expect(start).rejects.toThrow("authorization-url-secret-must-not-leak")
+    expect(fixture.store.states.size).toBe(0)
   })
 
   it("purges only OAuth states that have reached their retention deadline", async () => {
