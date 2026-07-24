@@ -17,6 +17,14 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
         <a class="secondary" href="/manage" data-action="manage-issued-token">관리 화면에서 연결 확인</a>
       </div>
     </section>
+    <section class="api-quickstart" aria-labelledby="api-quickstart-title">
+      <h2 id="api-quickstart-title">첫 API 요청</h2>
+      <p>이 Gateway와 같은 주소의 <code>/v1</code> 아래에 SmartThings API 경로를 붙이세요. Growful 토큰은 요청 헤더에 Bearer 토큰으로 전달합니다.</p>
+      <p>디바이스 읽기 권한을 선택한 경우 아래처럼 요청할 수 있습니다. 다른 권한만 승인했다면 <code>/v1</code> 뒤에 자신이 승인한 SmartThings API 경로를 사용하세요.</p>
+      <pre class="api-request-example" aria-label="첫 API 요청 예시"><code>GET /v1/devices
+Authorization: Bearer &lt;Growful 토큰&gt;</code></pre>
+      <p class="api-token-safety">실제 토큰은 위 자리표시자 대신 Authorization 헤더에만 넣으세요. URL, 쿼리, 요청 본문 또는 공유 문서에는 넣지 마세요.</p>
+    </section>
     <script src="/token-safety.js" defer></script>`,
     description: "SmartThings 연결이 완료되어 Growful 토큰을 한 번 표시합니다.",
     styles: `
@@ -29,6 +37,10 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     .copy-feedback { color: var(--success); }
     .copy-error { color: var(--error); }
     .actions { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
+    .api-quickstart { padding-top: var(--space-6); border-top: 1px solid var(--border); }
+    .api-quickstart p { margin-bottom: var(--space-3); }
+    .api-request-example { margin: 0 0 var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); color: var(--text); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-small); line-height: var(--line-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .api-quickstart .api-token-safety { margin-bottom: 0; }
     .primary, .secondary { display: inline-flex; width: 100%; min-height: var(--action-height); align-items: center; justify-content: center; padding: var(--space-3) var(--space-4); border-radius: var(--radius-action); font: inherit; font-weight: var(--weight-bold); line-height: var(--line-action); text-decoration: none; cursor: pointer; }
     .primary[hidden] { display: none; }
     .primary { border: 1px solid var(--action); background: var(--action); color: var(--action-text); }
@@ -36,6 +48,7 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     .primary:hover { background: var(--action-hover); }
     .primary:active, .secondary:active { transform: scale(var(--pressed-scale)); }
     .primary:focus-visible, .secondary:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    @media (forced-colors: active) { .api-request-example { border: 2px solid CanvasText; } }
     @media (prefers-reduced-motion: no-preference) { .primary, .secondary { transition: transform 100ms ease; } }`,
     title: "SmartThings 연결 완료",
   })

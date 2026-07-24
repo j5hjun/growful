@@ -6,6 +6,12 @@ import { GrowfulTokenSchema } from "../src/security/growful-token.js"
 
 const token = GrowfulTokenSchema.parse(`grw_st_${"A".repeat(43)}`)
 const origin = "https://growful.test"
+const viewports = [
+  { height: 720, width: 320 },
+  { height: 812, width: 375 },
+  { height: 1_024, width: 768 },
+  { height: 900, width: 1_280 },
+] as const
 
 async function routeCompletion(page: Page, scriptAvailable: boolean): Promise<void> {
   await page.route(`${origin}/**`, async (route) => {
@@ -45,6 +51,58 @@ async function expectManualOnlyCompletion(page: Page): Promise<void> {
   await expect(page.locator("[data-copy-token]")).toBeHidden()
   await expect(page.locator("[data-copy-token]")).toBeDisabled()
   await expect(page.getByRole("link", { name: "관리 화면에서 연결 확인" })).toBeVisible()
+  await expectQuickstart(page)
+}
+
+async function expectQuickstart(page: Page): Promise<void> {
+  const quickstart = page.getByRole("region", { name: "첫 API 요청" })
+
+  await expect(quickstart).toBeVisible()
+  await expect(quickstart).toContainText(
+    "이 Gateway와 같은 주소의 /v1 아래에 SmartThings API 경로를 붙이세요.",
+  )
+  await expect(quickstart).toContainText(
+    "디바이스 읽기 권한을 선택한 경우 아래처럼 요청할 수 있습니다. 다른 권한만 승인했다면 /v1 뒤에 자신이 승인한 SmartThings API 경로를 사용하세요.",
+  )
+  await expect(quickstart.locator("pre code")).toHaveText(
+    "GET /v1/devices\nAuthorization: Bearer <Growful 토큰>",
+  )
+  await expect(quickstart).toContainText(
+    "실제 토큰은 위 자리표시자 대신 Authorization 헤더에만 넣으세요.",
+  )
+  await expect(quickstart.locator(".api-token-safety")).toHaveCSS("margin-bottom", "0px")
+}
+
+async function expectNoHorizontalOverflowOrQuickstartOverlap(page: Page): Promise<void> {
+  const layout = await page.evaluate(() => {
+    const documentElement = document.documentElement
+    const quickstart = document.querySelector('[aria-labelledby="api-quickstart-title"]')
+    if (!(quickstart instanceof HTMLElement)) {
+      throw new TypeError("API quickstart is missing")
+    }
+    const visibleChildren = [...quickstart.children]
+      .filter((element): element is HTMLElement => element instanceof HTMLElement)
+      .map((element) => {
+        const bounds = element.getBoundingClientRect()
+        return { bottom: bounds.bottom, left: bounds.left, right: bounds.right, top: bounds.top }
+      })
+
+    return {
+      clientWidth: documentElement.clientWidth,
+      overlappingChildren: visibleChildren.slice(1).filter((child, index) => {
+        const previous = visibleChildren[index]
+        return previous !== undefined && child.top < previous.bottom - 1
+      }).length,
+      overflowingChildren: visibleChildren.filter(
+        (child) => child.left < -1 || child.right > documentElement.clientWidth + 1,
+      ).length,
+      scrollWidth: documentElement.scrollWidth,
+    }
+  })
+
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth)
+  expect(layout.overflowingChildren).toBe(0)
+  expect(layout.overlappingChildren).toBe(0)
 }
 
 async function expectExactKeyboardCopy(page: Page): Promise<void> {
@@ -174,4 +232,43 @@ test("clipboard failure selects the exact token for keyboard copying", async ({
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(token)
   await page.getByRole("link", { name: "관리 화면에서 연결 확인" }).click()
   await expect(page).toHaveURL(`${origin}/manage`)
+})
+
+for (const viewport of viewports) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`quickstart reflows at ${viewport.width}px in ${colorScheme} mode`, async ({ page }) => {
+      await page.setViewportSize(viewport)
+      await page.emulateMedia({ colorScheme })
+      await routeCompletion(page, true)
+
+      await page.goto(`${origin}/oauth`)
+
+      await expectQuickstart(page)
+      await expectNoHorizontalOverflowOrQuickstartOverlap(page)
+    })
+  }
+}
+
+test("quickstart remains readable at 200 percent zoom", async ({ page }) => {
+  await page.setViewportSize({ height: viewports[0].height / 2, width: viewports[0].width / 2 })
+  await page.emulateMedia({ colorScheme: "dark" })
+  await routeCompletion(page, true)
+
+  await page.goto(`${origin}/oauth`)
+
+  await expectQuickstart(page)
+  await expectNoHorizontalOverflowOrQuickstartOverlap(page)
+})
+
+test("forced colors preserve the quickstart example boundary", async ({ page }) => {
+  await page.setViewportSize(viewports[0])
+  await page.emulateMedia({ forcedColors: "active" })
+  await routeCompletion(page, true)
+
+  await page.goto(`${origin}/oauth`)
+
+  await expectQuickstart(page)
+  await expect(page.locator(".api-request-example")).toHaveCSS("border-top-style", "solid")
+  await expect(page.locator(".api-request-example")).toHaveCSS("border-top-width", "2px")
+  await expectNoHorizontalOverflowOrQuickstartOverlap(page)
 })
