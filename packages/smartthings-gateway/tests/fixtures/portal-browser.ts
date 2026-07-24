@@ -20,6 +20,7 @@ type PortalListener = (event: PortalEvent) => unknown
 
 export class PortalElement {
   readonly attributes = new Map<string, string>()
+  readonly children: PortalElement[] = []
   readonly listeners = new Map<string, PortalListener>()
   disabled = false
   dialogOwner: PortalElement | null = null
@@ -89,7 +90,9 @@ export class PortalElement {
     return this.attributes.has(name)
   }
 
-  replaceChildren(..._children: unknown[]): void {}
+  replaceChildren(...children: PortalElement[]): void {
+    this.children.splice(0, this.children.length, ...children)
+  }
 
   reportValidity(): void {}
 

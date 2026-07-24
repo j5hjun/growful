@@ -45,7 +45,7 @@ const resultCopy = {
     title: "연결 요청을 다시 시작해 주세요",
   },
   rate_limited: {
-    description: "반복된 SmartThings OAuth callback 요청을 안전하게 제한합니다.",
+    description: "SmartThings 승인 후 돌아오는 요청이 반복되면 안전하게 제한합니다.",
     explanation:
       '짧은 시간에 연결 완료 요청이 너무 많이 접수되었습니다. 잠시 기다린 뒤 <span class="phrase">새 OAuth 요청을 시작해 주세요.</span>',
     label: "요청 제한",

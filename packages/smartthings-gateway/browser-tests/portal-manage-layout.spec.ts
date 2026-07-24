@@ -3,6 +3,7 @@ import { renderOAuthCompletion } from "../src/http/oauth-completion.js"
 import { portalClientScript } from "../src/http/portal-client.js"
 import { renderPortalManagement } from "../src/http/portal-manage.js"
 import { tokenSafetyClientScript } from "../src/http/token-safety.js"
+import { smartThingsScopes } from "../src/oauth/smartthings-scope.js"
 import { GrowfulTokenSchema } from "../src/security/growful-token.js"
 
 function portalAccess() {
@@ -126,6 +127,138 @@ test("management token errors remain part of the input description", async ({ pa
   expect(describedBy).toEqual(["token-hint", "management-token-error"])
 })
 
+test("management keeps token checking ahead of lost-token recovery at 320px", async ({ page }) => {
+  // Given
+  await page.setViewportSize({ height: 720, width: 320 })
+  await page.setContent(renderPortalManagement(portalAccess()))
+  const panel = page.locator(".connection-panel")
+  const input = page.locator("#growful-token")
+  const reveal = page.locator("[data-token-visibility]")
+  const submit = page.locator("[data-token-submit]")
+  const recovery = page.locator("[data-token-loss-recovery]")
+  const reconnect = recovery.getByRole("link", { name: "새 연결 시작" })
+
+  // When
+  const layout = await page.evaluate(() => {
+    const panel = document.querySelector(".connection-panel")
+    const recovery = document.querySelector("[data-token-loss-recovery]")
+    return {
+      recoveryFollowsPanel:
+        panel !== null &&
+        recovery !== null &&
+        Boolean(panel.compareDocumentPosition(recovery) & Node.DOCUMENT_POSITION_FOLLOWING),
+    }
+  })
+  const inputBox = await input.boundingBox()
+  const submitBox = await submit.boundingBox()
+  const panelBox = await panel.boundingBox()
+  const recoveryBox = await recovery.boundingBox()
+
+  // Then
+  expect(layout.recoveryFollowsPanel).toBe(true)
+  if (inputBox === null || submitBox === null || panelBox === null || recoveryBox === null) {
+    throw new Error("Management priority controls have a missing layout box at 320px")
+  }
+  expect(inputBox.y + inputBox.height).toBeLessThanOrEqual(720)
+  expect(submitBox.y + submitBox.height).toBeLessThanOrEqual(720)
+  expect(recoveryBox.y).toBeGreaterThanOrEqual(panelBox.y + panelBox.height)
+  await expect(reconnect).toHaveClass(/action-secondary/)
+  await expect(reconnect).not.toHaveClass(/action-primary/)
+  await expect(recovery).toContainText("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")
+  await expect(recovery).toContainText(
+    "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+  )
+
+  await input.focus()
+  await page.keyboard.press("Tab")
+  await expect(reveal).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(submit).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(reconnect).toBeFocused()
+})
+
+test("active management actions precede the maximum readable scope list at 375px", async ({
+  page,
+}) => {
+  // Given
+  const token = `grw_st_${"A".repeat(43)}`
+  await page.setViewportSize({ height: 812, width: 375 })
+  await page.route("https://growful.test/**", async (route) => {
+    const { pathname } = new URL(route.request().url())
+    if (pathname === "/manage") {
+      await route.fulfill({
+        body: renderPortalManagement(portalAccess()),
+        contentType: "text/html",
+      })
+      return
+    }
+    if (pathname === "/portal.js") {
+      await route.fulfill({ body: portalClientScript, contentType: "text/javascript" })
+      return
+    }
+    if (pathname === "/connection") {
+      await route.fulfill({
+        json: {
+          authorizationHealth: { status: "active" },
+          connected: true,
+          expiresAt: "2026-07-23T00:00:00.000Z",
+          grantedScopes: [...smartThingsScopes, "r:future-resources:*"],
+          lastRefreshedAt: null,
+          serviceAccess: { status: "active" },
+          supportReference: "a".repeat(64),
+        },
+      })
+      return
+    }
+    await route.abort()
+  })
+  await page.goto("https://growful.test/manage")
+
+  // When
+  await page.locator("#growful-token").fill(token)
+  await page.locator("[data-token-submit]").click()
+
+  // Then
+  const status = page.locator("[data-portal-status]")
+  const actions = page.locator(".status-actions")
+  const scopeRegion = page.getByRole("region", { name: "승인된 권한" })
+  const rotate = actions.getByRole("button", { name: "Growful 토큰 교체" })
+  const disconnect = actions.getByRole("button", { name: "연결 해제" })
+  await expect(status).toBeFocused()
+  await expect(page.locator("[data-status-active]")).toBeVisible()
+  await expect(page.locator("[data-status-blocked]")).toBeHidden()
+  await expect(page.locator("[data-status-reauthorization]")).toBeHidden()
+  await expect(rotate).toBeVisible()
+  await expect(disconnect).toBeVisible()
+  await expect(scopeRegion.getByRole("listitem")).toHaveCount(15)
+
+  const layout = await page.evaluate(() => {
+    const actions = document.querySelector(".status-actions")
+    const scopes = document.querySelector(".scope-section")
+    return {
+      actionsPrecedeScopes:
+        actions !== null &&
+        scopes !== null &&
+        Boolean(actions.compareDocumentPosition(scopes) & Node.DOCUMENT_POSITION_FOLLOWING),
+    }
+  })
+  const statusBox = await status.boundingBox()
+  const actionsBox = await actions.boundingBox()
+  const scopeBox = await scopeRegion.boundingBox()
+  if (statusBox === null || actionsBox === null || scopeBox === null) {
+    throw new Error("Active management priority regions have a missing layout box at 375px")
+  }
+  expect(layout.actionsPrecedeScopes).toBe(true)
+  expect(actionsBox.y - statusBox.y).toBeLessThan(600)
+  expect(actionsBox.y + actionsBox.height).toBeLessThanOrEqual(scopeBox.y)
+  for (const action of [rotate, disconnect]) {
+    const actionBox = await action.boundingBox()
+    if (actionBox === null) throw new Error("Active management action has no layout box")
+    expect(actionBox.height).toBeGreaterThanOrEqual(44)
+  }
+})
+
 test("one-time token flows confirm rotation and keep recovery navigation available", async ({
   page,
 }) => {
@@ -181,7 +314,7 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
           authorizationHealth: { status: "active" },
           connected: true,
           expiresAt: "2026-07-23T00:00:00.000Z",
-          grantedScopes: [],
+          grantedScopes: ["r:devices:*"],
           lastRefreshedAt: null,
           serviceAccess: { status: "active" },
           supportReference: "c".repeat(64),

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { portalClientScript } from "../src/http/portal-client.js"
 import { renderPortalManagement } from "../src/http/portal-manage.js"
+import { smartThingsScopes } from "../src/oauth/smartthings-scope.js"
 
 const growfulToken = `grw_st_${"R".repeat(43)}`
 
@@ -37,7 +38,7 @@ test("reauthorization recovery is keyboard reachable, responsive, and forced-col
           authorizationHealth: { status: "reauthorization_required" },
           connected: true,
           expiresAt: "2026-07-23T00:00:00.000Z",
-          grantedScopes: ["r:devices:*"],
+          grantedScopes: [...smartThingsScopes, "r:future-resources:*"],
           lastRefreshedAt: null,
           serviceAccess: { status: "active" },
           supportReference: "a".repeat(64),
@@ -51,7 +52,29 @@ test("reauthorization recovery is keyboard reachable, responsive, and forced-col
   for (const width of [160, 320, 375, 390, 640, 768, 1_280]) {
     await page.setViewportSize({ height: 900, width })
     await page.goto("https://growful.test/manage")
-    await page.locator("#growful-token").fill(growfulToken)
+    const tokenRecovery = page.getByRole("region", {
+      name: "Growful 토큰을 잃어버렸나요?",
+    })
+    const tokenRecoveryAction = tokenRecovery.getByRole("link", {
+      name: "새 연결 시작",
+    })
+    await expect(tokenRecovery).toContainText(
+      "기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.",
+    )
+    await expect(tokenRecovery).toContainText(
+      "분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.",
+    )
+    await expect(tokenRecovery).toContainText(
+      "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+    )
+    await expect(tokenRecoveryAction).toHaveAttribute("href", "/oauth/start")
+    const tokenInput = page.locator("#growful-token")
+    await tokenInput.fill(growfulToken)
+    await page.keyboard.press("Tab")
+    await page.keyboard.press("Tab")
+    await page.keyboard.press("Tab")
+    await expect(tokenRecoveryAction).toBeFocused()
+    await tokenInput.fill(growfulToken)
     await page.locator("[data-token-submit]").click()
 
     const notice = page.locator("[data-reauthorization-notice]")
@@ -74,6 +97,22 @@ test("reauthorization recovery is keyboard reachable, responsive, and forced-col
     await expect(reconnect).toHaveAttribute("href", "/oauth/start")
     await expect(page.locator("[data-rotate-token]")).toBeHidden()
     await expect(page.locator("[data-disconnect]")).toBeVisible()
+    const permissionRegion = page.getByRole("region", { name: "승인된 권한" })
+    const permissionList = permissionRegion.getByRole("list")
+    await expect(permissionList).not.toHaveAttribute("aria-labelledby")
+    await expect(permissionList.getByRole("listitem")).toHaveCount(15)
+    await expect(
+      permissionList.getByRole("listitem").filter({
+        hasText: "SmartThings에서 선택한 디바이스 정보와 상태 읽기",
+      }),
+    ).toContainText("r:devices:$")
+    const unknownPermission = permissionList.locator('[data-scope-kind="unknown"]')
+    await expect(unknownPermission).toContainText("알 수 없는 SmartThings 권한")
+    await expect(unknownPermission.locator("code")).toHaveText("r:future-resources:*")
+    await expect(unknownPermission.locator("code")).toHaveAttribute(
+      "aria-label",
+      "원문 권한 코드: r:future-resources:*",
+    )
 
     await page.keyboard.press("Tab")
     await page.keyboard.press("Tab")
@@ -114,12 +153,34 @@ test("reauthorization recovery is keyboard reachable, responsive, and forced-col
     expect(reconnectBox.x + reconnectBox.width).toBeLessThanOrEqual(dimensions.clientWidth + 1)
   }
 
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    deviceScaleFactor: 2,
+    height: 450,
+    mobile: false,
+    screenHeight: 900,
+    screenWidth: 1_280,
+    width: 640,
+  })
+  const reflow = await page.locator("html").evaluate((html) => ({
+    clientWidth: html.clientWidth,
+    devicePixelRatio: window.devicePixelRatio,
+    innerWidth: window.innerWidth,
+    scrollWidth: html.scrollWidth,
+  }))
+  expect(reflow.devicePixelRatio).toBe(2)
+  expect(reflow.innerWidth).toBe(640)
+  expect(reflow.scrollWidth).toBeLessThanOrEqual(reflow.clientWidth)
+
   await page.emulateMedia({ forcedColors: "active" })
   const reconnect = page
     .locator("[data-reauthorization-notice]")
     .getByRole("link", { name: "SmartThings 다시 연결" })
   await expect(reconnect).toHaveCSS("border-top-style", "solid")
   await expect(reconnect).toHaveCSS("border-top-width", "2px")
+  const unknownPermission = page.locator('[data-scope-kind="unknown"]')
+  await expect(unknownPermission).toHaveCSS("border-top-style", "dashed")
+  await expect(unknownPermission).toHaveCSS("border-top-width", "1px")
 })
 
 test("operator block takes precedence over simultaneous reauthorization health", async ({
@@ -144,7 +205,7 @@ test("operator block takes precedence over simultaneous reauthorization health",
           authorizationHealth: { status: "reauthorization_required" },
           connected: true,
           expiresAt: "2026-07-23T00:00:00.000Z",
-          grantedScopes: [],
+          grantedScopes: ["r:devices:*"],
           lastRefreshedAt: null,
           serviceAccess: {
             blockedAt: "2026-07-22T01:02:03.000Z",

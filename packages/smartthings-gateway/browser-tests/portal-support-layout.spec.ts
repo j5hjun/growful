@@ -68,6 +68,21 @@ test("support keyboard order reaches the primary contact action before static to
   // Then
   await expect(page.locator("[data-support-email-action]")).toBeFocused()
   await expect(page.locator("[data-support-topic]:focus")).toHaveCount(0)
+
+  // When
+  await page.keyboard.press("Tab")
+
+  // Then
+  const recovery = page.getByRole("region", { name: "먼저 직접 할 수 있는 조치" })
+  const reconnect = recovery.getByRole("link", { name: "새 연결 시작" })
+  await expect(reconnect).toBeFocused()
+  await expect(reconnect).toHaveAttribute("href", "/oauth/start")
+  await expect(recovery).toContainText("기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.")
+  await expect(recovery).toContainText("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")
+  await expect(recovery).toContainText(
+    "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+  )
+  await expect(recovery).not.toContainText("비밀값을 이메일로 보내지 마세요.")
 })
 
 test("support content reflows without horizontal overflow at 200 percent zoom", async ({

@@ -61,15 +61,22 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
           <p>SmartThings 인증이 만료되었거나 회수되어 API 요청을 사용할 수 없습니다. 다시 연결하면 새 Growful 토큰이 발급되고 현재 토큰은 사용할 수 없게 됩니다. 새 토큰으로 소비자 설정을 업데이트하세요.</p>
           <a class="action action-primary" href="/oauth/start">SmartThings 다시 연결</a>
         </section>
-        <section class="scope-section" aria-labelledby="scope-title">
-          <h3 id="scope-title">승인된 권한</h3>
-          <ul data-scope-list></ul>
-        </section>
         <div class="action-row status-actions">
           <button class="secondary" type="button" data-rotate-token>Growful 토큰 교체</button>
           <button class="destructive" type="button" data-disconnect>연결 해제</button>
         </div>
+        <section class="scope-section" aria-labelledby="scope-title">
+          <h3 id="scope-title">승인된 권한</h3>
+          <ul data-scope-list></ul>
+        </section>
       </section>
+    </section>
+    <section class="token-recovery" data-token-loss-recovery aria-labelledby="token-recovery-title">
+      <p class="eyebrow">토큰 분실 도움말</p>
+      <h2 id="token-recovery-title">Growful 토큰을 잃어버렸나요?</h2>
+      <p>기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다. 새 연결을 시작하면 새 토큰을 받을 수 있지만, 분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.</p>
+      <p>기존 연결도 정리하려면 SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.</p>
+      <a class="action action-secondary" href="/oauth/start" data-token-loss-reconnect>새 연결 시작</a>
     </section>
     <section class="credential-output" data-token-safety data-rotated-token-section aria-labelledby="rotated-token-title" hidden>
       <p class="eyebrow">교체 완료</p>
@@ -112,6 +119,10 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .portal-page-shell.page-manage, main.page-manage { align-self: start; }
     .manage-header { padding: var(--space-8) 0 var(--space-4); }
     .manage-header p:last-child { margin-bottom: 0; }
+    .token-recovery { margin-top: var(--space-6); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .token-recovery h2 { margin: 0 0 var(--space-3); font-size: var(--font-body); }
+    .token-recovery p:not(.eyebrow) { margin-bottom: var(--space-3); }
+    .token-recovery .action { width: 100%; }
     .connection-panel { margin-top: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); word-break: keep-all; overflow-wrap: normal; }
     .token-form { display: grid; grid-template-rows: repeat(3, auto); min-block-size: 0; padding: var(--space-6); }
     .token-entry-region > label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-bold); }
@@ -154,9 +165,13 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .reauthorization-notice h3 { margin: 0 0 var(--space-3); color: var(--error); font-size: var(--font-body); }
     .reauthorization-notice p { margin-bottom: var(--space-3); }
     .reauthorization-notice .action { width: 100%; }
+    .scope-section { margin-top: var(--space-6); }
     .scope-section h3 { margin: 0 0 var(--space-3); font-size: var(--font-body); }
-    .scope-section ul { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-    .scope-section li { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-small); overflow-wrap: anywhere; }
+    .scope-section ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+    .scope-section li { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); overflow-wrap: anywhere; }
+    .scope-label { font-weight: var(--weight-bold); }
+    .scope-code { color: var(--text-muted); font-size: var(--font-small); }
+    .scope-section li[data-scope-kind="unknown"] { border-style: dashed; }
     .status-actions { margin-top: var(--space-6); }
     .connection-action-slot { display: grid; grid-auto-rows: minmax(var(--action-height), auto); gap: var(--space-3); padding-top: var(--space-4); }
     .connection-action-slot > * { width: 100%; }
@@ -180,18 +195,25 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     }
     @media (max-width: 22.5rem) {
       .connection-panel { margin-top: var(--space-4); }
+      .token-recovery { margin-top: var(--space-4); }
       .token-form { padding: var(--space-4); }
       .token-entry { grid-template-columns: minmax(0, 1fr); }
       .reveal { width: 100%; }
     }
     @media (max-width: 20rem) {
+      .manage-header { padding: var(--space-4) 0 var(--space-2); }
+      .connection-panel { margin-top: var(--space-2); }
       .token-form { padding: var(--space-3); }
+      .token-recovery { padding: var(--space-3); }
       .connection-status { margin-inline: var(--space-2); padding-bottom: var(--space-4); }
       dl { gap: var(--space-2); margin: var(--space-4) 0; }
       dl div, .restricted-notice, .reauthorization-notice { padding: var(--space-2); }
       .connection-status dd { word-break: normal; overflow-wrap: anywhere; }
       button.compact { min-width: 0; }
       .restricted-notice, .reauthorization-notice { margin-bottom: var(--space-4); }
+    }
+    @media (forced-colors: active) {
+      .scope-section li { border-color: CanvasText; }
     }`,
     title: "SmartThings 연결 관리 | Growful",
   })

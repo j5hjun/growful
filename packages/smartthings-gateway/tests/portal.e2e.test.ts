@@ -91,6 +91,14 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body).toContain('<meta name="robots" content="index,follow">')
     expect(response.body).toContain("data-portal-token-form")
     expect(response.body).toContain('href="/oauth/start" data-reconnect')
+    expect(response.body).toContain("data-token-loss-recovery")
+    expect(response.body).toContain('href="/oauth/start" data-token-loss-reconnect')
+    expect(response.body).toContain("기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.")
+    expect(response.body).toContain("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")
+    expect(response.body).toContain(
+      "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+    )
+    expect(response.body).toContain(">새 연결 시작</a>")
     expect(response.body).toContain('type="password"')
     expect(response.body).toContain('autocomplete="off"')
     expect(response.body).toContain("data-portal-status")
@@ -194,6 +202,36 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body.includes("OAuth code·state")).toBe(true)
     expect(response.body.includes("비밀번호")).toBe(true)
     expect(response.body.includes("원본 계정·설치 식별자")).toBe(true)
+    expect(response.body.includes("승인 후 돌아오는 단계")).toBe(true)
+    expect(response.body.includes("가명 지원 참조")).toBe(true)
+    expect(response.body.includes("callback")).toBe(false)
+    expect(response.body.includes("supportReference")).toBe(false)
+    expect(response.body.includes("data-token-loss-recovery")).toBe(true)
+    expect(response.body.includes('href="/oauth/start" data-token-loss-reconnect')).toBe(true)
+    expect(response.body.includes("기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.")).toBe(
+      true,
+    )
+    expect(response.body.includes("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")).toBe(
+      true,
+    )
+    expect(
+      response.body.includes("SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요."),
+    ).toBe(true)
+    expect(response.body.includes(">새 연결 시작</a>")).toBe(true)
+    expect(
+      response.body.includes("분실한 토큰의 기존 연결을 찾아 정리하기 위한 본인 확인 절차"),
+    ).toBe(true)
+    expect(
+      response.body.includes(
+        "Gateway에 저장된 SmartThings 토큰까지 삭제하려면 Growful 연결을 해제합니다.",
+      ),
+    ).toBe(true)
+    expect(
+      response.body.includes(
+        "Growful 연결 해제는 Gateway의 활성 연결과 저장 토큰을 삭제하지만 SmartThings 설치 자체는 삭제하지 않습니다.",
+      ),
+    ).toBe(true)
+    expect(response.body.includes("SmartThings 토큰까지 폐기하려면")).toBe(false)
     expect(response.body.includes("비공개 베타")).toBe(false)
   })
 
