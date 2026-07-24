@@ -19,6 +19,7 @@ policy_misroute_image_reference='registry.example/gateway@sha256:000000000000000
 healthy_image_reference='registry.example/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000002'
 release_state_file="$deployment_root/.deployed-release-state"
 deployment_sequence_file="$deployment_root/.deployment-sequence"
+contract_source_file="$source_dir/../../packages/smartthings-gateway/public-launch-readiness-contract-version.txt"
 
 assert_release_state() {
   local expected_image_reference="$1"
@@ -60,8 +61,8 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$release_dir" "$previous_release" "$fake_bin"
-cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$release_dir/"
-cp "$source_dir/compose.yaml" "$previous_release/"
+cp "$source_dir/deploy.sh" "$source_dir/compose.yaml" "$contract_source_file" "$release_dir/"
+cp "$source_dir/compose.yaml" "$contract_source_file" "$previous_release/"
 grep -Fq 'stop_grace_period: 120s' "$source_dir/compose.yaml"
 grep -Fq "fetch('http://127.0.0.1:8100/readyz')" "$source_dir/compose.yaml"
 printf '%s\n' 'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \

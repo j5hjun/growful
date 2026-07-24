@@ -260,7 +260,15 @@ jobs:
         if: steps.freshness.outputs.deploy == 'true'
         run: |
           test -n "$DEPLOY_USER"
-          tar -C deploy/smartthings-gateway -cf - compose.yaml deploy.sh preflight.sh |
+          deployment_bundle="$(mktemp -d "$RUNNER_TEMP/smartthings-gateway-deployment.XXXXXX")"
+          trap 'rm -rf "$deployment_bundle"' EXIT
+          cp deploy/smartthings-gateway/compose.yaml \
+            deploy/smartthings-gateway/deploy.sh \
+            deploy/smartthings-gateway/preflight.sh \
+            packages/smartthings-gateway/public-launch-readiness-contract-version.txt \
+            "$deployment_bundle/"
+          tar -C "$deployment_bundle" -cf - \
+            compose.yaml deploy.sh preflight.sh public-launch-readiness-contract-version.txt |
             tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
               "mkdir -p \"\$HOME/app/smartthings-gateway/releases/$RELEASE_ID\" && tar -xf - -C \"\$HOME/app/smartthings-gateway/releases/$RELEASE_ID\""
       - name: Check production prerequisites

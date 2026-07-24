@@ -6,6 +6,7 @@ deployment_root="${DEPLOYMENT_ROOT:-$deployment_dir}"
 environment_file="$deployment_root/.env"
 image_reference="${1:?image reference is required}"
 release_id="${2:?release id is required}"
+contract_version_file="$deployment_dir/public-launch-readiness-contract-version.txt"
 
 if [[ ! "$image_reference" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
   printf 'gateway image reference must use an immutable sha256 digest\n' >&2
@@ -14,12 +15,32 @@ fi
 image_name="${image_reference%@sha256:*}"
 image_digest="sha256:${image_reference##*@sha256:}"
 
-for command_name in base64 cp curl docker flock head rm sleep stat tr; do
+for command_name in base64 cp curl docker flock head rm sleep stat tail tr; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'required command is missing: %s\n' "$command_name" >&2
     exit 1
   fi
 done
+
+if [[ ! -r "$contract_version_file" ]]; then
+  printf 'public launch readiness contract version file is not readable: %s\n' \
+    "$contract_version_file" >&2
+  exit 1
+fi
+contract_version_lines=()
+while IFS= read -r contract_version_line || [[ -n "$contract_version_line" ]]; do
+  contract_version_lines+=("$contract_version_line")
+done <"$contract_version_file"
+contract_version_last_byte="$(tail -c 1 "$contract_version_file"; printf x)"
+if ((${#contract_version_lines[@]} != 1)) ||
+  [[ ! "${contract_version_lines[0]}" =~ ^smartthings-public-launch-readiness-v[1-9][0-9]*$ ]] ||
+  [[ "$contract_version_last_byte" != $'\nx' ]]; then
+  printf '%s\n' \
+    'public launch readiness contract version file must contain one valid version followed by LF' \
+    >&2
+  exit 1
+fi
+readonly public_launch_readiness_revision="${contract_version_lines[0]}"
 
 docker info >/dev/null
 docker compose version >/dev/null
@@ -92,6 +113,7 @@ case "$service_access_mode" in
     ;;
   public)
     access_keys+=(
+      PUBLIC_LAUNCH_READINESS_ACK
       SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE
       SMARTTHINGS_PUBLIC_USE_APPROVED_AT
     )
@@ -116,6 +138,14 @@ if [[ ! "$support_email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; 
 fi
 
 if [[ "$service_access_mode" == 'public' ]]; then
+  public_launch_readiness_ack="$(
+    sed -n 's/^PUBLIC_LAUNCH_READINESS_ACK=//p' "$environment_file"
+  )"
+  if [[ "$public_launch_readiness_ack" != "$public_launch_readiness_revision" ]]; then
+    printf 'PUBLIC_LAUNCH_READINESS_ACK must exactly match readiness revision %s\n' \
+      "$public_launch_readiness_revision" >&2
+    exit 1
+  fi
   approved_at="$(sed -n 's/^SMARTTHINGS_PUBLIC_USE_APPROVED_AT=//p' "$environment_file")"
   if [[ ! "$approved_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
     printf 'SMARTTHINGS_PUBLIC_USE_APPROVED_AT must use YYYY-MM-DD\n' >&2

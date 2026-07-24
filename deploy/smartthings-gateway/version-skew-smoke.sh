@@ -13,6 +13,7 @@ environment_file="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-version-skew.XXX
 candidate_environment_file="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-version-skew-candidate.XXXXXX")"
 rollback_environment_file="$(mktemp "${TMPDIR:-/tmp}/smartthings-gateway-version-skew-rollback.XXXXXX")"
 postgres_image="postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193"
+contract_version_file="$script_dir/../../packages/smartthings-gateway/public-launch-readiness-contract-version.txt"
 
 cleanup() {
   local status=$?
@@ -22,6 +23,16 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+
+candidate_contract_version="$(docker run --rm "$candidate_image" node -e '
+process.stdout.write(
+  require("node:fs").readFileSync(
+    "/app/public-launch-readiness-contract-version.txt",
+    "utf8",
+  ),
+)
+')"
+test "$candidate_contract_version" = "$(<"$contract_version_file")"
 
 # The rollback image still requires its legacy policy URL inputs. The candidate
 # environment below removes them before the new image starts.
@@ -37,6 +48,7 @@ printf '%s\n' \
   'OAUTH_REDIRECT_URI=https://smartthings.growful.click/oauth/callback' \
   'SERVICE_ACCESS_MODE=private_beta' \
   'PRIVATE_BETA_INVITES_JSON=[{"username":"gateway-version-skew-beta","passwordHash":"5ddf8b91211dce99eacd9d5923f5a6fa47c4943630855c921a50c47f111aa2ee"}]' \
+  'PUBLIC_LAUNCH_READINESS_ACK=smartthings-public-launch-readiness-v0' \
   'PUBLIC_OPERATOR_NAME=Growful version skew' \
   'PUBLIC_SUPPORT_EMAIL=support@growful.click' \
   'PUBLIC_PRIVACY_POLICY_URL=https://smartthings.growful.click/privacy' \
@@ -121,7 +133,13 @@ test "$(grep --count '^OAUTH_ADMIN_TOKEN=' "$candidate_environment_file" || true
 test "$(grep --count '^PUBLIC_PRIVACY_POLICY_URL=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^PUBLIC_TERMS_URL=' "$candidate_environment_file" || true)" = "0"
 test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$candidate_environment_file" || true)" = "1"
+test "$(grep --fixed-strings --line-regexp --count \
+  'PUBLIC_LAUNCH_READINESS_ACK=smartthings-public-launch-readiness-v0' \
+  "$candidate_environment_file")" = "1"
 test "$(grep --count '^PRIVATE_BETA_INVITES_JSON=' "$rollback_environment_file" || true)" = "1"
+test "$(grep --fixed-strings --line-regexp --count \
+  'PUBLIC_LAUNCH_READINESS_ACK=smartthings-public-launch-readiness-v0' \
+  "$rollback_environment_file")" = "1"
 test "$(grep --count '^PUBLIC_PRIVACY_POLICY_URL=' "$rollback_environment_file" || true)" = "1"
 test "$(grep --count '^PUBLIC_TERMS_URL=' "$rollback_environment_file" || true)" = "1"
 test "$(grep --fixed-strings --line-regexp --count 'SMARTTHINGS_SCOPES=r:devices:$' "$rollback_environment_file")" = "1"

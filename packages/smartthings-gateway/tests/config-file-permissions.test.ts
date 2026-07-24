@@ -1,14 +1,17 @@
 import { describe, expect, it, vi } from "vitest"
 
-class PermissionDeniedError extends Error {
-  readonly code = "EACCES"
-}
-
-vi.mock("node:fs", () => ({
-  readFileSync: () => {
-    throw new PermissionDeniedError("permission denied")
-  },
-}))
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>()
+  return {
+    ...actual,
+    readFileSync: (...arguments_: Parameters<typeof actual.readFileSync>) => {
+      if (arguments_[0] === "configured-secret-file") {
+        throw Object.assign(new Error("permission denied"), { code: "EACCES" })
+      }
+      return actual.readFileSync(...arguments_)
+    },
+  }
+})
 
 import { loadConfig } from "../src/config.js"
 
