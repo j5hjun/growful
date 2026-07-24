@@ -139,24 +139,26 @@ test("reauthorization recovery is keyboard reachable, responsive, and forced-col
       elements
         .filter((element) => {
           const bounds = element.getBoundingClientRect()
-          return (
-            bounds.left < -1 || bounds.right > element.ownerDocument.documentElement.clientWidth + 1
-          )
+          return bounds.left < 0 || bounds.right > element.ownerDocument.documentElement.clientWidth
         })
         .map((element) => ({
+          clientWidth: element.clientWidth,
           className: element.getAttribute("class") ?? "",
+          left: element.getBoundingClientRect().left,
+          right: element.getBoundingClientRect().right,
+          scrollWidth: element.scrollWidth,
           tagName: element.tagName,
           text: (element.textContent ?? "").trim().slice(0, 80),
         })),
     )
-    expect(
-      dimensions.scrollWidth,
-      `${width}px overflowing elements: ${JSON.stringify(overflowingElements)}`,
-    ).toBeLessThanOrEqual(dimensions.clientWidth)
-    expect(noticeBox.x).toBeGreaterThanOrEqual(-1)
-    expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(dimensions.clientWidth + 1)
-    expect(reconnectBox.x).toBeGreaterThanOrEqual(-1)
-    expect(reconnectBox.x + reconnectBox.width).toBeLessThanOrEqual(dimensions.clientWidth + 1)
+    expect(dimensions.scrollWidth, `${width}px document overflow`).toBe(dimensions.clientWidth)
+    if (width === 160) {
+      expect(overflowingElements, "160px offscreen geometry offenders").toEqual([])
+    }
+    expect(noticeBox.x).toBeGreaterThanOrEqual(0)
+    expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(dimensions.clientWidth)
+    expect(reconnectBox.x).toBeGreaterThanOrEqual(0)
+    expect(reconnectBox.x + reconnectBox.width).toBeLessThanOrEqual(dimensions.clientWidth)
   }
 
   const cdp = await page.context().newCDPSession(page)

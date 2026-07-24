@@ -146,7 +146,8 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .credential-output { margin-top: var(--section-gap); padding-top: var(--section-gap); border-top: 1px solid var(--border); }
     .connection-status:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .status-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
-    .status-heading h2, .status-indicator { margin: 0; }
+    .status-heading > * { min-width: 0; max-width: 100%; }
+    .status-heading h2, .status-indicator { margin: 0; overflow-wrap: anywhere; }
     .status-indicator { color: var(--success); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); }
     .status-blocked { color: var(--error); }
     .status-reauthorization { color: var(--error); }
