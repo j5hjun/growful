@@ -3,7 +3,13 @@
 import type { ConnectionStatus, PortalContracts } from "./portal-client-contracts.js"
 import type { PortalElements } from "./portal-client-elements.js"
 
-type PortalActionState = "connected" | "disconnected" | "error" | "initial" | "loading"
+type PortalActionState =
+  | "connected"
+  | "disconnected"
+  | "error"
+  | "initial"
+  | "loading"
+  | "unavailable"
 
 export function createPortalView(elements: PortalElements, contracts: PortalContracts) {
   const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
@@ -49,6 +55,9 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
         break
       case "loading":
         elements.tokenSubmit.textContent = "확인 중…"
+        break
+      case "unavailable":
+        elements.tokenSubmit.textContent = "상태 다시 확인"
         break
       default:
         state satisfies never

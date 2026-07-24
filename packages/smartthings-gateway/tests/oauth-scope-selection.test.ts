@@ -298,6 +298,15 @@ describe("parseOAuthScopeSelection", () => {
     expect(html).toContain('href="/" data-action="cancel-oauth">서비스 안내로 돌아가기</a>')
   })
 
+  it("protects the support email link from edge email rewriting", () => {
+    const html = renderOAuthScopeSelection({ disclosures: testDisclosures })
+
+    expect(html).toContain(
+      `<!--email_off--><a href="mailto:${testDisclosures.supportEmail}">지원 문의</a><!--/email_off-->`,
+    )
+    expect(html).not.toContain("/cdn-cgi/l/email-protection")
+  })
+
   it("preserves the full submitted draft in an accessible error summary", () => {
     const html = renderOAuthScopeSelection({
       disclosures: testDisclosures,

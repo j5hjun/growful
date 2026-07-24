@@ -78,6 +78,24 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;")
 }
 
+type PortalEmailLinkOptions = {
+  readonly className?: string
+  readonly label?: string
+  readonly supportEmailAction?: boolean
+}
+
+export function renderPortalEmailLink(
+  supportEmail: string,
+  options: PortalEmailLinkOptions = {},
+): string {
+  const safeSupportEmail = escapeHtml(supportEmail)
+  const safeLabel = escapeHtml(options.label ?? supportEmail)
+  const className = options.className ? ` class="${escapeHtml(options.className)}"` : ""
+  const supportEmailAction = options.supportEmailAction ? " data-support-email-action" : ""
+
+  return `<!--email_off--><a${className} href="mailto:${safeSupportEmail}"${supportEmailAction}>${safeLabel}</a><!--/email_off-->`
+}
+
 export function renderPortalFooter(
   currentPage: PortalPageName | null,
   operatorName: string,
@@ -87,7 +105,6 @@ export function renderPortalFooter(
   const privacyCurrent = currentPage === "privacy" ? ' aria-current="page"' : ""
   const termsCurrent = currentPage === "terms" ? ' aria-current="page"' : ""
   const safeOperatorName = escapeHtml(operatorName)
-  const safeSupportEmail = escapeHtml(supportEmail)
   return `<footer class="site-footer">
       <nav aria-label="보조 메뉴">
         <ul class="footer-nav-list">
@@ -98,7 +115,7 @@ export function renderPortalFooter(
       </nav>
       <dl class="footer-meta">
         <div><dt>운영자</dt><dd>${safeOperatorName}</dd></div>
-        <div><dt>지원 이메일</dt><dd><a href="mailto:${safeSupportEmail}">${safeSupportEmail}</a></dd></div>
+        <div><dt>지원 이메일</dt><dd>${renderPortalEmailLink(supportEmail)}</dd></div>
       </dl>
     </footer>`
 }

@@ -8,7 +8,9 @@ import { testDisclosures } from "../tests/fixtures/oauth-access.js"
 
 const gatewayUrl = "http://gateway.test/oauth/start"
 const viewports = [
-  { height: 812, name: "mobile", width: 375 },
+  { height: 720, name: "mobile-320", width: 320 },
+  { height: 780, name: "mobile-360", width: 360 },
+  { height: 844, name: "mobile-390", width: 390 },
   { height: 1_024, name: "tablet", width: 768 },
   { height: 900, name: "desktop", width: 1_280 },
 ] as const
@@ -166,4 +168,43 @@ test("invalid draft remains usable at 200 percent zoom", async ({ page }) => {
   expect(overflowingElements).toEqual([])
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
   await expect(page.getByRole("button", { name: "SmartThings에서 계속" })).toBeVisible()
+})
+
+test("mobile range and policy choices provide touch-sized targets", async ({ page }) => {
+  await page.route(gatewayUrl, fulfillScopeSelection)
+
+  for (const width of [320, 360, 390]) {
+    // Given
+    await page.setViewportSize({ height: 844, width })
+    await page.goto(gatewayUrl)
+
+    // When
+    const targetHeights = await page
+      .locator('[data-permission-step="range"] label, .policy-links a')
+      .evaluateAll((targets) => targets.map((target) => target.getBoundingClientRect().height))
+    const dimensions = await page.locator("html").evaluate((html) => ({
+      clientWidth: html.clientWidth,
+      scrollWidth: html.scrollWidth,
+    }))
+
+    // Then
+    expect(targetHeights.length).toBe(5)
+    for (const height of targetHeights) expect(height).toBeGreaterThanOrEqual(44)
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
+  }
+})
+
+test("forced colors preserve the OAuth primary action boundary", async ({ page }) => {
+  // Given
+  await page.setViewportSize({ height: 844, width: 390 })
+  await page.emulateMedia({ forcedColors: "active" })
+  await page.route(gatewayUrl, fulfillScopeSelection)
+
+  // When
+  await page.goto(gatewayUrl)
+
+  // Then
+  const primaryAction = page.getByRole("button", { name: "SmartThings에서 계속" })
+  await expect(primaryAction).toHaveCSS("border-top-style", "solid")
+  await expect(primaryAction).toHaveCSS("border-top-width", "2px")
 })

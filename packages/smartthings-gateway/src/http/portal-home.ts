@@ -1,6 +1,10 @@
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import { portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
+import {
+  portalSharedStyles,
+  renderPortalEmailLink,
+  renderPortalNavigation,
+} from "./portal-shell.js"
 
 function escapeHtml(value: string): string {
   return value
@@ -16,7 +20,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
   const descriptionSuffix = access.mode === "private_beta" ? "비공개 베타 Gateway" : "Gateway"
   const operatorName = escapeHtml(access.operatorName)
   const privacyPolicyUrl = escapeHtml(access.privacyPolicyUrl.toString())
-  const supportEmail = escapeHtml(access.supportEmail)
+  const supportEmailLink = renderPortalEmailLink(access.supportEmail)
   const termsUrl = escapeHtml(access.termsUrl.toString())
   const privateBetaEntryGuidance =
     access.mode === "private_beta"
@@ -59,7 +63,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
       <dl>
         <div><dt>운영자</dt><dd>${operatorName}</dd></div>
         <div><dt>상태</dt><dd><a href="/status">현재 Gateway 상태</a></dd></div>
-        <div><dt>지원</dt><dd><a href="/support">지원 안내</a> · <a href="mailto:${supportEmail}">${supportEmail}</a></dd></div>
+        <div><dt>지원</dt><dd><a href="/support">지원 안내</a> · ${supportEmailLink}</dd></div>
         <div><dt>정책</dt><dd><a href="${privacyPolicyUrl}">개인정보 처리방침</a> · <a href="${termsUrl}">이용약관</a></dd></div>
       </dl>
     </section>`,

@@ -62,6 +62,10 @@ export class PortalElement {
     this.focusCount += 1
   }
 
+  hasAttribute(name: string): boolean {
+    return this.attributes.has(name)
+  }
+
   replaceChildren(..._children: unknown[]): void {}
 
   reportValidity(): void {}
@@ -145,7 +149,11 @@ export function createPortalBrowserFixture(missingSelector?: string) {
   getPortalElement(elements, "rotatedSection").hidden = true
   getPortalElement(elements, "rotatedFeedback").hidden = true
   getPortalElement(elements, "rotatedError").hidden = true
-  return { elements, selectors }
+  return {
+    confirmation: { accepted: true, messages: [] as string[] },
+    elements,
+    selectors,
+  }
 }
 
 export function getPortalElement(
@@ -161,7 +169,7 @@ export function runPortalClient(
   fixture: ReturnType<typeof createPortalBrowserFixture>,
   fetch: PortalFetch,
 ): void {
-  const { elements, selectors } = fixture
+  const { confirmation, elements, selectors } = fixture
   runInNewContext(portalClientScript, {
     document: {
       createElement: () => new PortalElement(),
@@ -183,6 +191,12 @@ export function runPortalClient(
     },
     Intl,
     navigator: { clipboard: { writeText: async () => {} } },
-    window: { addEventListener() {} },
+    window: {
+      addEventListener() {},
+      confirm(message: string) {
+        confirmation.messages.push(message)
+        return confirmation.accepted
+      },
+    },
   })
 }

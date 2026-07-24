@@ -11,17 +11,28 @@ export function bindTokenSafetyActions(): void {
     let copyGeneration = 0
     let copyPending = false
     let pageHidden = false
+    let tokenAcknowledged = false
 
     region.addEventListener("token-safety-reset", () => {
       copyGeneration += 1
+      tokenAcknowledged = false
+      region.removeAttribute("data-token-safety-acknowledged")
       copyButton.disabled = pageHidden || copyPending
       error.hidden = true
       feedback.hidden = true
     })
 
+    window.addEventListener("beforeunload", (event) => {
+      if (tokenAcknowledged || output.textContent === "") return
+      event.preventDefault()
+      event.returnValue = ""
+    })
+
     window.addEventListener("pagehide", () => {
       pageHidden = true
       copyGeneration += 1
+      tokenAcknowledged = false
+      region.removeAttribute("data-token-safety-acknowledged")
       output.textContent = ""
       copyButton.disabled = true
       error.hidden = true
@@ -36,6 +47,8 @@ export function bindTokenSafetyActions(): void {
       try {
         await navigator.clipboard.writeText(output.textContent)
         if (requestGeneration !== copyGeneration) return
+        tokenAcknowledged = true
+        region.setAttribute("data-token-safety-acknowledged", "")
         error.hidden = true
         feedback.hidden = false
       } catch (copyError) {

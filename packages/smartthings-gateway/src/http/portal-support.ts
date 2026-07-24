@@ -1,6 +1,10 @@
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import { portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
+import {
+  portalSharedStyles,
+  renderPortalEmailLink,
+  renderPortalNavigation,
+} from "./portal-shell.js"
 
 function escapeHtml(value: string): string {
   return value
@@ -13,7 +17,12 @@ function escapeHtml(value: string): string {
 
 export function renderPortalSupport(access: OAuthAccessPolicy): string {
   const operatorName = escapeHtml(access.operatorName)
-  const supportEmail = escapeHtml(access.supportEmail)
+  const supportEmailAction = renderPortalEmailLink(access.supportEmail, {
+    className: "action action-primary",
+    label: "이메일 문의하기",
+    supportEmailAction: true,
+  })
+  const supportEmailLink = renderPortalEmailLink(access.supportEmail)
   const accessBoundary =
     access.mode === "private_beta"
       ? "보안 사고, 약관 위반 또는 운영상 필요한 경우 비공개 베타 초대나 접근을 회수할 수 있습니다."
@@ -28,7 +37,7 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
         <h1>민감정보 없이 문제를 알려주세요</h1>
         <p class="support-summary">연결 문제, 토큰 노출 의심, 개인정보 요청과 보안 신고를 아래 지원 이메일로 접수합니다. 아직 공개 응답시간과 본인 확인 절차는 확정되지 않았습니다.</p>
         <div class="action-row support-actions">
-          <a class="action action-primary" href="mailto:${supportEmail}" data-support-email-action>이메일 문의하기</a>
+          ${supportEmailAction}
         </div>
       </header>
       <section aria-labelledby="support-topics-title">
@@ -66,7 +75,7 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
         <h2 id="support-contact-title">운영자와 문의</h2>
         <dl>
           <div><dt>운영자</dt><dd>${operatorName}</dd></div>
-          <div><dt>지원 이메일</dt><dd><a href="mailto:${supportEmail}">${supportEmail}</a></dd></div>
+          <div><dt>지원 이메일</dt><dd>${supportEmailLink}</dd></div>
         </dl>
       </section>
     </article>`,

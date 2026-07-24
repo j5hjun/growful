@@ -25,7 +25,11 @@ describe("Growful portal shell", () => {
     expect(response.body).toContain('<nav aria-label="보조 메뉴">')
     expect(response.body).toContain('href="/privacy" aria-current="page"')
     expect(response.body).toContain(publicOAuthAccess.operatorName)
-    expect(response.body).toContain(`href="mailto:${publicOAuthAccess.supportEmail}"`)
+    expect(response.body).toContain(
+      `<!--email_off--><a href="mailto:${publicOAuthAccess.supportEmail}">${publicOAuthAccess.supportEmail}</a><!--/email_off-->`,
+    )
+    expect(response.body).not.toContain("/cdn-cgi/l/email-protection")
+    expect(response.body).not.toContain("[email protected]")
 
     const primaryNavigation = response.body.match(/<nav class="site-nav"[\s\S]*?<\/nav>/u)?.[0]
     expect(primaryNavigation).toContain("서비스 안내")

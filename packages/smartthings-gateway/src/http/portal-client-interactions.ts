@@ -13,6 +13,21 @@ export function bindPortalInteractions(
   let rotationSubmitted = false
   let tokenGeneration = 0
 
+  function confirmRotatedTokenDiscard(): boolean {
+    if (
+      elements.rotatedTokenSection.hidden ||
+      elements.rotatedTokenOutput.textContent === "" ||
+      elements.rotatedTokenSection.hasAttribute("data-token-safety-acknowledged")
+    ) {
+      return true
+    }
+    const discard = window.confirm(
+      "새 Growful 토큰을 복사하거나 안전한 곳에 저장했는지 아직 확인되지 않았습니다. 이 화면을 떠나면 토큰을 다시 볼 수 없습니다. 그래도 계속할까요?",
+    )
+    if (!discard) elements.rotatedTokenOutput.focus()
+    return discard
+  }
+
   function clearRotatedToken(): void {
     elements.rotatedTokenSection.dispatchEvent(new Event("token-safety-reset"))
     elements.rotatedTokenOutput.textContent = ""
@@ -66,11 +81,18 @@ export function bindPortalInteractions(
     }
     switch (error.status) {
       case 401:
-        resetToTokenEntry("토큰이 교체되었거나 만료되었습니다. 새 Growful 토큰을 입력하세요.")
+        resetToTokenEntry(
+          "입력한 Growful 토큰이 올바르지 않거나 이미 교체 또는 회수되었습니다. 현재 유효한 토큰을 입력하세요.",
+        )
         break
       case 404:
-      case 503:
         resetToDisconnected("연결된 SmartThings 설치를 찾을 수 없습니다.")
+        break
+      case 503:
+        view.showError(
+          "Growful 관리 서비스를 일시적으로 사용할 수 없습니다. 연결은 삭제되지 않았습니다. 잠시 후 상태를 다시 확인하세요.",
+        )
+        view.setActionState("unavailable")
         break
       case 429:
         view.showError("요청이 너무 많습니다. 잠시 후 다시 확인하세요.")
@@ -97,11 +119,12 @@ export function bindPortalInteractions(
       elements.tokenInput.focus()
       return
     }
+    if (!confirmRotatedTokenDiscard()) return
     if (enteredToken !== "") growfulToken = enteredToken
     const requestGeneration = ++tokenGeneration
+    const statusWasHidden = elements.statusSection.hidden
     elements.tokenInput.removeAttribute("aria-invalid")
     elements.statusSection.hidden = true
-    clearRotatedToken()
     view.clearMessages()
     view.setActionState("loading")
     elements.tokenForm.setAttribute("aria-busy", "true")
@@ -112,12 +135,16 @@ export function bindPortalInteractions(
       }
       if (requestGeneration !== tokenGeneration) return
       elements.tokenInput.value = ""
+      clearRotatedToken()
       view.renderStatus(connection)
       view.showFeedback("연결 상태를 확인했습니다.")
     } catch (error) {
       if (!(error instanceof Error) && (typeof error !== "object" || error === null)) throw error
       if (requestGeneration !== tokenGeneration) return
       handleRequestError(error)
+      if (error instanceof contracts.PortalRequestError && error.status === 503) {
+        elements.statusSection.hidden = statusWasHidden
+      }
       if (enteredToken !== "" && growfulToken !== "") elements.tokenInput.value = enteredToken
     } finally {
       elements.tokenForm.removeAttribute("aria-busy")
@@ -136,6 +163,7 @@ export function bindPortalInteractions(
     elements.tokenInput.focus()
   })
   elements.forgetTokenButton.addEventListener("click", () => {
+    if (!confirmRotatedTokenDiscard()) return
     tokenGeneration += 1
     growfulToken = ""
     elements.tokenInput.value = ""
@@ -173,6 +201,7 @@ export function bindPortalInteractions(
       if (!contracts.isRotation(rotation)) throw new contracts.PortalRequestError(502)
       if (requestGeneration !== tokenGeneration) return
       growfulToken = rotation.growfulToken
+      elements.rotatedTokenSection.dispatchEvent(new Event("token-safety-reset"))
       elements.rotatedTokenOutput.textContent = rotation.growfulToken
       elements.rotatedTokenFeedback.hidden = true
       elements.rotatedTokenError.hidden = true
@@ -193,6 +222,7 @@ export function bindPortalInteractions(
   })
 
   elements.returnStatusButton.addEventListener("click", () => {
+    if (!confirmRotatedTokenDiscard()) return
     clearRotatedToken()
     elements.statusSection.hidden = false
     elements.statusSection.focus()
