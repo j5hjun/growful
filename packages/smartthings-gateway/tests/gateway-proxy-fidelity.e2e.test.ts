@@ -119,6 +119,31 @@ describe("SmartThings API passthrough fidelity", () => {
     expect(response.headers["content-type"]).toBeUndefined()
   })
 
+  it("passes through an upstream HTML body without applying the user page shell", async () => {
+    // Given
+    const fixture = createGatewayProxyFixture({ api, apps })
+    const upstreamBody = "<html><body>SmartThings upstream response</body></html>"
+    api.enqueueResponse({
+      body: Buffer.from(upstreamBody),
+      headers: { "content-type": "text/html; charset=utf-8" },
+      statusCode: 502,
+    })
+
+    // When
+    const response = await fixture.app.inject({
+      headers: { authorization: gatewayAuthorization },
+      method: "GET",
+      url: "/v1/devices",
+    })
+
+    // Then
+    expect(response.statusCode).toBe(502)
+    expect(response.headers["content-type"]).toBe("text/html; charset=utf-8")
+    expect(response.body).toBe(upstreamBody)
+    expect(response.body).not.toContain("data-page-shell")
+    expect(response.body).not.toContain('id="main-content"')
+  })
+
   it("forwards a GET request body byte for byte", async () => {
     // Given
     const fixture = createGatewayProxyFixture({ api, apps })

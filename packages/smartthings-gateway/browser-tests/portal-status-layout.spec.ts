@@ -235,7 +235,6 @@ for (const actionCase of actionCases) {
       expect(lastAction.y).toBeCloseTo(firstAction.y, 0)
       expect(firstAction.height).toBeGreaterThanOrEqual(44)
       expect(lastAction.height).toBeGreaterThanOrEqual(44)
-      expect(lastAction.y + lastAction.height).toBeLessThanOrEqual(900)
 
       // When
       await page.keyboard.press("Tab")
@@ -251,6 +250,12 @@ for (const actionCase of actionCases) {
       await expect(actions.nth(0)).toHaveCSS("outline-style", "solid")
       await page.keyboard.press("Tab")
       await expect(actions.nth(1)).toBeFocused()
+      const focusedAction = await actions.nth(1).evaluate((element) => {
+        const bounds = element.getBoundingClientRect()
+        return { bottom: bounds.bottom, top: bounds.top, viewportHeight: window.innerHeight }
+      })
+      expect(focusedAction.top).toBeGreaterThanOrEqual(0)
+      expect(focusedAction.bottom).toBeLessThanOrEqual(focusedAction.viewportHeight)
       await page.keyboard.press("Tab")
       await expect(page.locator('a[href="/readyz"]')).toBeFocused()
     } finally {

@@ -1,10 +1,6 @@
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import {
-  portalSharedStyles,
-  renderPortalEmailLink,
-  renderPortalNavigation,
-} from "./portal-shell.js"
+import { portalSharedStyles, renderPortalEmailLink } from "./portal-shell.js"
 import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 function escapeHtml(value: string): string {
@@ -35,16 +31,15 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
 
   return renderGatewayPage({
     body: `
-    ${renderPortalNavigation("support")}
     <article class="support-document" data-support-document>
-      <header>
+      <div class="page-title">
         <p class="eyebrow">지원 안내</p>
         <h1>민감정보 없이 문제를 알려주세요</h1>
         <p class="support-summary">연결 문제, 토큰 노출 의심, 개인정보 요청과 보안 신고를 아래 지원 이메일로 접수합니다. 아직 목표 응답시간과 본인 확인 절차는 확정되지 않았습니다.</p>
         <div class="action-row support-actions">
           ${supportEmailAction}
         </div>
-      </header>
+      </div>
       <section aria-labelledby="support-topics-title">
         <h2 id="support-topics-title">문의할 수 있는 내용</h2>
         <dl class="support-topics">
@@ -92,12 +87,17 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
       "Growful SmartThings Gateway 연결, 토큰 노출, 개인정보와 보안 문제를 민감정보 없이 문의하는 방법입니다.",
     layout: "manage",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
+    shell: {
+      currentPage: "support",
+      operatorName: access.operatorName,
+      supportEmail: access.supportEmail,
+      variant: "standard",
+    },
     styles: `${portalSharedStyles}
-    .support-document { padding-top: var(--space-8); }
-    .support-document header { padding-bottom: var(--space-6); border-bottom: 1px solid var(--border); }
+    .support-document > .page-title { border-bottom: 1px solid var(--border); }
     .support-summary { max-width: var(--panel-manage); margin-bottom: 0; font-size: var(--font-h2); }
     .support-actions { margin-top: var(--space-6); }
-    .support-document section { padding: var(--space-6) 0; border-bottom: 1px solid var(--border); }
+    .support-document section { padding: var(--section-gap) 0; border-bottom: 1px solid var(--border); }
     .support-document section:last-child { border-bottom: 0; padding-bottom: 0; }
     .support-document section h2 { margin: 0 0 var(--space-4); }
     .support-document section p:last-child, .support-document section ol:last-child { margin-bottom: 0; }
@@ -106,11 +106,11 @@ export function renderPortalSupport(access: OAuthAccessPolicy): string {
     .support-topics dt { font-weight: var(--weight-bold); }
     .support-topics dd { margin: 0; color: var(--text-muted); }
     .support-document ol { display: grid; gap: var(--space-2); padding-left: var(--space-6); color: var(--text-muted); }
-    .token-recovery { margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .token-recovery { margin-bottom: var(--space-6); padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .token-recovery h3 { margin: 0 0 var(--space-3); }
     .token-recovery p { margin-bottom: var(--space-3); }
     .token-recovery .action { width: 100%; }
-    .warning { margin: var(--space-6) 0 0; padding: var(--space-4); border-left: 1px solid var(--error); background: var(--surface-subtle); }
+    .warning { margin: var(--space-6) 0 0; padding: var(--card-padding); border-left: 1px solid var(--error); background: var(--surface-subtle); }
     .warning p { margin-bottom: 0; }
     .support-contact dl { display: grid; gap: var(--space-3); margin: 0; }
     .support-contact dl div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-4); }

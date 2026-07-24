@@ -127,6 +127,11 @@ for (const viewport of viewports) {
       }))
       expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
       expect(await findSplitKoreanWords(page)).toEqual([])
+      if (viewport.name === "mobile-320" && colorScheme === "light") {
+        for (let step = 0; step < 4; step += 1) await page.keyboard.press("Shift+Tab")
+        await expect(page.getByRole("link", { name: "본문 바로가기" })).toBeFocused()
+        await page.locator("#selection-error-summary").focus()
+      }
       await page.keyboard.press("Tab")
       await expect(page.locator('input[name="deviceRange"][value="all"]')).toBeFocused()
     })

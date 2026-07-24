@@ -1,4 +1,14 @@
 const [baseUrl, state, sensitiveValue] = process.argv.slice(2)
+const legacySensitiveDataGuidance = "OAuth code, state 또는 토큰을 보내지 마세요."
+const standardizedSensitiveDataGuidance = [
+  "보내지 마세요:",
+  "주소창 전체 주소",
+  "승인 과정의 임시 코드·상태값",
+  "Growful 토큰",
+  "SmartThings 연결 토큰",
+  "비밀번호",
+  "원본 계정·설치 식별자",
+]
 
 function requireContract(condition, failure) {
   if (!condition) throw new Error(`rollback OAuth callback contract failed: ${failure}`)
@@ -21,6 +31,16 @@ function hasOnlySource(contentSecurityPolicyDirectives, directiveName, expectedS
     matchingDirectives[0]?.length === 2 &&
     matchingDirectives[0][1] === expectedSource
   )
+}
+
+function hasStandardizedSensitiveDataGuidance(body) {
+  let searchFrom = 0
+  for (const requiredGuidance of standardizedSensitiveDataGuidance) {
+    const guidanceIndex = body.indexOf(requiredGuidance, searchFrom)
+    if (guidanceIndex === -1) return false
+    searchFrom = guidanceIndex + requiredGuidance.length
+  }
+  return true
 }
 
 async function verifyRollbackOAuthCallback() {
@@ -98,7 +118,7 @@ async function verifyRollbackOAuthCallback() {
   requireContract(body.includes('href="/"'), "missing service guidance action")
   requireContract(body.includes('href="/support"'), "missing support action")
   requireContract(
-    body.includes("OAuth code, state 또는 토큰을 보내지 마세요."),
+    body.includes(legacySensitiveDataGuidance) || hasStandardizedSensitiveDataGuidance(body),
     "missing sensitive-data guidance",
   )
   requireContract(!/<meta\b[^>]*\bhttp-equiv\b/i.test(body), "unexpected meta directive")

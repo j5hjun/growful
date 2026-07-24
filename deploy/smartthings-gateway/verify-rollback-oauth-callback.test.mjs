@@ -7,6 +7,16 @@ import { fileURLToPath } from "node:url"
 const verifier = fileURLToPath(new URL("./verify-rollback-oauth-callback.mjs", import.meta.url))
 const state = "oauth-state-sensitive-sentinel"
 const secret = "oauth-secret-sensitive-sentinel"
+const legacySensitiveDataGuidance = "OAuth code, state 또는 토큰을 보내지 마세요."
+const standardizedSensitiveDataGuidance = [
+  "보내지 마세요:",
+  "주소창 전체 주소",
+  "승인 과정의 임시 코드·상태값",
+  "Growful 토큰",
+  "SmartThings 연결 토큰",
+  "비밀번호",
+  "원본 계정·설치 식별자",
+]
 const safeBody = `<!doctype html>
 <html lang="ko">
   <body>
@@ -14,9 +24,15 @@ const safeBody = `<!doctype html>
     <a href="/oauth/start">OAuth 다시 시작</a>
     <a href="/">서비스 안내</a>
     <a href="/support">지원 안내</a>
-    <p>OAuth code, state 또는 토큰을 보내지 마세요.</p>
+    <p>${legacySensitiveDataGuidance}</p>
   </body>
 </html>`
+const standardizedSafeBody = safeBody.replace(
+  `<p>${legacySensitiveDataGuidance}</p>`,
+  `<p><strong>${standardizedSensitiveDataGuidance[0]}</strong> ${standardizedSensitiveDataGuidance
+    .slice(1)
+    .join(", ")}</p>`,
+)
 const safeHeaders = {
   "cache-control": "no-store",
   "content-security-policy":
@@ -68,9 +84,35 @@ function runVerifier() {
   })
 }
 
-test("accepts the safe rollback OAuth recovery response", async () => {
-  response = { body: safeBody, headers: safeHeaders, status: 400 }
-  assert.equal(await runVerifier(), 0)
+test("accepts both adjacent safe rollback OAuth recovery guidance contracts", async () => {
+  for (const body of [safeBody, standardizedSafeBody]) {
+    response = { body, headers: safeHeaders, status: 400 }
+    assert.equal(await runVerifier(), 0)
+  }
+})
+
+test("rejects every incomplete standardized sensitive-data guidance category", async () => {
+  for (const requiredGuidance of standardizedSensitiveDataGuidance) {
+    response = {
+      body: standardizedSafeBody.replace(requiredGuidance, ""),
+      headers: safeHeaders,
+      status: 400,
+    }
+    assert.equal(
+      await runVerifier(),
+      1,
+      `accepted standardized guidance without ${requiredGuidance}`,
+    )
+  }
+})
+
+test("rejects an approximate but non-exact legacy sensitive-data warning", async () => {
+  response = {
+    body: safeBody.replace(legacySensitiveDataGuidance, "OAuth code 또는 토큰을 보내지 마세요."),
+    headers: safeHeaders,
+    status: 400,
+  }
+  assert.equal(await runVerifier(), 1)
 })
 
 test("rejects the legacy JSON callback response", async () => {

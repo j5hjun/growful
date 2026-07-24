@@ -4,7 +4,10 @@ import { renderGatewayPage } from "./oauth-page.js"
 export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
   return renderGatewayPage({
     body: `
-    <h1>SmartThings 연결 완료</h1>
+    <div class="page-title">
+      <h1>SmartThings 연결 완료</h1>
+      <p>Growful 토큰을 복사해 안전하게 저장한 뒤 다음 단계로 이동하세요.</p>
+    </div>
     <section aria-labelledby="growful-token-title" data-token-safety>
       <h2 id="growful-token-title">Growful 토큰</h2>
       <p><span class="phrase">이 페이지를 떠나면 토큰을 다시 볼 수 없습니다.</span> 복사하거나 안전한 곳에 저장했는지 확인하기 전에는 <span class="phrase">페이지를 닫거나 이동하지 마세요.</span> <span class="phrase">분실하면 SmartThings 연결을 다시 완료해야 합니다.</span> 같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다. 별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다. <span class="phrase">이 Gateway에 보내는 요청에는 Bearer 토큰으로 사용하세요.</span></p>
@@ -28,8 +31,9 @@ Authorization: Bearer &lt;Growful 토큰&gt;</code></pre>
     <script src="/token-safety.js" defer></script>`,
     description:
       "SmartThings 연결이 완료되어 Growful 토큰을 한 번 표시하고 Gateway의 SmartThings API 중계 사용법을 안내합니다.",
+    shell: { sensitiveNavigation: true, variant: "task" },
     styles: `
-    section { margin-top: var(--space-6); }
+    section { margin-top: var(--section-gap); }
     h2 { margin: 0 0 var(--space-3); font-size: var(--font-body); line-height: var(--line-body); }
     textarea[data-token-value] { display: block; width: 100%; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface); color: var(--text); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-body); line-height: var(--line-body); overflow-wrap: anywhere; resize: none; }
     textarea[data-token-value]:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
@@ -38,7 +42,7 @@ Authorization: Bearer &lt;Growful 토큰&gt;</code></pre>
     .copy-feedback { color: var(--success); }
     .copy-error { color: var(--error); }
     .actions { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
-    .api-quickstart { padding-top: var(--space-6); border-top: 1px solid var(--border); }
+    .api-quickstart { padding-top: var(--section-gap); border-top: 1px solid var(--border); }
     .api-quickstart p { margin-bottom: var(--space-3); }
     .api-request-example { margin: 0 0 var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); color: var(--text); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-small); line-height: var(--line-body); white-space: pre-wrap; overflow-wrap: anywhere; }
     .api-quickstart .api-token-safety { margin-bottom: 0; }

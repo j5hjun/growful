@@ -173,6 +173,17 @@ test("OAuth completion warns before navigation until the one-time token is copie
   })
   await page.goto("https://growful.test/oauth")
   const output = page.locator("[data-growful-token]")
+  const headerServiceLink = page.getByRole("link", { name: "토큰 저장 후 서비스 안내" })
+
+  await expect(headerServiceLink).not.toHaveAttribute("target", "_blank")
+  page.once("dialog", async (dialog) => {
+    expect(dialog.type()).toBe("beforeunload")
+    await dialog.dismiss()
+  })
+  await headerServiceLink.click()
+
+  await expect(page).toHaveURL("https://growful.test/oauth")
+  await expect(output).toHaveText(tokenA)
 
   page.once("dialog", async (dialog) => {
     expect(dialog.type()).toBe("beforeunload")

@@ -34,11 +34,15 @@ for (const width of [320, 375]) {
     await expect(page.locator('[role="alert"]')).toHaveCount(0)
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("연결을 시작하지 못했습니다")
     await expect(page.getByRole("heading", { level: 2 })).toHaveText("다음 행동")
-    await expect(page.getByRole("link", { name: "권한 선택 다시 시작" })).toBeVisible()
-    await expect(page.getByRole("link", { name: "서비스 안내" })).toBeVisible()
+    const recovery = page.getByRole("navigation", { name: "연결 시작 복구" })
+    await expect(recovery.getByRole("link", { name: "권한 선택 다시 시작" })).toBeVisible()
+    await expect(recovery.getByRole("link", { name: "서비스 안내" })).toBeVisible()
     await expect(page.getByRole("link", { name: "지원 안내" })).toBeVisible()
+    for (let step = 0; step < 4; step += 1) await page.keyboard.press("Shift+Tab")
+    await expect(page.getByRole("link", { name: "본문 바로가기" })).toBeFocused()
+    await page.locator(".error-summary").focus()
     await page.keyboard.press("Tab")
-    await expect(page.getByRole("link", { name: "권한 선택 다시 시작" })).toBeFocused()
+    await expect(recovery.getByRole("link", { name: "권한 선택 다시 시작" })).toBeFocused()
     const dimensions = await page.locator("html").evaluate((html) => ({
       clientWidth: html.clientWidth,
       scrollWidth: html.scrollWidth,
@@ -85,10 +89,11 @@ test("forced colors preserve the OAuth start primary action boundary", async ({ 
   // Then
   await expect(page.locator("time")).toHaveCount(0)
   await expect(page.getByText("잠시 후 권한 선택을 다시 시작할 수 있습니다.")).toBeVisible()
-  const primaryAction = page.getByRole("link", { name: "서비스 안내" })
+  const recovery = page.getByRole("navigation", { name: "연결 시작 복구" })
+  const primaryAction = recovery.getByRole("link", { name: "서비스 안내" })
   await expect(primaryAction).toHaveCSS("border-top-style", "solid")
   await expect(primaryAction).toHaveCSS("border-top-width", "2px")
   await page.keyboard.press("Tab")
   await expect(primaryAction).toBeFocused()
-  await expect(page.getByRole("link", { name: "권한 선택 다시 시작" })).toHaveClass("secondary")
+  await expect(recovery.getByRole("link", { name: "권한 선택 다시 시작" })).toHaveClass("secondary")
 })

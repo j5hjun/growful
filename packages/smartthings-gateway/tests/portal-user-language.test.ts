@@ -185,7 +185,7 @@ describe("portal user language", () => {
       ...Object.values(oauthCallbackResultKinds).map((kind) => renderOAuthCallbackResult(kind)),
       renderPrivateBetaAccessGuidance({ kind: "authentication_failed" }),
       renderPrivateBetaAccessGuidance({ kind: "rate_limited", retryAfterSeconds: 60 }),
-      renderPortalNotFound(),
+      renderPortalNotFound(publicOAuthAccess),
       renderPortalManagement(publicOAuthAccess),
       renderPortalStatus("ready", noIncidents, publicOAuthAccess),
       renderPortalSupport(publicOAuthAccess),

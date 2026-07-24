@@ -249,7 +249,7 @@ for (const mode of modes) {
           )
           await expectNoHorizontalOverflow(page, `${mode.name} ${path} at ${width}px`)
           await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1)
-          await expect(page.locator(".portal-page-shell")).toHaveCount(1)
+          await expect(page.locator("[data-page-shell]")).toHaveCount(1)
           await expect(page.locator(".site-footer")).toHaveCount(1)
         }
 

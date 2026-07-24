@@ -79,9 +79,11 @@ export function renderOAuthCallbackResult(kind: OAuthCallbackResultKind): string
   const copy = resultCopy[kind]
   return renderGatewayPage({
     body: `
-    <p class="result-label">${copy.label}</p>
-    <h1>${"heading" in copy ? copy.heading : copy.title}</h1>
-    <p>${copy.explanation}</p>
+    <div class="page-title">
+      <p class="result-label">${copy.label}</p>
+      <h1>${"heading" in copy ? copy.heading : copy.title}</h1>
+      <p>${copy.explanation}</p>
+    </div>
     <section aria-labelledby="recovery-title">
       <h2 id="recovery-title">다음 단계</h2>
       <div class="actions">
@@ -96,7 +98,7 @@ export function renderOAuthCallbackResult(kind: OAuthCallbackResultKind): string
     description: copy.description,
     styles: `
     .result-label { margin-bottom: var(--space-3); color: var(--error); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); }
-    section { margin-top: var(--space-8); padding-top: var(--space-6); border-top: 1px solid var(--border); }
+    section { padding-top: var(--section-gap); border-top: 1px solid var(--border); }
     h2 { margin: 0 0 var(--space-4); }
     .actions { display: grid; gap: var(--space-3); }
     .primary, .secondary { display: inline-flex; width: 100%; min-height: var(--action-height); align-items: center; justify-content: center; padding: var(--space-3) var(--space-4); border-radius: var(--radius-action); font: inherit; font-weight: var(--weight-bold); line-height: var(--line-action); text-align: center; text-decoration: none; }
@@ -105,7 +107,7 @@ export function renderOAuthCallbackResult(kind: OAuthCallbackResultKind): string
     .primary:hover { background: var(--action-hover); }
     .primary:active, .secondary:active { transform: scale(var(--pressed-scale)); }
     .primary:focus-visible, .secondary:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
-    .support-note { margin: var(--space-6) 0 0; padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
+    .support-note { margin: var(--section-gap) 0 0; padding: var(--card-padding); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
     .support-note p { margin-bottom: var(--space-3); }
     .support-note p:last-child { margin-bottom: 0; }
     .support-note .phrase { white-space: normal; }

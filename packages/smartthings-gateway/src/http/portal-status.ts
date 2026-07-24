@@ -6,7 +6,7 @@ import type {
 } from "../status/service-status.js"
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import { portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
+import { portalSharedStyles } from "./portal-shell.js"
 import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 type StatusPresentation = {
@@ -149,13 +149,12 @@ export function renderPortalStatus(
 
   return renderGatewayPage({
     body: `
-    ${renderPortalNavigation("status")}
     <article class="status-document" data-status-document data-service-status="${status}">
-      <header>
+      <div class="page-title">
         <p class="eyebrow">SmartThings Gateway</p>
         <h1>Growful Gateway 상태</h1>
         <p class="status-summary">${presentation.summary}</p>
-      </header>
+      </div>
       <section class="current-status" aria-labelledby="current-status-title" data-status-section="current">
         <div>
           <h2 id="current-status-title">현재 Gateway 준비 상태</h2>
@@ -182,12 +181,12 @@ export function renderPortalStatus(
       ${renderIncidentHistory(incidentHistory)}
       <section aria-labelledby="status-scope-title" data-status-section="scope">
         <h2 id="status-scope-title">판정과 공지 범위</h2>
-        <p>필수 내부 검사가 통과한 경우에만 <strong>Gateway 준비됨</strong>으로 표시합니다. 자동 확인에는 <a href="/readyz">기계용 Gateway 준비 상태 응답</a>을 사용하세요.</p>
+        <p>필수 내부 검사가 통과한 경우에만 <strong>Gateway 준비됨</strong>으로 표시합니다. 자동 확인에는 <a class="touch-link" href="/readyz">기계용 Gateway 준비 상태 응답</a>을 사용하세요.</p>
         <p>공개 가동률 보장 목표와 목표 수치는 아직 확정되지 않았습니다. 이 이력은 운영자가 등록한 공지이며 자동 장애 탐지나 개별 사용자 통지를 보장하지 않습니다.</p>
       </section>
       <section aria-labelledby="status-help-title" data-status-section="support">
         <h2 id="status-help-title">지원</h2>
-        <p><a href="/manage">연결 관리</a>에서 자신의 연결 상태를 먼저 확인하세요. 자세한 문의 방법은 <a href="/support">지원 안내</a>에서 확인할 수 있습니다.</p>
+        <p><a class="touch-link" href="/manage">연결 관리</a>에서 자신의 연결 상태를 먼저 확인하세요. 자세한 문의 방법은 <a class="touch-link" href="/support">지원 안내</a>에서 확인할 수 있습니다.</p>
         ${renderSupportSafetyGuidance()}
       </section>
     </article>`,
@@ -195,11 +194,16 @@ export function renderPortalStatus(
       "Growful Gateway의 내부 준비 상태, 운영자 장애 공지, SmartThings 서비스 자체의 상태를 검사하지 않는 범위를 확인합니다.",
     layout: "manage",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
+    shell: {
+      currentPage: "status",
+      operatorName: access.operatorName,
+      supportEmail: access.supportEmail,
+      variant: "standard",
+    },
     styles: `${portalSharedStyles}
-    .status-document { padding-top: var(--space-8); }
-    .status-document header { padding-bottom: var(--space-6); border-bottom: 1px solid var(--border); }
+    .status-document > .page-title { border-bottom: 1px solid var(--border); }
     .status-summary { max-width: var(--panel-manage); margin-bottom: 0; font-size: var(--font-h2); }
-    .status-document section { padding: var(--space-6) 0; border-bottom: 1px solid var(--border); }
+    .status-document section { padding: var(--section-gap) 0; border-bottom: 1px solid var(--border); }
     .status-document section:last-child { border-bottom: 0; padding-bottom: 0; }
     .status-document section h2 { margin: 0 0 var(--space-4); }
     .status-document section p:last-child { margin-bottom: 0; }
@@ -208,7 +212,7 @@ export function renderPortalStatus(
     .current-status h2 { margin-bottom: var(--space-3); }
     .status-context { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
     .status-context > * { min-width: 0; }
-    .status-boundary { min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .status-boundary { min-width: 0; padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .status-boundary h2 { font-size: var(--font-body); }
     .status-boundary dl { display: grid; gap: var(--space-3); margin: 0; }
     .status-boundary dl div { display: grid; gap: var(--space-2); }
@@ -226,7 +230,7 @@ export function renderPortalStatus(
     .status-label-ready { color: var(--success); }
     .status-label-unavailable { color: var(--error); }
     .incident-list { display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
-    .incident-list li { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); }
+    .incident-list li { padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-field); }
     .incident-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
     .incident-heading h3 { margin: 0; }
     .incident-label { margin-bottom: var(--space-2); color: var(--error); font-size: var(--font-small); font-weight: var(--weight-bold); }
@@ -242,11 +246,9 @@ export function renderPortalStatus(
       .incident-heading, .status-check dl div { grid-template-columns: 1fr; gap: var(--space-2); }
     }
     @media (max-width: 20rem) {
-      .status-document { min-width: 0; padding-top: var(--space-6); }
-      .status-document header { padding-bottom: var(--space-3); }
+      .status-document { min-width: 0; }
       .status-document .current-status { padding-top: var(--space-3); }
       .status-context { gap: var(--space-3); }
-      .status-boundary { padding: var(--space-3); }
       .status-boundary h2 { margin-bottom: var(--space-3); }
       .status-boundary dl { gap: var(--space-2); }
       .status-check .action-row { flex-direction: row; gap: var(--space-2); }

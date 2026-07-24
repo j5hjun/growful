@@ -149,18 +149,29 @@ test("management keeps token checking ahead of lost-token recovery at 320px", as
         Boolean(panel.compareDocumentPosition(recovery) & Node.DOCUMENT_POSITION_FOLLOWING),
     }
   })
-  const inputBox = await input.boundingBox()
-  const submitBox = await submit.boundingBox()
   const panelBox = await panel.boundingBox()
   const recoveryBox = await recovery.boundingBox()
+  const targetBoxes = await page
+    .locator(
+      "#growful-token, [data-token-visibility], [data-token-submit], [data-token-loss-reconnect]",
+    )
+    .evaluateAll((targets) =>
+      targets.map((target) => {
+        const bounds = target.getBoundingClientRect()
+        return { height: bounds.height, width: bounds.width }
+      }),
+    )
 
   // Then
   expect(layout.recoveryFollowsPanel).toBe(true)
-  if (inputBox === null || submitBox === null || panelBox === null || recoveryBox === null) {
+  if (panelBox === null || recoveryBox === null) {
     throw new Error("Management priority controls have a missing layout box at 320px")
   }
-  expect(inputBox.y + inputBox.height).toBeLessThanOrEqual(720)
-  expect(submitBox.y + submitBox.height).toBeLessThanOrEqual(720)
+  expect(targetBoxes).toHaveLength(4)
+  for (const targetBox of targetBoxes) {
+    expect(targetBox.height).toBeGreaterThanOrEqual(44)
+    expect(targetBox.width).toBeGreaterThanOrEqual(44)
+  }
   expect(recoveryBox.y).toBeGreaterThanOrEqual(panelBox.y + panelBox.height)
   await expect(reconnect).toHaveClass(/action-secondary/)
   await expect(reconnect).not.toHaveClass(/action-primary/)
@@ -182,8 +193,15 @@ test("management keeps token checking ahead of lost-token recovery at 320px", as
   await expect(reveal).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(submit).toBeFocused()
+  const focusedSubmit = await submit.evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    return { bottom: bounds.bottom, top: bounds.top, viewportHeight: window.innerHeight }
+  })
+  expect(focusedSubmit.top).toBeGreaterThanOrEqual(0)
+  expect(focusedSubmit.bottom).toBeLessThanOrEqual(focusedSubmit.viewportHeight)
   await page.keyboard.press("Tab")
   await expect(reconnect).toBeFocused()
+  await expect(reconnect).toBeInViewport()
 })
 
 test("active management actions precede the maximum readable scope list at 375px", async ({
@@ -400,6 +418,10 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   // Then
   const oauthCopy = page.locator("[data-copy-token]")
   const manageAction = page.locator("[data-action=manage-issued-token]")
+  await expect(page.getByRole("link", { name: "본문 바로가기" })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(page.locator("main#main-content")).toBeFocused()
+  await page.keyboard.press("Tab")
   await expect(oauthCopy).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(manageAction).toBeFocused()
