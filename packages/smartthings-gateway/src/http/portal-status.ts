@@ -204,6 +204,7 @@ export function renderPortalStatus(
     .status-document section h2 { margin: 0 0 var(--space-4); }
     .status-document section p:last-child { margin-bottom: 0; }
     .current-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
+    .current-status > * { min-width: 0; }
     .current-status h2 { margin-bottom: var(--space-3); }
     .status-context { display: grid; gap: var(--space-4); }
     .status-boundary { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
@@ -235,10 +236,11 @@ export function renderPortalStatus(
     .incident-list li > p { margin: var(--space-4) 0 0; white-space: pre-wrap; }
     .status-document a { color: var(--text); }
     @media (max-width: 30rem) {
-      .current-status, .incident-heading, .status-check dl div { grid-template-columns: 1fr; gap: var(--space-2); }
+      .current-status { grid-template-columns: minmax(0, 1fr); }
+      .incident-heading, .status-check dl div { grid-template-columns: 1fr; gap: var(--space-2); }
     }
     @media (max-width: 20rem) {
-      .status-document { width: calc(100% - 1px); min-width: 0; padding-top: var(--space-6); }
+      .status-document { min-width: 0; padding-top: var(--space-6); }
       .status-document header { padding-bottom: var(--space-3); }
       .status-document .current-status { padding-top: var(--space-3); }
       .status-context { gap: var(--space-3); }
