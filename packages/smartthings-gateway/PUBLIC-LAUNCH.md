@@ -41,6 +41,40 @@ SmartThings에 제출할 질문과 현재 증빙은
 [데이터 보존·파기 대장](./DATA-RETENTION.md)에서 관리합니다. 세 문서는 승인·운영·훈련 증빙이
 완료되지 않은 초안이며, 문서 존재 자체를 출시 통과로 간주하지 않습니다.
 
+## 공개 출시 readiness 승인 계약
+
+현재 계약 revision은 package root의 한 줄
+`public-launch-readiness-contract-version.txt`이며 형식은
+`smartthings-public-launch-readiness-v<양의 정수>`와 마지막 LF 하나입니다. 같은 파일을
+runtime image와 production release artifact에 포함해 runtime과 preflight가 동일한 바이트
+원본을 읽습니다.
+`SERVICE_ACCESS_MODE=public`은 SmartThings 서면 확인 reference/date만으로 기동하거나
+production preflight를 통과하지 않습니다. 운영 환경의
+`PUBLIC_LAUNCH_READINESS_ACK`가 이 revision과 byte-for-byte로 정확히 일치해야 합니다.
+공백, `true`, 부분 문자열, 접두사·접미사, 임의 문자열과 이전 revision은 승인으로 해석하지
+않습니다. `private_beta`에서는 이 키가 없거나 비어 있거나 이전 값이어도 영향을 받지 않습니다.
+
+이 ACK는 secret, 운영자 신원, SLA, 긴급 연락 절차 또는 SmartThings 승인 원문이 아닙니다.
+코드가 그런 사실값을 만들어내거나 검증했다는 뜻도 아닙니다. 운영자가 다음 코드 밖 준비 사항을
+실제 기록과 증빙으로 확인했다는 명시적 배포 승인입니다.
+
+- 이 문서 1~5단계의 차단 항목과 SmartThings가 요구한 계약·검토·테스트·사전 통지가 해결됨
+- 운영자·개인정보 담당자·지원 정보, 처리위탁·처리지역, 보존·삭제와 법률 검토 사실값이 확정됨
+- 본인 확인·지원 응답 목표·보안 사고 및 SmartThings 긴급 통지 절차가 승인되고 실제 운영
+  기록·훈련 증빙이 보관됨
+- 공개 모드의 abuse 대응, 용량·비용·가용성 통제와 공개 HTTPS/API/브라우저 검증 결과가 보관됨
+
+현재 문서에 미해결로 표시된 항목이 남아 있는 동안에는 ACK를 설정하거나 공개 모드로 전환하지
+않습니다. 필수 확인 항목, 승인 범위 또는 위 의미가 바뀌면 코드의 revision을 올리고 새
+revision 기준으로 다시 확인합니다. 일반 구현 변경이나 release commit SHA만으로 revision을
+바꾸지 않습니다. 이 안정성은 같은 운영 `.env`를 사용하는 정상 배포와 rollback이 매 commit마다
+막히는 것을 방지합니다. 공개 상태의 vN→vN+1 bump는 명시적인 public rollback 경계입니다.
+구버전 runtime은 live `.env`의 vN+1 ACK를 exact match로 거부해 자동 rollback이 실패할 수
+있습니다. rollback 과정에서 ACK를 자동 rewrite하거나 revision 목록·접두사를 허용해 승인의
+의미를 희석하지 않습니다. bump 전에는 maintenance 또는 `private_beta` 전환, 혹은 별도 rollback
+계획을 검토·검증하고, 호환성이 증명되지 않으면 `private_beta`를 유지합니다. 현재
+`private_beta` 배포에는 영향이 없습니다.
+
 ## 확인된 현재 데이터 흐름
 
 | 구간 | 처리 내용 | 현재 보존 |
@@ -105,6 +139,8 @@ SmartThings에 제출할 질문과 현재 증빙은
 - 운영자명과 지원 연락처를 타입 검증하고 정책 URL은 callback과 같은 origin의 내장 경로로 고정합니다.
 - `public` 모드는 SmartThings 서면 확인 참조번호와 확인일이 없으면 시작·배포 preflight를
   실패시킵니다.
+- `public` 모드는 현재 공개 출시 readiness 계약 revision에 대한 exact ACK도 없으면 시작·배포
+  preflight를 실패시킵니다.
 - 비공개 베타는 이름만 베타인 공개 가입이 되지 않도록 실제 초대 또는 허용 목록으로
   `/oauth/start`를 보호합니다.
 

@@ -44,7 +44,23 @@ function resolveFileBackedSecrets(environment: NodeJS.ProcessEnv): NodeJS.Proces
   return resolvedEnvironment
 }
 
+const publicLaunchReadinessContractVersionFile = readFileSync(
+  new URL("../public-launch-readiness-contract-version.txt", import.meta.url),
+  "utf8",
+)
+if (
+  !/^smartthings-public-launch-readiness-v[1-9][0-9]*\n$/u.test(
+    publicLaunchReadinessContractVersionFile,
+  )
+) {
+  throw new Error("public launch readiness contract version file is malformed")
+}
+
 const smartThingsApiUrl = "https://api.smartthings.com"
+export const publicLaunchReadinessRevision = publicLaunchReadinessContractVersionFile.replace(
+  /\n$/u,
+  "",
+)
 export const servicePolicyRevision = "2026-07-22"
 const smartThingsAuthorizationUrls = [
   "https://api.smartthings.com/oauth/authorize",
@@ -67,6 +83,7 @@ const environmentSchema = z.object({
   OAUTH_REDIRECT_URI: z.url(),
   PRIVATE_BETA_INVITES_JSON: z.string().optional(),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8_100),
+  PUBLIC_LAUNCH_READINESS_ACK: z.string().optional(),
   PUBLIC_OPERATOR_NAME: z.string().optional(),
   PUBLIC_SUPPORT_EMAIL: z.string().optional(),
   REFRESH_BEFORE_EXPIRY_SECONDS: z.coerce.number().int().positive().default(3_600),
@@ -95,6 +112,7 @@ const disclosureSchema = z.object({
 })
 
 const publicAccessSchema = z.object({
+  PUBLIC_LAUNCH_READINESS_ACK: z.literal(publicLaunchReadinessRevision),
   SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: z.string().trim().min(1).max(500),
   SMARTTHINGS_PUBLIC_USE_APPROVED_AT: z.iso.date(),
 })

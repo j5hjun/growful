@@ -183,7 +183,13 @@ DATABASE_URL=postgresql://... node dist/manage-invites.js revoke USERNAME OPERAT
 살아나지 않게 합니다. 따라서 회수 직후 기존 Basic 자격 증명과 Growful 토큰은 모두 거부됩니다.
 운영자 ID와 ticket은 원문을 저장하지 않고 SHA-256 hash로 감사 체인에 기록합니다. CLI 입력의
 실제 운영자 귀속은 개별 SSH 계정과 session audit로 별도 증명해야 합니다. 공개 모드는
-운영자·지원 연락처와 SmartThings 공개 사용 서면 확인 정보를 모두 검증한 설정에서만 기동합니다.
+운영자·지원 연락처, SmartThings 공개 사용 서면 확인 정보와 현재 공개 출시 readiness 계약의
+exact 승인을 모두 검증한 설정에서만 기동합니다. 현재 계약 revision과 환경의
+`PUBLIC_LAUNCH_READINESS_ACK`는 package root의
+`public-launch-readiness-contract-version.txt` 한 줄과 정확히 일치해야 합니다. 이 값은
+secret이 아니라 [공개 출시 계획](./PUBLIC-LAUNCH.md)의 코드 밖 준비 사항이 실제 증빙으로
+해결됐음을 배포 직전에 확인하는 게이트입니다. 일반 release SHA마다 바꾸지 않고 계약의 필수
+확인 항목이나 의미가 달라질 때 canonical revision과 운영 값을 함께 갱신합니다.
 개인정보 처리방침과 이용약관 URL은 OAuth callback과 같은 origin의 `/privacy`, `/terms`로
 Gateway가 직접 제공하며 별도 환경변수를 읽지 않습니다.
 지원 절차는 `/support`에서 제공하며 Growful·SmartThings 토큰 원문, OAuth code, 비밀번호나

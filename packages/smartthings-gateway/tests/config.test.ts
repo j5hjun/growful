@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { loadConfig } from "../src/config.js"
+import { loadConfig, publicLaunchReadinessRevision } from "../src/config.js"
 
 const requiredEnvironment = {
   DATABASE_URL: "postgresql://gateway:password@postgres:5432/gateway",
@@ -18,7 +18,22 @@ const requiredEnvironment = {
   TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
 }
 
+const publicEnvironment = {
+  ...requiredEnvironment,
+  PRIVATE_BETA_INVITES_JSON: undefined,
+  PUBLIC_LAUNCH_READINESS_ACK: publicLaunchReadinessRevision,
+  SERVICE_ACCESS_MODE: "public",
+  SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: "smartthings-case-123",
+  SMARTTHINGS_PUBLIC_USE_APPROVED_AT: "2026-07-22",
+}
+
 describe("loadConfig", () => {
+  it("loads the stable canonical public launch readiness contract version", () => {
+    expect(publicLaunchReadinessRevision).toMatch(
+      /^smartthings-public-launch-readiness-v[1-9][0-9]*$/u,
+    )
+  })
+
   it("parses runtime configuration without shared Gateway tokens", () => {
     // Given
     const environment = { ...requiredEnvironment }
@@ -86,13 +101,7 @@ describe("loadConfig", () => {
 
   it("changes policy identity with service mode and approval facts", () => {
     const privatePolicyVersion = loadConfig(requiredEnvironment).serviceAccess.policyVersion
-    const publicPolicyVersion = loadConfig({
-      ...requiredEnvironment,
-      PRIVATE_BETA_INVITES_JSON: undefined,
-      SERVICE_ACCESS_MODE: "public",
-      SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: "smartthings-case-123",
-      SMARTTHINGS_PUBLIC_USE_APPROVED_AT: "2026-07-22",
-    }).serviceAccess.policyVersion
+    const publicPolicyVersion = loadConfig(publicEnvironment).serviceAccess.policyVersion
 
     expect(publicPolicyVersion).not.toBe(privatePolicyVersion)
   })
@@ -131,16 +140,22 @@ describe("loadConfig", () => {
     ).toThrow()
   })
 
-  it("parses public mode only with operator, policy, and SmartThings approval facts", () => {
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["stale", "smartthings-public-launch-readiness-v0"],
+  ])("keeps private beta unaffected by a %s readiness acknowledgement", (_label, value) => {
     const config = loadConfig({
       ...requiredEnvironment,
-      PRIVATE_BETA_INVITES_JSON: undefined,
-      PUBLIC_OPERATOR_NAME: "Growful",
-      PUBLIC_SUPPORT_EMAIL: "support@growful.click",
-      SERVICE_ACCESS_MODE: "public",
-      SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: "smartthings-case-123",
-      SMARTTHINGS_PUBLIC_USE_APPROVED_AT: "2026-07-22",
+      PUBLIC_LAUNCH_READINESS_ACK: value,
     })
+
+    expect(config.serviceAccess.mode).toBe("private_beta")
+    expect(config.serviceAccess).not.toHaveProperty("publicLaunchReadinessAck")
+  })
+
+  it("parses public mode only with the exact current readiness acknowledgement", () => {
+    const config = loadConfig(publicEnvironment)
 
     expect(config.serviceAccess).toEqual({
       mode: "public",
@@ -155,16 +170,26 @@ describe("loadConfig", () => {
   })
 
   it("rejects public mode when approval facts are missing", () => {
-    const publicEnvironment = {
-      ...requiredEnvironment,
-      PUBLIC_OPERATOR_NAME: "Growful",
-      PUBLIC_SUPPORT_EMAIL: "support@growful.click",
-      SERVICE_ACCESS_MODE: "public",
-      SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: "smartthings-case-123",
-      SMARTTHINGS_PUBLIC_USE_APPROVED_AT: "2026-07-22",
-    }
     expect(() =>
       loadConfig({ ...publicEnvironment, SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE: undefined }),
+    ).toThrow()
+  })
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["boolean-like", "true"],
+    ["arbitrary", "approved"],
+    ["stale", "smartthings-public-launch-readiness-v0"],
+    ["prefix", `${publicLaunchReadinessRevision}-extra`],
+    ["leading whitespace", ` ${publicLaunchReadinessRevision}`],
+    ["trailing whitespace", `${publicLaunchReadinessRevision} `],
+  ])("rejects public mode with a %s readiness acknowledgement", (_label, value) => {
+    expect(() =>
+      loadConfig({
+        ...publicEnvironment,
+        PUBLIC_LAUNCH_READINESS_ACK: value,
+      }),
     ).toThrow()
   })
 })

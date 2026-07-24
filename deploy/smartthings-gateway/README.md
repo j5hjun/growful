@@ -97,13 +97,38 @@ unset gateway_container
 각 작업은 해시된 운영자 ID와 ticket으로 감사 체인에 남습니다.
 
 두 모드 모두 다음 운영자·지원 값을 요구하며 OAuth 시작 전에 사용자에게 표시하고
-명시적 동의를 받습니다. 공개 모드는 SmartThings 서면 확인 값도 추가로 요구합니다. 값의
-존재는 서면 확인 자체를 대신하지 않으므로 원본 답변과 법률 검토 기록을 별도로 보관합니다.
+명시적 동의를 받습니다. 공개 모드는 SmartThings 서면 확인 값과 공개 출시 readiness 승인도
+추가로 요구합니다. 값의 존재는 서면 확인이나 출시 준비 자체를 대신하지 않으므로 원본 답변,
+법률 검토와 운영 증빙을 별도로 보관합니다.
 
 - `PUBLIC_OPERATOR_NAME`
 - `PUBLIC_SUPPORT_EMAIL`
 - `SMARTTHINGS_PUBLIC_USE_APPROVAL_REFERENCE` (공개 모드만)
 - `SMARTTHINGS_PUBLIC_USE_APPROVED_AT` (`YYYY-MM-DD`, 공개 모드만)
+- `PUBLIC_LAUNCH_READINESS_ACK` (공개 모드만, 아래 canonical 파일의 한 줄과 exact match)
+
+현재 revision의 단일 소스는 package와 release artifact에 함께 들어가는 한 줄 파일
+`public-launch-readiness-contract-version.txt`입니다. 형식은
+`smartthings-public-launch-readiness-v<양의 정수>`와 마지막 LF 하나이며, runtime과 preflight가
+같은 파일을 읽습니다. 파일 누락·빈 값·여러 줄·공백 오염은 preflight를 실패시킵니다.
+
+`PUBLIC_LAUNCH_READINESS_ACK`는 secret이나 외부 승인 reference가 아닙니다. 운영자가
+[공개 출시 계획](../../packages/smartthings-gateway/PUBLIC-LAUNCH.md)의 현재 revision에 묶인
+코드 밖 준비 사항을 실제 증빙으로 모두 확인한 직후, 공개 전환 배치에서만 exact 값을
+설정합니다. 공백, `true`, 부분 문자열, 접두사·접미사, 임의 문자열과 이전 revision은 runtime과
+preflight에서 모두 거부됩니다. `private_beta`에서는 이 키가 없거나 비어 있거나 이전 값이어도
+배포와 기동에 영향을 주지 않습니다.
+
+필수 증빙 목록이나 승인 의미가 바뀌면 코드의 readiness 계약 revision을 올리고 운영 값을
+다시 확인해 갱신합니다. 일반 코드 변경이나 release SHA마다 revision을 바꾸지 않습니다.
+운영 `.env`는 candidate와 rollback 이미지가 공유하므로, 공개 상태에서 revision을 올리는 배치는
+명시적인 public rollback 경계입니다. vN runtime은 live `.env`의 vN+1 ACK를 exact match로
+거부하므로 자동 rollback이 health를 회복하지 못할 수 있습니다. 이를 피하려고 rollback
+환경에서 ACK를 자동으로 다시 쓰거나 여러 revision·접두사를 허용하지 않습니다. revision bump
+전에는 maintenance 또는 `private_beta` 전환, 혹은 승인을 보존하는 별도 rollback 계획을
+검토·검증해야 합니다. 현재 pre-gate image는 새 키를 무시하고 같은 contract revision의 gated
+release끼리는 값을 공유하므로 rollback이 유지됩니다. 현재 비공개 베타 배치와 version-skew
+검사는 ACK가 없거나 stale인 공유 `.env`에서도 정상 deploy/rollback이 가능함을 검증합니다.
 
 개인정보 처리방침과 이용약관은 `OAUTH_REDIRECT_URI`와 같은 origin의 `/privacy`, `/terms`에서
 Gateway가 직접 제공합니다. 별도 정책 URL 환경변수는 사용하지 않습니다. 운영자·지원 값 또는
