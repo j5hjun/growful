@@ -8,7 +8,7 @@ import { renderPortalManagement } from "./portal-manage.js"
 import { renderPortalNotFound } from "./portal-not-found.js"
 import { renderPortalPolicy } from "./portal-policy.js"
 import { type PortalPageName, renderPortalFooter } from "./portal-shell.js"
-import { renderPortalStatus } from "./portal-status.js"
+import { type PortalStatusIncidentHistory, renderPortalStatus } from "./portal-status.js"
 import { renderPortalSupport } from "./portal-support.js"
 
 const sharedContentSecurityPolicy =
@@ -138,14 +138,26 @@ export function registerPortalRoutes(
       access,
     ),
   )
-  app.get("/status", async (_request, reply) => {
-    const checkedAt = new Date()
+  app.get("/status", async (request, reply) => {
     const readinessStatus = await readinessProbe.check()
-    const incidents =
-      readinessStatus === "ready" ? await serviceStatusSource.listPublicIncidents() : null
+    let incidentHistory: PortalStatusIncidentHistory
+    if (readinessStatus === "unavailable") {
+      incidentHistory = { state: "skipped" }
+    } else {
+      try {
+        incidentHistory = {
+          incidents: await serviceStatusSource.listPublicIncidents(),
+          state: "available",
+        }
+      } catch {
+        request.log.warn("portal.status.incident_history_retrieval_failed")
+        incidentHistory = { state: "retrieval-failed" }
+      }
+    }
+    const respondedAt = new Date()
     return sendPortalPage(
       reply,
-      renderPortalStatus(readinessStatus, incidents, access, checkedAt),
+      renderPortalStatus(readinessStatus, incidentHistory, access, respondedAt),
       sharedContentSecurityPolicy,
       "status",
       access,

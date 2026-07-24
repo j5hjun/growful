@@ -16,15 +16,15 @@ type StatusPresentation = {
 
 const statusPresentations = {
   ready: {
-    label: "정상",
-    summary: "현재 Gateway 프로세스와 필수 저장소가 일반 요청을 처리할 준비가 되었습니다.",
-    title: "Gateway가 요청을 처리할 수 있습니다",
+    label: "Gateway 준비됨",
+    summary: "현재 Growful Gateway가 요청을 처리하는 데 필요한 내부 준비를 마쳤습니다.",
+    title: "Gateway 내부 준비 검사를 통과했습니다",
   },
   unavailable: {
-    label: "이용 불가",
+    label: "Gateway 준비 안 됨",
     summary:
-      "현재 일반 요청을 처리할 준비가 되지 않았습니다. 복구 예상 시간은 아직 제공하지 않습니다.",
-    title: "Gateway 준비 상태를 확인해 주세요",
+      "현재 Growful Gateway가 요청을 처리하는 데 필요한 내부 준비를 마치지 못했습니다. 복구 예상 시간은 아직 제공하지 않습니다.",
+    title: "Gateway 내부 준비 검사를 통과하지 못했습니다",
   },
 } as const satisfies Record<ReadinessStatus, StatusPresentation>
 
@@ -86,54 +86,102 @@ function renderIncidentList(
     .join("")}</ol>`
 }
 
+export type PortalStatusIncidentHistory =
+  | {
+      readonly incidents: readonly PublicServiceIncident[]
+      readonly state: "available"
+    }
+  | {
+      readonly state: "retrieval-failed"
+    }
+  | {
+      readonly state: "skipped"
+    }
+
+function renderIncidentHistory(history: PortalStatusIncidentHistory): string {
+  if (history.state === "skipped") {
+    return `<section class="incident-history" aria-labelledby="incident-history-title" data-incident-history data-incident-history-state="skipped" data-status-section="incidents-skipped">
+        <h2 id="incident-history-title">장애 공지</h2>
+        <p data-incident-history-skipped>Gateway 내부 준비 검사가 통과되지 않아 이번 요청에서는 공지 이력을 조회하지 않았습니다. 공지 이력 조회 실패와는 별개의 상태입니다.</p>
+      </section>`
+  }
+  if (history.state === "retrieval-failed") {
+    return `<section class="incident-history" aria-labelledby="incident-history-title" data-incident-history data-incident-history-state="retrieval-failed" data-status-section="incidents-retrieval-failed">
+        <h2 id="incident-history-title">장애 공지</h2>
+        <p data-incident-history-retrieval-failed>공지 이력을 불러오지 못했습니다. Gateway 준비 상태와는 별개의 문제입니다. 잠시 후 다시 확인하세요.</p>
+      </section>`
+  }
+
+  const activeIncidents = history.incidents.filter((incident) => incident.status !== "resolved")
+  const resolvedIncidents = history.incidents.filter((incident) => incident.status === "resolved")
+  return `<section class="incident-history" aria-labelledby="active-incidents-title" data-incident-history data-incident-history-state="available" data-status-section="active-incidents">
+        <h2 id="active-incidents-title">진행 중인 장애</h2>
+        ${renderIncidentList(activeIncidents, "data-incident-empty", "진행 중인 장애가 없습니다.")}
+      </section>
+      <section class="incident-history" aria-labelledby="resolved-incidents-title" data-status-section="resolved-incidents">
+        <h2 id="resolved-incidents-title">해결 이력</h2>
+        ${renderIncidentList(
+          resolvedIncidents,
+          "data-resolved-incident-empty",
+          "등록된 해결 이력이 없습니다.",
+        )}
+      </section>`
+}
+
+function renderStatusActions(status: ReadinessStatus): string {
+  const refreshAction = `<a class="action ${status === "unavailable" ? "action-primary" : "action-secondary"}" href="/status" data-action="refresh-status">다시 확인</a>`
+  const connectionAction = `<a class="action ${status === "ready" ? "action-primary" : "action-secondary"}" href="/manage" data-action="check-connection">내 연결 확인</a>`
+  return status === "ready"
+    ? `${connectionAction}
+              ${refreshAction}`
+    : `${refreshAction}
+              ${connectionAction}`
+}
+
 export function renderPortalStatus(
   status: ReadinessStatus,
-  incidents: readonly PublicServiceIncident[] | null,
+  incidentHistory: PortalStatusIncidentHistory,
   access: OAuthAccessPolicy,
-  checkedAt: Date = new Date(),
+  respondedAt: Date = new Date(),
 ): string {
   const presentation = statusPresentations[status]
-  const activeIncidents = incidents?.filter((incident) => incident.status !== "resolved") ?? null
-  const resolvedIncidents = incidents?.filter((incident) => incident.status === "resolved") ?? null
-  const historyUnavailable =
-    "<p data-incident-history-unavailable>현재 readiness 장애로 공지 이력을 불러올 수 없습니다.</p>"
 
   return renderGatewayPage({
     body: `
     ${renderPortalNavigation("status")}
     <article class="status-document" data-status-document data-service-status="${status}">
       <header>
-        <p class="eyebrow">서비스 상태</p>
-        <h1>Growful readiness</h1>
+        <p class="eyebrow">SmartThings Gateway</p>
+        <h1>Growful Gateway 상태</h1>
         <p class="status-summary">${presentation.summary}</p>
       </header>
       <section class="current-status" aria-labelledby="current-status-title" data-status-section="current">
         <div>
-          <h2 id="current-status-title">현재 준비 상태</h2>
+          <h2 id="current-status-title">현재 Gateway 준비 상태</h2>
           <p class="status-label status-label-${status}">${presentation.label}</p>
           <p class="status-title"><span class="phrase">${presentation.title}</span></p>
         </div>
-        <div class="status-check">
-          <p>이 결과는 페이지를 연 시점의 Gateway readiness 검사입니다.</p>
-          <dl><div><dt>마지막 확인 시각</dt><dd><time datetime="${checkedAt.toISOString()}">${formatKoreanDateTime(checkedAt)}</time></dd></div></dl>
-          <div class="action-row">
-            <a class="action action-secondary" href="/status" data-action="refresh-status">다시 확인</a>
-            <a class="action action-secondary" href="/manage" data-action="check-connection">내 연결 확인</a>
+        <div class="status-context">
+          <aside class="status-boundary" aria-labelledby="status-boundary-title" data-status-boundary>
+            <h2 id="status-boundary-title">Gateway 상태만으로 SmartThings 정상 여부를 알 수 없습니다</h2>
+            <dl>
+              <div><dt>이 신호가 확인함</dt><dd>Gateway 실행·저장소 응답, 최근 감사 기록 검사 결과</dd></div>
+              <div><dt>이 신호가 확인하지 않음</dt><dd>SmartThings 서비스 자체의 상태, 개별 연결, 삼성 계정, 실제 SmartThings API 요청의 성공 여부</dd></div>
+            </dl>
+          </aside>
+          <div class="status-check">
+            <div class="action-row">
+              ${renderStatusActions(status)}
+            </div>
+            <p>이 결과는 현재 페이지 응답을 위한 Gateway 내부 준비 상태입니다.</p>
+            <dl><div><dt>페이지 응답 확인 시각</dt><dd><time datetime="${respondedAt.toISOString()}">${formatKoreanDateTime(respondedAt)}</time></dd></div></dl>
           </div>
         </div>
       </section>
-      <section class="incident-history" aria-labelledby="active-incidents-title" data-incident-history data-status-section="active-incidents">
-        <h2 id="active-incidents-title">진행 중인 장애</h2>
-        ${activeIncidents === null ? historyUnavailable : renderIncidentList(activeIncidents, "data-incident-empty", "진행 중인 장애가 없습니다.")}
-      </section>
-      <section class="incident-history" aria-labelledby="resolved-incidents-title" data-status-section="resolved-incidents">
-        <h2 id="resolved-incidents-title">해결 이력</h2>
-        ${resolvedIncidents === null ? historyUnavailable : renderIncidentList(resolvedIncidents, "data-resolved-incident-empty", "등록된 해결 이력이 없습니다.")}
-      </section>
+      ${renderIncidentHistory(incidentHistory)}
       <section aria-labelledby="status-scope-title" data-status-section="scope">
-        <h2 id="status-scope-title">검사 범위</h2>
-        <p>Gateway 프로세스가 실행 중이고 데이터베이스 질의와 감사 체인 검사를 통과했는지를 나타냅니다. 자동 확인에는 <a href="/readyz">기계용 readiness 응답</a>을 사용하세요.</p>
-        <p><strong>SmartThings 외부 종단은 <span class="phrase">검사하지 않습니다.</span></strong> 개별 SmartThings 연결, 삼성 계정, SmartThings API의 지역별 상태나 종단 간 성공 여부를 이 신호로 확인하거나 SmartThings 상태를 추정하지 않습니다.</p>
+        <h2 id="status-scope-title">판정과 공지 범위</h2>
+        <p>필수 내부 검사가 통과한 경우에만 <strong>Gateway 준비됨</strong>으로 표시합니다. 자동 확인에는 <a href="/readyz">기계용 Gateway 준비 상태 응답</a>을 사용하세요.</p>
         <p>공개 SLA와 가동률 목표는 아직 확정되지 않았습니다. 이 이력은 운영자가 등록한 공지이며 자동 장애 탐지나 개별 사용자 통지를 보장하지 않습니다.</p>
       </section>
       <section aria-labelledby="status-help-title" data-status-section="support">
@@ -142,7 +190,7 @@ export function renderPortalStatus(
       </section>
     </article>`,
     description:
-      "Growful SmartThings Gateway의 현재 준비 상태와 상태 신호가 의미하는 범위를 확인합니다.",
+      "Growful Gateway의 내부 준비 상태, 운영자 장애 공지, SmartThings 서비스 자체의 상태를 검사하지 않는 범위를 확인합니다.",
     layout: "manage",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
     styles: `${portalSharedStyles}
@@ -155,9 +203,17 @@ export function renderPortalStatus(
     .status-document section p:last-child { margin-bottom: 0; }
     .current-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
     .current-status h2 { margin-bottom: var(--space-3); }
+    .status-context { display: grid; gap: var(--space-4); }
+    .status-boundary { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .status-boundary h2 { font-size: var(--font-body); }
+    .status-boundary dl { display: grid; gap: var(--space-3); margin: 0; }
+    .status-boundary dl div { display: grid; gap: var(--space-2); }
+    .status-boundary dt { color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); }
+    .status-boundary dd { margin: 0; color: var(--text-muted); line-height: var(--line-body); }
     .status-title { margin-bottom: 0; color: var(--text); font-size: var(--font-h2); font-weight: var(--weight-bold); line-height: var(--line-heading); }
-    .status-check p { margin-bottom: var(--space-4); }
-    .status-check dl { margin: 0 0 var(--space-4); }
+    .status-check { display: grid; gap: var(--space-3); }
+    .status-check p { margin: 0; }
+    .status-check dl { margin: 0; }
     .status-check dl div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-3); }
     .status-check dt { color: var(--text-muted); font-size: var(--font-small); }
     .status-check dd { margin: 0; font-size: var(--font-small); }
@@ -178,7 +234,21 @@ export function renderPortalStatus(
     .status-document a { color: var(--text); }
     @media (max-width: 30rem) {
       .current-status, .incident-heading, .status-check dl div { grid-template-columns: 1fr; gap: var(--space-2); }
+    }
+    @media (max-width: 20rem) {
+      .status-document { padding-top: var(--space-6); }
+      .status-document header { padding-bottom: var(--space-3); }
+      .status-document .current-status { padding-top: var(--space-3); }
+      .status-context { gap: var(--space-3); }
+      .status-boundary { padding: var(--space-3); }
+      .status-boundary h2 { margin-bottom: var(--space-3); }
+      .status-boundary dl { gap: var(--space-2); }
+      .status-check .action-row { flex-direction: row; gap: var(--space-2); }
+      .status-check .action { width: auto; min-width: 0; flex: 1 1 0; padding-inline: var(--space-2); }
+    }
+    @media (forced-colors: active) {
+      .status-boundary, .status-label { border: 2px solid CanvasText; }
     }`,
-    title: "서비스 상태 · Growful SmartThings Gateway",
+    title: "Gateway 상태 · Growful SmartThings Gateway",
   })
 }
