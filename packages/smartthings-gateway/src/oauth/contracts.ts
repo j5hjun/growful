@@ -36,13 +36,21 @@ export type StoredTokens = {
   readonly accessToken: string
   readonly expiresAt: Date
   readonly installedAppId: InstalledAppId
+  readonly lastRefreshError: string | null
   readonly lastRefreshedAt: Date | null
   readonly refreshToken: string
   readonly scopes: readonly string[]
   readonly tokenType: string
 }
 
+export const SMARTTHINGS_REAUTHORIZATION_REQUIRED = "smartthings.oauth.reauthorization_required"
+
+export type AuthorizationHealth =
+  | { readonly status: "active" }
+  | { readonly status: "reauthorization_required" }
+
 export type ConnectionStatus = {
+  readonly authorizationHealth: AuthorizationHealth
   readonly connected: true
   readonly expiresAt: string
   readonly grantedScopes: readonly string[]

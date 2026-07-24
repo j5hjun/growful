@@ -62,6 +62,7 @@ describe("SmartThings API rate-limit backoff", () => {
         accessToken: "rate-limit-isolated-access-token",
         expiresAt: new Date("2026-07-23T00:00:00.000Z"),
         installedAppId: InstalledAppIdSchema.parse("rate-limit-isolated-installed-app"),
+        lastRefreshError: null,
         lastRefreshedAt: null,
         refreshToken: "rate-limit-isolated-refresh-token",
         scopes: ["r:devices:*"],

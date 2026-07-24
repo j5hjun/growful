@@ -11,6 +11,7 @@ export class FakeSmartThingsClient implements SmartThingsClient {
   readonly refreshedTokens: string[] = []
 
   exchangeError: Error | null = null
+  refreshError: Error | null = null
 
   exchangeGrant: TokenGrant = {
     accessToken: "initial-access-token",
@@ -47,6 +48,9 @@ export class FakeSmartThingsClient implements SmartThingsClient {
 
   async refresh(refreshToken: string): Promise<TokenGrant> {
     this.refreshedTokens.push(refreshToken)
+    if (this.refreshError !== null) {
+      throw this.refreshError
+    }
     return this.refreshGrants.get(refreshToken) ?? this.refreshGrant
   }
 }

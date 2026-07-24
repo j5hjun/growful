@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
+import {
+  RefreshClaimIdSchema,
+  SMARTTHINGS_REAUTHORIZATION_REQUIRED,
+} from "../src/oauth/contracts.js"
 import { hashGrowfulToken } from "../src/security/growful-token.js"
+import { SmartThingsReauthorizationRequiredError } from "../src/smartthings/smartthings-client.js"
 import {
   createOAuthServiceFixture,
   storedTokens,
@@ -68,5 +73,53 @@ describe("OAuth refresh service", () => {
     expect(refreshed).toBe(true)
     expect(fixture.client.refreshedTokens).toEqual([second.refreshToken])
     await expect(fixture.store.getTokens(first.installedAppId)).resolves.toEqual(first)
+  })
+
+  it("persists explicit invalid_grant as terminal and stops due and forced refresh attempts", async () => {
+    const fixture = createOAuthServiceFixture()
+    const tokens = storedTokens(1)
+    fixture.store.seedTokens(tokens, hashGrowfulToken(testGrowfulToken(1)))
+    fixture.client.refreshError = new SmartThingsReauthorizationRequiredError(400)
+
+    const firstResult = await fixture.service.refreshDueConnections()
+    const secondResult = await fixture.service.refreshDueConnections()
+    const forced = await fixture.service.refreshAccessToken(
+      tokens.installedAppId,
+      tokens.accessToken,
+    )
+
+    expect(firstResult).toEqual({
+      failureNames: ["SmartThingsReauthorizationRequiredError"],
+      refreshedCount: 0,
+    })
+    expect(secondResult).toEqual({ failureNames: [], refreshedCount: 0 })
+    expect(forced).toBe(false)
+    expect(fixture.client.refreshedTokens).toEqual([tokens.refreshToken])
+    await expect(fixture.store.getTokens(tokens.installedAppId)).resolves.toMatchObject({
+      lastRefreshError: SMARTTHINGS_REAUTHORIZATION_REQUIRED,
+    })
+  })
+
+  it("keeps a timeout transient, reports active authorization health, and retries after the lease", async () => {
+    const fixture = createOAuthServiceFixture()
+    const tokens = storedTokens(1)
+    const timeout = new Error("request timed out")
+    timeout.name = "TimeoutError"
+    fixture.store.seedTokens(tokens, hashGrowfulToken(testGrowfulToken(1)))
+    fixture.client.refreshError = timeout
+
+    const result = await fixture.service.refreshDueConnections()
+    const status = await fixture.service.getConnectionStatus(tokens.installedAppId)
+    const retried = await fixture.store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000031"),
+      kind: "due",
+      leaseMs: 60_000,
+      now: new Date("2026-07-19T00:01:00.000Z"),
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+
+    expect(result).toEqual({ failureNames: ["TimeoutError"], refreshedCount: 0 })
+    expect(status.authorizationHealth).toEqual({ status: "active" })
+    expect(retried?.installedAppId).toBe(tokens.installedAppId)
   })
 })

@@ -12,8 +12,8 @@ export const portalSharedStyles = `
     .portal-page-shell.page-wide { --page-max: var(--panel-wide); }
     .portal-page-shell > main { width: 100%; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
     .site-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-bottom: var(--space-6); border-bottom: 1px solid var(--border); }
-    .brand { display: inline-flex; min-height: var(--action-height); align-items: center; color: var(--text); font-weight: var(--weight-bold); text-decoration: none; }
-    .brand span { color: var(--text-muted); font-weight: 400; }
+    .brand { display: inline-flex; min-width: 0; min-height: var(--action-height); flex-wrap: wrap; align-items: center; color: var(--text); font-weight: var(--weight-bold); text-decoration: none; }
+    .brand span { min-width: 0; color: var(--text-muted); font-weight: 400; overflow-wrap: anywhere; }
     .nav-list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
     .nav-list a { display: inline-flex; min-height: var(--action-height); align-items: center; padding: 0 var(--space-3); border-radius: var(--radius-action); color: var(--text-muted); font-size: var(--font-small); font-weight: var(--weight-bold); text-decoration: none; }
     .nav-list a[aria-current=page] { background: var(--surface-subtle); color: var(--text); }
@@ -53,6 +53,13 @@ export const portalSharedStyles = `
     }
     @media (max-width: 30rem) { .portal-page-shell { padding: var(--space-6); } }
     @media (max-width: 30rem) { .site-footer .footer-meta > div { grid-template-columns: 1fr; gap: 0; } }
+    @media (max-width: 20rem) {
+      body { padding-inline: var(--space-2); }
+      .portal-page-shell, main { padding: var(--space-3); }
+      .site-nav { gap: var(--space-2); }
+      .nav-list, .footer-nav-list { gap: 0; }
+      .nav-list a, .footer-nav-list a { padding-inline: var(--space-2); }
+    }
     @media (forced-colors: active) { .action-primary, button.primary { border: 2px solid ButtonText; } }
     @media (prefers-reduced-motion: reduce) { .skip-link, .action, button { transition: none; } }`
 

@@ -41,6 +41,7 @@ describe("Growful portal token mutations", () => {
       const authorization = options.headers.authorization.slice("Bearer ".length)
       if (path === "/connection" && options.method === "GET") {
         return response(authorization === serverToken ? 200 : 401, {
+          authorizationHealth: { status: "active" },
           connected: true,
           expiresAt: "2026-07-23T00:00:00.000Z",
           grantedScopes: [],

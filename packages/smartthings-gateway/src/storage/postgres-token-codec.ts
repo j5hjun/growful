@@ -39,6 +39,7 @@ export class PostgresTokenCodec {
       accessToken: decryptSecret(row.accessTokenCiphertext, this.encryptionKey),
       expiresAt: row.expiresAt,
       installedAppId: InstalledAppIdSchema.parse(row.installedAppId),
+      lastRefreshError: row.lastRefreshError,
       lastRefreshedAt: row.lastRefreshedAt,
       refreshToken: decryptSecret(row.refreshTokenCiphertext, this.encryptionKey),
       scopes: SmartThingsGrantedScopeStringSchema.parse(row.scope),

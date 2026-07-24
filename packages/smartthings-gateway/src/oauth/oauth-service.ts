@@ -16,7 +16,7 @@ import type {
   SmartThingsClient,
   StoredTokens,
 } from "./contracts.js"
-import { OAuthStateHashSchema } from "./contracts.js"
+import { OAuthStateHashSchema, SMARTTHINGS_REAUTHORIZATION_REQUIRED } from "./contracts.js"
 import { OAuthRefreshService, type RefreshBatchResult } from "./oauth-refresh-service.js"
 import { ensureOAuthScopesWithin } from "./oauth-scope-policy.js"
 
@@ -259,6 +259,10 @@ export class OAuthService {
 
   private toConnectionStatus(tokens: StoredTokens): ConnectionStatus {
     return {
+      authorizationHealth:
+        tokens.lastRefreshError === SMARTTHINGS_REAUTHORIZATION_REQUIRED
+          ? { status: "reauthorization_required" }
+          : { status: "active" },
       connected: true,
       expiresAt: tokens.expiresAt.toISOString(),
       grantedScopes: tokens.scopes,

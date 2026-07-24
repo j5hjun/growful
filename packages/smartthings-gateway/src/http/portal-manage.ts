@@ -40,7 +40,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       </form>
       <section class="connection-status" data-portal-status aria-labelledby="connection-title" tabindex="-1" hidden>
         <div class="status-heading">
-          <div><p class="status-indicator" data-status-active>API 사용 가능</p><p class="status-indicator status-blocked" data-status-blocked hidden>API 접근 차단</p><h2 id="connection-title">SmartThings 연결 상태</h2></div>
+          <div><p class="status-indicator" data-status-active>API 사용 가능</p><p class="status-indicator status-blocked" data-status-blocked hidden>API 접근 차단</p><p class="status-indicator status-reauthorization" data-status-reauthorization hidden>API 사용 불가 · 다시 연결 필요</p><h2 id="connection-title">SmartThings 연결 상태</h2></div>
           <button class="secondary" type="button" data-forget-token>이 탭에서 토큰 지우기</button>
         </div>
         <dl>
@@ -54,6 +54,12 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
           <p data-block-reason></p>
           <p>차단 적용: <time data-blocked-at></time></p>
           <p>문의할 때 위 지원 참조를 함께 전달해 주세요. ${supportEmailLink}</p>
+        </section>
+        <section class="reauthorization-notice" data-reauthorization-notice role="alert" aria-labelledby="reauthorization-title" hidden>
+          <p class="eyebrow">인증 갱신 필요</p>
+          <h3 id="reauthorization-title">SmartThings 연결을 다시 승인해 주세요</h3>
+          <p>SmartThings 인증이 만료되었거나 회수되어 API 요청을 사용할 수 없습니다. 다시 연결하면 새 Growful 토큰이 발급되고 현재 토큰은 사용할 수 없게 됩니다. 새 토큰으로 소비자 설정을 업데이트하세요.</p>
+          <a class="action action-primary" href="/oauth/start">SmartThings 다시 연결</a>
         </section>
         <section class="scope-section" aria-labelledby="scope-title">
           <h3 id="scope-title">승인된 권한</h3>
@@ -129,9 +135,11 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .status-heading h2, .status-indicator { margin: 0; }
     .status-indicator { color: var(--success); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); }
     .status-blocked { color: var(--error); }
+    .status-reauthorization { color: var(--error); }
     dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-6) 0; }
     dl div { padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); }
     dl .support-entry { grid-column: 1 / -1; }
+    .connection-status dl, .connection-status dl > div, .connection-status dt, .connection-status dd { min-width: 0; }
     dt { color: var(--text-muted); font-size: var(--font-small); }
     dd { margin: var(--space-2) 0 0; font-weight: var(--weight-bold); line-height: var(--line-body); }
     .support-value { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
@@ -142,6 +150,10 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .restricted-notice p { margin-bottom: var(--space-3); }
     .restricted-notice p:last-child { margin-bottom: 0; }
     .restricted-notice a { color: var(--text); font-weight: var(--weight-bold); }
+    .reauthorization-notice { margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--error); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .reauthorization-notice h3 { margin: 0 0 var(--space-3); color: var(--error); font-size: var(--font-body); }
+    .reauthorization-notice p { margin-bottom: var(--space-3); }
+    .reauthorization-notice .action { width: 100%; }
     .scope-section h3 { margin: 0 0 var(--space-3); font-size: var(--font-body); }
     .scope-section ul { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
     .scope-section li { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-small); overflow-wrap: anywhere; }
@@ -171,6 +183,15 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       .token-form { padding: var(--space-4); }
       .token-entry { grid-template-columns: minmax(0, 1fr); }
       .reveal { width: 100%; }
+    }
+    @media (max-width: 20rem) {
+      .token-form { padding: var(--space-3); }
+      .connection-status { margin-inline: var(--space-2); padding-bottom: var(--space-4); }
+      dl { gap: var(--space-2); margin: var(--space-4) 0; }
+      dl div, .restricted-notice, .reauthorization-notice { padding: var(--space-2); }
+      .connection-status dd { word-break: normal; overflow-wrap: anywhere; }
+      button.compact { min-width: 0; }
+      .restricted-notice, .reauthorization-notice { margin-bottom: var(--space-4); }
     }`,
     title: "SmartThings 연결 관리 | Growful",
   })
