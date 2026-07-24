@@ -51,6 +51,13 @@ function expectOAuthFailureSecurity(
 }
 
 function expectOAuthRecoveryPage(response: OAuthStartResponse): void {
+  expect(response.body.match(/class="skip-link"/gu)).toHaveLength(1)
+  expect(response.body.match(/<header(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body.match(/<main(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body.match(/<h1(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body.match(/<footer(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body).toContain('data-header-variant="task"')
+  expect(response.body).toContain('data-body-width="panel"')
   expect(response.body).not.toContain('role="alert"')
   expect(response.body).toContain('aria-labelledby="error-title"')
   expect(response.body).toContain('tabindex="-1" autofocus')

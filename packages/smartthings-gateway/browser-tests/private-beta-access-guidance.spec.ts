@@ -87,6 +87,11 @@ for (const variant of pageVariants) {
             ).toBe(1)
           }
         }
+        const skipLink = page.getByRole("link", { name: "본문 바로가기" })
+        await expect(skipLink).toBeFocused()
+        await page.keyboard.press("Enter")
+        await expect(page.locator("main#main-content")).toBeFocused()
+        await page.keyboard.press("Tab")
         await expect(primaryAction).toBeFocused()
         expect((await primaryAction.boundingBox())?.height).toBeGreaterThanOrEqual(44)
         expect(

@@ -158,6 +158,9 @@ function sendOAuthCallbackResultPage(
       "Content-Security-Policy",
       "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src 'none'; font-src 'none'; connect-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
     )
+    .header("Cross-Origin-Opener-Policy", "same-origin")
+    .header("Cross-Origin-Resource-Policy", "same-origin")
+    .header("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
     .header("Referrer-Policy", "no-referrer")
     .header("X-Content-Type-Options", "nosniff")
     .header("X-Frame-Options", "DENY")
@@ -279,6 +282,7 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
         }
         throw error
       },
+      exposeHeadRoute: false,
     },
     async (request, reply) => {
       try {
@@ -294,7 +298,11 @@ export function registerOAuthRoutes(app: FastifyInstance, options: OAuthRouteOpt
             "Content-Security-Policy",
             "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
           )
+          .header("Cross-Origin-Opener-Policy", "same-origin")
+          .header("Cross-Origin-Resource-Policy", "same-origin")
+          .header("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
           .header("Referrer-Policy", "no-referrer")
+          .header("X-Content-Type-Options", "nosniff")
           .header("X-Frame-Options", "DENY")
           .type("text/html; charset=utf-8")
           .send(renderOAuthCompletion(completion.growfulToken))

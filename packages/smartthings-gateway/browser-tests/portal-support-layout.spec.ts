@@ -63,7 +63,7 @@ test("support keyboard order reaches the primary contact action before static to
   await page.setContent(renderPortalSupport(publicOAuthAccess))
 
   // When
-  for (let index = 0; index < 5; index += 1) await page.keyboard.press("Tab")
+  for (let index = 0; index < 7; index += 1) await page.keyboard.press("Tab")
 
   // Then
   await expect(page.locator("[data-support-email-action]")).toBeFocused()
@@ -128,7 +128,7 @@ test("support content reflows without overflow in the DPR 2 / 640px surrogate", 
   ).toHaveCount(0)
 
   // When
-  for (let index = 0; index < 5; index += 1) await page.keyboard.press("Tab")
+  for (let index = 0; index < 7; index += 1) await page.keyboard.press("Tab")
 
   // Then
   await expect(cta).toBeFocused()

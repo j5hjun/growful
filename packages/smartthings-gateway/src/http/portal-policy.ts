@@ -1,12 +1,7 @@
 import { servicePolicyRevision } from "../config.js"
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import {
-  type PortalPageName,
-  portalSharedStyles,
-  renderPortalEmailLink,
-  renderPortalNavigation,
-} from "./portal-shell.js"
+import { type PortalPageName, portalSharedStyles, renderPortalEmailLink } from "./portal-shell.js"
 
 export type PolicyDocumentName = Extract<PortalPageName, "privacy" | "terms">
 
@@ -110,14 +105,13 @@ export function renderPortalPolicy(
     : `Growful SmartThings Gateway ${access.mode === "private_beta" ? "비공개 베타" : "초대 없이 이용 가능한 공개 접근 모드"}를 안전하게 이용하기 위한 기술적 조건입니다.`
   return renderGatewayPage({
     body: `
-    ${renderPortalNavigation(documentName)}
     <article class="policy-document" data-policy-document="${documentName}">
-      <header>
+      <div class="page-title">
         <p class="eyebrow">정책 문서</p>
         <h1>${title}</h1>
         <p class="policy-summary">${summary}</p>
         <p class="policy-revision">개정일 ${servicePolicyRevision}</p>
-      </header>
+      </div>
       ${isPrivacy ? renderPrivacySections(access.mode) : renderTermsSections(access.mode)}
       <section class="policy-contact" aria-labelledby="policy-contact-title">
         <h2 id="policy-contact-title">${isPrivacy ? "5. " : "6. "}운영자와 문의</h2>
@@ -127,13 +121,18 @@ export function renderPortalPolicy(
     description: summary,
     layout: "manage",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
+    shell: {
+      currentPage: documentName,
+      operatorName: access.operatorName,
+      supportEmail: access.supportEmail,
+      variant: "standard",
+    },
     styles: `${portalSharedStyles}
-    .policy-document { padding-top: var(--space-8); }
-    .policy-document header { padding-bottom: var(--space-6); border-bottom: 1px solid var(--border); }
-    .policy-document header p:last-child { margin-bottom: 0; }
+    .policy-document > .page-title { border-bottom: 1px solid var(--border); }
+    .policy-document > .page-title p:last-child { margin-bottom: 0; }
     .policy-summary { font-size: var(--font-h2); }
     .policy-revision { font-size: var(--font-small); }
-    .policy-document section { padding: var(--space-6) 0; border-bottom: 1px solid var(--border); }
+    .policy-document section { padding: var(--section-gap) 0; border-bottom: 1px solid var(--border); }
     .policy-document section:last-child { border-bottom: 0; padding-bottom: 0; }
     .policy-document section h2 { margin: 0 0 var(--space-4); }
     .policy-document section p:last-child, .policy-document section ul:last-child { margin-bottom: 0; }

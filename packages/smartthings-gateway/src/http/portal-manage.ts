@@ -1,22 +1,17 @@
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import {
-  portalSharedStyles,
-  renderPortalEmailLink,
-  renderPortalNavigation,
-} from "./portal-shell.js"
+import { portalSharedStyles, renderPortalEmailLink } from "./portal-shell.js"
 import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 export function renderPortalManagement(access: OAuthAccessPolicy): string {
   const supportEmailLink = renderPortalEmailLink(access.supportEmail)
   return renderGatewayPage({
     body: `
-    ${renderPortalNavigation("manage")}
-    <header class="manage-header">
+    <div class="manage-header page-title">
       <p class="eyebrow">연결 관리</p>
       <h1><span class="phrase">Growful 토큰으로</span> <span class="phrase">연결 확인</span></h1>
       <p>입력한 Growful 토큰으로 이 Gateway에 연결 상태를 요청합니다. 토큰은 이 탭을 닫거나 새로고침하면 사라지며 <span class="phrase">브라우저에 저장하지 않습니다.</span> SmartThings 연결 토큰은 Gateway가 암호화해 보관·갱신하며 이 화면에 표시하지 않습니다.</p>
-    </header>
+    </div>
     <section class="connection-panel" aria-label="Growful 토큰 연결 상태">
       <form class="token-form" action="/manage#javascript-required" method="get" data-portal-token-form novalidate>
         <div class="token-entry-region">
@@ -119,16 +114,20 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     layout: "manage",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
     scriptSource: "/portal.js",
+    shell: {
+      currentPage: "manage",
+      operatorName: access.operatorName,
+      supportEmail: access.supportEmail,
+      variant: "standard",
+    },
     styles: `${portalSharedStyles}
-    .portal-page-shell.page-manage, main.page-manage { align-self: start; }
-    .manage-header { padding: var(--space-8) 0 var(--space-4); }
     .manage-header p:last-child { margin-bottom: 0; }
-    .token-recovery { margin-top: var(--space-6); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .token-recovery { margin-top: var(--section-gap); padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .token-recovery h2 { margin: 0 0 var(--space-3); font-size: var(--font-body); }
     .token-recovery p:not(.eyebrow) { margin-bottom: var(--space-3); }
     .token-recovery .action { width: 100%; }
-    .connection-panel { margin-top: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); word-break: keep-all; overflow-wrap: normal; }
-    .token-form { display: grid; grid-template-rows: repeat(3, auto); min-block-size: 0; padding: var(--space-6); }
+    .connection-panel { margin-top: var(--section-gap); border-radius: var(--radius-field); background: var(--surface-subtle); word-break: keep-all; overflow-wrap: normal; }
+    .token-form { display: grid; grid-template-rows: repeat(3, auto); min-block-size: 0; padding: var(--card-padding); }
     .token-entry-region > label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-bold); }
     .token-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
     input { width: 100%; min-height: var(--action-height); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); background: var(--surface); color: var(--text); font: inherit; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
@@ -144,15 +143,15 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .no-js-fallback { display: none; font-size: var(--font-small); }
     .no-js-fallback:target { display: block; }
     .connection-status { margin: 0 var(--space-6); padding: var(--space-4) 0 var(--space-6); border-top: 1px solid var(--border); }
-    .credential-output { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border); }
+    .credential-output { margin-top: var(--section-gap); padding-top: var(--section-gap); border-top: 1px solid var(--border); }
     .connection-status:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .status-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
     .status-heading h2, .status-indicator { margin: 0; }
     .status-indicator { color: var(--success); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); }
     .status-blocked { color: var(--error); }
     .status-reauthorization { color: var(--error); }
-    dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-6) 0; }
-    dl div { padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    dl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--section-gap) 0; }
+    dl div { padding: var(--card-padding); border-radius: var(--radius-field); background: var(--surface-subtle); }
     dl .support-entry { grid-column: 1 / -1; }
     .connection-status dl, .connection-status dl > div, .connection-status dt, .connection-status dd { min-width: 0; }
     dt { color: var(--text-muted); font-size: var(--font-small); }
@@ -160,17 +159,17 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .support-value { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
     .support-value output { min-width: 0; overflow-wrap: anywhere; user-select: all; }
     button.compact { width: auto; min-width: max-content; }
-    .restricted-notice { margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--error); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .restricted-notice { margin-bottom: var(--section-gap); padding: var(--card-padding); border: 1px solid var(--error); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .restricted-notice h3 { margin: 0 0 var(--space-3); color: var(--error); font-size: var(--font-body); }
     .restricted-notice p { margin-bottom: var(--space-3); }
     .restricted-notice p:last-child { margin-bottom: 0; }
     .restricted-notice a { color: var(--text); font-weight: var(--weight-bold); }
-    .reauthorization-notice { margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--error); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .reauthorization-notice { margin-bottom: var(--section-gap); padding: var(--card-padding); border: 1px solid var(--error); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .reauthorization-notice h3 { margin: 0 0 var(--space-3); color: var(--error); font-size: var(--font-body); }
     .reauthorization-notice p { margin-bottom: var(--space-3); }
     .reauthorization-notice .action { width: 100%; }
-    .scope-section { margin-top: var(--space-6); }
-    .management-support-safety { margin-top: var(--space-6); padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface); font-size: var(--font-small); }
+    .scope-section { margin-top: var(--section-gap); }
+    .management-support-safety { margin-top: var(--section-gap); padding: var(--card-padding); border-radius: var(--radius-field); background: var(--surface); font-size: var(--font-small); }
     .management-support-safety p { margin-bottom: var(--space-3); }
     .management-support-safety p:last-child { margin-bottom: 0; }
     .management-support-safety a { color: var(--text); }
@@ -180,19 +179,19 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .scope-label { font-weight: var(--weight-bold); }
     .scope-code { color: var(--text-muted); font-size: var(--font-small); }
     .scope-section li[data-scope-kind="unknown"] { border-style: dashed; }
-    .status-actions { margin-top: var(--space-6); }
+    .status-actions { margin-top: var(--section-gap); }
     .connection-action-slot { display: grid; grid-auto-rows: minmax(var(--action-height), auto); gap: var(--space-3); padding-top: var(--space-4); }
     .connection-action-slot > * { width: 100%; }
-    .credential-output output { display: block; margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
+    .credential-output output { display: block; margin: var(--space-4) 0; padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-field); line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
     .credential-output output:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .copy-feedback, .copy-error { margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .copy-feedback { color: var(--success); }
     .copy-error { color: var(--error); }
-    .credential-actions { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
+    .credential-actions { display: grid; gap: var(--space-3); margin-top: var(--section-gap); }
     .credential-actions > * { width: 100%; }
     dialog { width: min(var(--panel-max), calc(100% - var(--space-8))); padding: 0; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--text); box-shadow: 0 var(--space-2) var(--space-8) var(--shadow-panel); }
     dialog::backdrop { background: var(--backdrop); }
-    .dialog-content { padding: var(--space-6); }
+    .dialog-content { padding: var(--card-padding); }
     .dialog-content h2 { margin: 0 0 var(--space-3); }
     @media (max-width: 48rem) {
       dl { grid-template-columns: 1fr; }
@@ -207,22 +206,14 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       .status-actions { margin-top: var(--space-4); }
     }
     @media (max-width: 22.5rem) {
-      .connection-panel { margin-top: var(--space-4); }
-      .token-recovery { margin-top: var(--space-4); }
-      .token-form { padding: var(--space-4); }
       .token-entry { grid-template-columns: minmax(0, 1fr); }
       .reveal { width: 100%; }
     }
     @media (max-width: 20rem) {
       .site-nav { padding-bottom: var(--space-3); }
-      .manage-header { padding: var(--space-2) 0; }
       .manage-header > p:last-child { font-size: var(--font-small); }
-      .connection-panel { margin-top: var(--space-2); }
-      .token-form { padding: var(--space-3); }
-      .token-recovery { padding: var(--space-3); }
       .connection-status { margin-inline: var(--space-2); padding-bottom: var(--space-4); }
       dl { gap: var(--space-2); margin: var(--space-4) 0; }
-      dl div, .restricted-notice, .reauthorization-notice { padding: var(--space-2); }
       .connection-status dd { word-break: normal; overflow-wrap: anywhere; }
       button.compact { min-width: 0; }
       .restricted-notice, .reauthorization-notice { margin-bottom: var(--space-4); }

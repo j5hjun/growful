@@ -7,7 +7,6 @@ import { renderPortalHome } from "./portal-home.js"
 import { renderPortalManagement } from "./portal-manage.js"
 import { renderPortalNotFound } from "./portal-not-found.js"
 import { renderPortalPolicy } from "./portal-policy.js"
-import { type PortalPageName, renderPortalFooter } from "./portal-shell.js"
 import { type PortalStatusIncidentHistory, renderPortalStatus } from "./portal-status.js"
 import { renderPortalSupport } from "./portal-support.js"
 
@@ -77,28 +76,7 @@ function acceptsHtml(accept: string | undefined): boolean {
   })
 }
 
-function decoratePortalPage(
-  html: string,
-  currentPage: PortalPageName | null,
-  access: OAuthAccessPolicy,
-): string {
-  return html
-    .replace("<body>", '<body>\n  <a class="skip-link" href="#main-content">본문 바로가기</a>')
-    .replace('<main class="', '<div class="portal-page-shell ')
-    .replace("</nav>", '</nav>\n    <main id="main-content" tabindex="-1">')
-    .replace(
-      "\n  </main>",
-      `\n    </main>\n    ${renderPortalFooter(currentPage, access.operatorName, access.supportEmail)}\n  </div>`,
-    )
-}
-
-function sendPortalPage(
-  reply: FastifyReply,
-  html: string,
-  contentSecurityPolicy: string,
-  currentPage: PortalPageName | null,
-  access: OAuthAccessPolicy,
-) {
+function sendPortalPage(reply: FastifyReply, html: string, contentSecurityPolicy: string) {
   return reply
     .header("Cache-Control", "no-store")
     .header("Content-Security-Policy", contentSecurityPolicy)
@@ -109,7 +87,7 @@ function sendPortalPage(
     .header("X-Content-Type-Options", "nosniff")
     .header("X-Frame-Options", "DENY")
     .type("text/html; charset=utf-8")
-    .send(decoratePortalPage(html, currentPage, access))
+    .send(html)
 }
 
 export function registerPortalRoutes(
@@ -127,15 +105,13 @@ export function registerPortalRoutes(
       .send(isPublic ? "User-agent: *\nAllow: /\n" : "User-agent: *\nDisallow: /\n"),
   )
   app.get("/", async (_request, reply) =>
-    sendPortalPage(reply, renderPortalHome(access), sharedContentSecurityPolicy, "home", access),
+    sendPortalPage(reply, renderPortalHome(access), sharedContentSecurityPolicy),
   )
   app.get("/manage", async (_request, reply) =>
     sendPortalPage(
       reply,
       renderPortalManagement(access),
       `${sharedContentSecurityPolicy.replace("form-action 'none'", "form-action 'self'")}; script-src 'self'`,
-      "manage",
-      access,
     ),
   )
   app.get("/status", async (request, reply) => {
@@ -159,36 +135,16 @@ export function registerPortalRoutes(
       reply,
       renderPortalStatus(readinessStatus, incidentHistory, access, respondedAt),
       sharedContentSecurityPolicy,
-      "status",
-      access,
     )
   })
   app.get("/privacy", async (_request, reply) =>
-    sendPortalPage(
-      reply,
-      renderPortalPolicy("privacy", access),
-      sharedContentSecurityPolicy,
-      "privacy",
-      access,
-    ),
+    sendPortalPage(reply, renderPortalPolicy("privacy", access), sharedContentSecurityPolicy),
   )
   app.get("/terms", async (_request, reply) =>
-    sendPortalPage(
-      reply,
-      renderPortalPolicy("terms", access),
-      sharedContentSecurityPolicy,
-      "terms",
-      access,
-    ),
+    sendPortalPage(reply, renderPortalPolicy("terms", access), sharedContentSecurityPolicy),
   )
   app.get("/support", async (_request, reply) =>
-    sendPortalPage(
-      reply,
-      renderPortalSupport(access),
-      sharedContentSecurityPolicy,
-      "support",
-      access,
-    ),
+    sendPortalPage(reply, renderPortalSupport(access), sharedContentSecurityPolicy),
   )
   app.get("/portal.js", async (_request, reply) =>
     reply
@@ -207,10 +163,8 @@ export function registerPortalRoutes(
     ) {
       return sendPortalPage(
         reply.status(404),
-        renderPortalNotFound(),
+        renderPortalNotFound(access),
         sharedContentSecurityPolicy,
-        null,
-        access,
       )
     }
     return reply.status(404).send({ error: "not_found" as const })

@@ -400,6 +400,10 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   // Then
   const oauthCopy = page.locator("[data-copy-token]")
   const manageAction = page.locator("[data-action=manage-issued-token]")
+  await expect(page.getByRole("link", { name: "본문 바로가기" })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(page.locator("main#main-content")).toBeFocused()
+  await page.keyboard.press("Tab")
   await expect(oauthCopy).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(manageAction).toBeFocused()

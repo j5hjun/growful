@@ -1,10 +1,6 @@
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import {
-  portalSharedStyles,
-  renderPortalEmailLink,
-  renderPortalNavigation,
-} from "./portal-shell.js"
+import { portalSharedStyles, renderPortalEmailLink } from "./portal-shell.js"
 
 function escapeHtml(value: string): string {
   return value
@@ -32,8 +28,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
       : ""
   return renderGatewayPage({
     body: `
-    ${renderPortalNavigation("home")}
-    <header class="hero" data-portal-home>
+    <div class="hero page-title" data-portal-home>
       <p class="eyebrow">${accessLabel}</p>
       <h1><span class="phrase">SmartThings 연결은 한 번,</span><br><span class="phrase">토큰 관리는 안전하게.</span></h1>
       <p class="hero-copy">Growful Gateway가 SmartThings 연결 토큰을 암호화해 보관하고 갱신합니다. <span class="phrase">사용자는 별도로 발급된 Growful 토큰으로 이 Gateway에 요청하고,</span> <span class="phrase">Gateway가 SmartThings API로 중계합니다.</span></p>
@@ -42,7 +37,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
         <a class="action action-primary" href="/oauth/start" data-action="connect">SmartThings 연결 시작</a>
         <a class="action action-secondary" href="/manage" data-action="manage">기존 연결 관리</a>
       </div>
-    </header>
+    </div>
     <section class="flow" aria-labelledby="flow-title">
       <p class="eyebrow">연결 흐름</p>
       <h2 id="flow-title">세 단계로 연결됩니다</h2>
@@ -71,25 +66,31 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     description: `SmartThings 연결 토큰을 대신 보관하고 Growful 토큰 요청을 SmartThings API로 안전하게 중계하는 ${descriptionSuffix}입니다.`,
     layout: "wide",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
+    shell: {
+      currentPage: "home",
+      operatorName: access.operatorName,
+      supportEmail: access.supportEmail,
+      variant: "standard",
+    },
     styles: `${portalSharedStyles}
-    .hero { max-width: var(--panel-manage); padding: var(--space-12) 0 var(--space-16); }
+    .hero { max-width: var(--panel-manage); }
     .hero h1 { margin-bottom: var(--space-6); }
     .hero-copy { font-size: var(--font-h2); }
-    .beta-entry-guidance { margin-bottom: var(--space-6); padding: var(--space-4); border-left: var(--space-2) solid var(--border); background: var(--surface-subtle); }
+    .beta-entry-guidance { margin-bottom: var(--space-6); padding: var(--card-padding); border-left: var(--space-2) solid var(--border); background: var(--surface-subtle); }
     .beta-entry-guidance h2 { margin: 0 0 var(--space-2); }
     .beta-entry-guidance p { margin: 0; font-size: var(--font-small); }
     .beta-entry-guidance .phrase { white-space: normal; }
-    .flow { padding: var(--space-8) 0; border-top: 1px solid var(--border); }
-    .flow h2 { margin: 0 0 var(--space-8); }
+    .flow { padding: var(--section-gap) 0; border-top: 1px solid var(--border); }
+    .flow h2 { margin: 0 0 var(--section-gap); }
     .flow ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); margin: 0; padding: 0; list-style: none; }
     .flow li { padding-top: var(--space-4); border-top: 1px solid var(--border); }
     .step-number { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; color: var(--text-muted); font-size: var(--font-small); }
     .flow h3 { margin: var(--space-4) 0 var(--space-2); font-size: var(--font-body); }
     .flow li p { margin: 0; font-size: var(--font-small); }
-    .trust-boundary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; margin-top: var(--space-8); padding: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .trust-boundary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; margin-top: var(--section-gap); padding: var(--card-padding); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .trust-boundary > *, .service-disclosures > * { min-width: 0; }
     .trust-boundary h2, .trust-boundary p { margin: 0; }
-    .service-disclosures { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; margin-top: var(--space-8); padding: var(--space-6) 0; border-top: 1px solid var(--border); }
+    .service-disclosures { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; margin-top: var(--section-gap); padding: var(--section-gap) 0; border-top: 1px solid var(--border); }
     .service-disclosures h2, .service-disclosures dl { margin: 0; }
     .service-disclosures dl { display: grid; gap: var(--space-3); }
     .service-disclosures dt { color: var(--text-muted); font-size: var(--font-small); }
@@ -97,7 +98,6 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     .service-disclosures dd, .service-disclosures a { overflow-wrap: anywhere; }
     .service-disclosures a { color: var(--text); }
     @media (max-width: 48rem) {
-      .hero { padding: var(--space-8) 0 var(--space-12); }
       .flow ol, .trust-boundary, .service-disclosures { grid-template-columns: 1fr; }
       .flow ol, .trust-boundary, .service-disclosures { gap: var(--space-4); }
     }`,

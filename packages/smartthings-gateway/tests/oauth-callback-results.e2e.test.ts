@@ -38,9 +38,19 @@ function expectRecoveryPage(
   expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
   expect(response.headers["content-security-policy"]).toContain("script-src 'none'")
   expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'")
+  expect(response.headers["cross-origin-opener-policy"]).toBe("same-origin")
+  expect(response.headers["cross-origin-resource-policy"]).toBe("same-origin")
+  expect(response.headers["permissions-policy"]).toBe("camera=(), geolocation=(), microphone=()")
   expect(response.headers["referrer-policy"]).toBe("no-referrer")
   expect(response.headers["x-frame-options"]).toBe("DENY")
   expect(response.headers["x-content-type-options"]).toBe("nosniff")
+  expect(response.body.match(/class="skip-link"/gu)).toHaveLength(1)
+  expect(response.body.match(/<header(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body.match(/<main(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body.match(/<h1(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body.match(/<footer(?:\s|>)/gu)).toHaveLength(1)
+  expect(response.body).toContain('data-header-variant="task"')
+  expect(response.body).toContain('data-body-width="panel"')
   const textNormalizedBody = response.body
     .replaceAll('<span class="phrase">', "")
     .replaceAll("</span>", "")
@@ -51,6 +61,38 @@ function expectRecoveryPage(
 }
 
 describe("OAuth callback browser results", () => {
+  it("does not expose callback completion through an automatic HEAD route", async () => {
+    // Given
+    const fixture = createGatewayAppFixture({ apps })
+    fixture.client.exchangeGrant = { ...fixture.client.exchangeGrant, scopes: ["r:devices:*"] }
+    const state = await startAuthorization(fixture.app)
+    expect(fixture.store.states.size).toBe(1)
+
+    // When
+    const headResponse = await fixture.app.inject({
+      method: "HEAD",
+      url: `/oauth/callback?code=head-must-not-exchange&state=${encodeURIComponent(state)}`,
+    })
+
+    // Then
+    expect([404, 405]).toContain(headResponse.statusCode)
+    expect(headResponse.body).not.toContain("head-must-not-exchange")
+    expect(headResponse.body).not.toContain("data-page-shell")
+    expect(fixture.client.exchangedCodes).toHaveLength(0)
+    expect(fixture.store.states.size).toBe(1)
+    expect(fixture.store.connections.size).toBe(0)
+    expect(fixture.store.tokens).toBeNull()
+
+    const getResponse = await fixture.app.inject({
+      method: "GET",
+      url: `/oauth/callback?code=authorization-code&state=${encodeURIComponent(state)}`,
+    })
+    expect(getResponse.statusCode).toBe(200)
+    expect(fixture.client.exchangedCodes).toEqual(["authorization-code"])
+    expect(fixture.store.states.size).toBe(0)
+    expect(fixture.store.connections.size).toBe(1)
+  })
+
   it("renders a recovery page when the user denies SmartThings access", async () => {
     // Given
     const fixture = createGatewayAppFixture({ apps })

@@ -122,7 +122,7 @@ export function renderOAuthStartError(
         <a class="secondary" href="/support">지원 안내</a>`
   return renderGatewayPage({
     body: `
-    <section class="error-summary" aria-labelledby="error-title" tabindex="-1" autofocus>
+    <section class="error-summary page-title" aria-labelledby="error-title" tabindex="-1" autofocus>
       <p class="error-label">${copy.label}</p>
       <h1 id="error-title">${copy.title}</h1>
       <p>${copy.explanation}</p>
@@ -143,7 +143,7 @@ export function renderOAuthStartError(
     .error-label { margin-bottom: var(--space-3); color: var(--error); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); }
     .retry-guidance { margin-bottom: 0; color: var(--text); }
     .retry-guidance time { font-weight: var(--weight-bold); }
-    .recovery { margin-top: var(--space-8); padding-top: var(--space-6); border-top: 1px solid var(--border); }
+    .recovery { margin-top: var(--section-gap); padding-top: var(--section-gap); border-top: 1px solid var(--border); }
     .recovery h2 { margin: 0 0 var(--space-4); }
     .actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
     .primary, .secondary { display: inline-flex; width: 100%; min-width: 0; min-height: var(--action-height); align-items: center; justify-content: center; padding: var(--space-3) var(--space-4); border-radius: var(--radius-action); font: inherit; font-weight: var(--weight-bold); line-height: var(--line-action); overflow-wrap: anywhere; text-align: center; text-decoration: none; }
@@ -152,7 +152,7 @@ export function renderOAuthStartError(
     .primary:hover { background: var(--action-hover); }
     .primary:active, .secondary:active { transform: scale(var(--pressed-scale)); }
     .primary:focus-visible, .secondary:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
-    .support-note { margin: var(--space-6) 0 0; padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
+    .support-note { margin: var(--section-gap) 0 0; padding: var(--card-padding); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
     .support-note p { margin-bottom: var(--space-3); }
     .support-note p:last-child { margin-bottom: 0; }
     .support-note .phrase { white-space: normal; }

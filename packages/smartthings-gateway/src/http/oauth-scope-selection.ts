@@ -270,8 +270,10 @@ export function renderOAuthScopeSelection(options: {
   const termsUrl = escapeHtml(options.disclosures.termsUrl.toString())
   return renderGatewayPage({
     body: `
-    <h1>SmartThings 권한 연결</h1>
-    <p class="intro"><span>Gateway에 허용할 리소스와 기능을 선택하세요.</span><span><span class="phrase">선택한 디바이스만 범위의 실제 대상은</span> <span class="phrase">SmartThings 화면에서 지정합니다.</span></span></p>
+    <div class="page-title">
+      <h1>SmartThings 권한 연결</h1>
+      <p class="intro"><span>Gateway에 허용할 리소스와 기능을 선택하세요.</span><span><span class="phrase">선택한 디바이스만 범위의 실제 대상은</span> <span class="phrase">SmartThings 화면에서 지정합니다.</span></span></p>
+    </div>
     <form action="/oauth/start" method="post">
       ${selectionError}
       <fieldset class="step-section" data-permission-step="range">
@@ -356,13 +358,13 @@ export function renderOAuthScopeSelection(options: {
     description: "SmartThings Gateway에 허용할 권한과 디바이스 범위를 선택합니다.",
     styles: `
     .intro > span { display: block; }
-    form { margin-top: var(--space-8); }
-    fieldset { min-width: 0; margin: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); }
+    form { margin-top: 0; }
+    fieldset { min-width: 0; margin: 0; padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-field); }
     .step-section { margin-bottom: var(--space-6); }
     legend { padding: 0 var(--space-2); font-weight: var(--weight-bold); }
     .step-index { display: inline-flex; width: var(--space-6); height: var(--space-6); align-items: center; justify-content: center; margin-right: var(--space-2); border-radius: 50%; background: var(--surface-subtle); color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .hint { margin: var(--space-2) 0 var(--space-3); font-size: var(--font-small); }
-    .error-summary { margin: 0 0 var(--space-6); padding: var(--space-4); border: 1px solid var(--error); border-radius: var(--radius-field); }
+    .error-summary { margin: 0 0 var(--space-6); padding: var(--card-padding); border: 1px solid var(--error); border-radius: var(--radius-field); }
     .error-summary:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .error-summary h2 { margin: 0 0 var(--space-2); color: var(--error); font-size: var(--font-h2); }
     .error-summary ul { margin: 0; padding-left: var(--space-6); color: var(--text); line-height: var(--line-body); }
@@ -381,13 +383,13 @@ export function renderOAuthScopeSelection(options: {
     .permission-resource:has(input[value="read"]:checked) [data-summary-permission="read"], .permission-resource:has(input[value="control"]:checked) [data-summary-permission="control"], .permission-resource:has(input[value="write"]:checked) [data-summary-permission="write"], .permission-resource:has(input[value="execute"]:checked) [data-summary-permission="execute"] { display: inline; }
     .permission-resource fieldset { margin: 0 var(--space-4) var(--space-4); }
     .impact { margin: calc(-1 * var(--space-2)) 0 var(--space-4) calc(var(--control-size) + var(--space-3)); font-size: var(--font-small); }
-    .policy { margin: 0 0 var(--space-8); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .policy { margin: 0 0 var(--section-gap); padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .policy h2 { margin: 0 0 var(--space-3); font-size: var(--font-h2); }
     .policy p { margin: var(--space-2) 0; }
     .policy a { color: var(--focus); }
     .policy-links { display: flex; flex-wrap: wrap; gap: var(--space-2); }
     .policy-links a { display: inline-flex; max-width: 100%; min-height: var(--action-height); align-items: center; padding: 0 var(--space-2); overflow-wrap: anywhere; text-align: center; }
-    label { display: flex; gap: var(--space-3); align-items: flex-start; margin: var(--space-3) 0; line-height: var(--line-body); cursor: pointer; }
+    label { display: flex; min-height: var(--action-height); gap: var(--space-3); align-items: center; margin: var(--space-3) 0; line-height: var(--line-body); cursor: pointer; }
     [data-permission-step="range"] label { min-height: var(--action-height); align-items: center; padding: 0 var(--space-2); }
     label > span { min-width: 0; }
     small { display: block; color: var(--text-muted); font-size: var(--font-small); line-height: var(--line-body); overflow-wrap: anywhere; }
@@ -400,9 +402,7 @@ export function renderOAuthScopeSelection(options: {
     button:active { transform: scale(var(--pressed-scale)); }
     button:focus-visible, input:focus-visible, .form-actions a:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     @media (max-width: 20rem) {
-      body { padding: var(--space-2); }
-      main { padding: var(--space-3); }
-      fieldset, .error-summary, .permission-resource summary, .policy { padding: var(--space-3); }
+      .permission-resource summary { padding: var(--space-3); }
       .permission-resource fieldset { margin: 0 var(--space-2) var(--space-2); padding: var(--space-2); }
       .summary-meta { margin-left: 0; }
       .impact { margin-left: 0; }

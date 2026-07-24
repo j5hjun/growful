@@ -7,14 +7,14 @@ type PrivateBetaAccessGuidance =
 
 const guidanceStyles = `
     .access-status { margin-block-end: var(--space-2); color: var(--error); font-size: var(--font-small); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); }
-    .guidance { margin-block-end: var(--space-6); padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .guidance { margin-block-end: var(--section-gap); padding: var(--card-padding); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .guidance h2 { margin: 0 0 var(--space-3); }
     .guidance p { margin-block-end: var(--space-3); color: var(--text); }
     .guidance p:last-child { margin-block-end: 0; }
     .guidance ol { margin: 0 0 var(--space-4); padding-inline-start: var(--space-6); line-height: var(--line-body); }
     .guidance li + li { margin-block-start: var(--space-2); }
     .actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-    .support-safety { margin-block-start: var(--space-6); padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
+    .support-safety { margin-block-start: var(--section-gap); padding: var(--card-padding); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
     .support-safety p { margin-block-end: var(--space-3); }
     .support-safety p:last-child { margin-block-end: 0; }
     .action { min-height: var(--action-height); display: inline-flex; align-items: center; justify-content: center; padding-inline: var(--space-4); border: 1px solid var(--action); border-radius: var(--radius-action); font-weight: var(--weight-bold); line-height: var(--line-action); text-decoration: none; }
@@ -29,9 +29,11 @@ const guidanceStyles = `
 function renderAuthenticationFailure(): string {
   return renderGatewayPage({
     body: `
-    <p class="access-status">비공개 베타 접근</p>
-    <h1>초대 확인을 완료하지 못했습니다</h1>
-    <p>초대 확인을 취소했거나 입력한 초대 정보가 맞지 않습니다. 아래 항목을 확인한 뒤 다시 시도하세요.</p>
+    <div class="page-title">
+      <p class="access-status">비공개 베타 접근</p>
+      <h1>초대 확인을 완료하지 못했습니다</h1>
+      <p>초대 확인을 취소했거나 입력한 초대 정보가 맞지 않습니다. 아래 항목을 확인한 뒤 다시 시도하세요.</p>
+    </div>
     <section class="guidance" aria-labelledby="credential-guidance">
       <h2 id="credential-guidance">다시 확인할 정보</h2>
       <ol>
@@ -57,9 +59,11 @@ function renderAuthenticationFailure(): string {
 function renderRateLimit(retryAfterSeconds: number): string {
   return renderGatewayPage({
     body: `
-    <p class="access-status">비공개 베타 접근 일시 제한</p>
-    <h1>잠시 후 다시 시도해 주세요</h1>
-    <p>반복된 초대 확인 실패로 일시 제한이 적용되었습니다.</p>
+    <div class="page-title">
+      <p class="access-status">비공개 베타 접근 일시 제한</p>
+      <h1>잠시 후 다시 시도해 주세요</h1>
+      <p>반복된 초대 확인 실패로 일시 제한이 적용되었습니다.</p>
+    </div>
     <section class="guidance" aria-labelledby="retry-guidance">
       <h2 id="retry-guidance">다시 시도하는 방법</h2>
       <p><time datetime="PT${retryAfterSeconds}S">약 ${retryAfterSeconds}초 뒤</time> 초대 확인을 다시 시작하세요.</p>

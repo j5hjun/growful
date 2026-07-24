@@ -68,6 +68,10 @@ for (const viewport of viewports) {
         expect(box?.height).toBeGreaterThanOrEqual(44)
       }
       await page.keyboard.press("Tab")
+      await expect(page.getByRole("link", { name: "본문 바로가기" })).toBeFocused()
+      await page.keyboard.press("Enter")
+      await expect(page.locator("main#main-content")).toBeFocused()
+      await page.keyboard.press("Tab")
       await expect(actions.nth(0)).toBeFocused()
       await page.keyboard.press("Tab")
       await expect(actions.nth(1)).toBeFocused()

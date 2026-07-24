@@ -109,6 +109,10 @@ async function expectExactKeyboardCopy(page: Page): Promise<void> {
   const tokenField = page.locator("[data-growful-token]")
 
   await page.keyboard.press("Tab")
+  await expect(page.getByRole("link", { name: "본문 바로가기" })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(page.locator("main#main-content")).toBeFocused()
+  await page.keyboard.press("Tab")
   await expect(tokenField).toBeFocused()
   await page.keyboard.press("ControlOrMeta+A")
 
@@ -129,7 +133,7 @@ async function expectExactKeyboardCopy(page: Page): Promise<void> {
 
   await page.keyboard.press("ControlOrMeta+C")
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(token)
-  await expect(page).toHaveURL(`${origin}/oauth`)
+  await expect(page).toHaveURL(`${origin}/oauth#main-content`)
 }
 
 test("completion keeps manual-copy recovery and no inert copy action without JavaScript", async ({
