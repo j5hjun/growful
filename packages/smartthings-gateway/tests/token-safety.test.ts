@@ -2,9 +2,15 @@ import { runInNewContext } from "node:vm"
 import { describe, expect, it } from "vitest"
 import { tokenSafetyClientScript } from "../src/http/token-safety.js"
 
-type Listener = () => unknown
+type TokenSafetyEvent = {
+  preventDefault(): void
+  returnValue: string
+}
+
+type Listener = (event?: TokenSafetyEvent) => unknown
 
 class TokenElement {
+  readonly attributes = new Map<string, string>()
   readonly listeners = new Map<string, Listener>()
   disabled = false
   focusCount = 0
@@ -22,6 +28,14 @@ class TokenElement {
 
   focus(): void {
     this.focusCount += 1
+  }
+
+  removeAttribute(name: string): void {
+    this.attributes.delete(name)
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value)
   }
 }
 
@@ -50,12 +64,19 @@ function createFixture() {
   const output = new TokenElement()
   output.textContent = `grw_st_${"A".repeat(43)}`
   const regionListeners = new Map<string, Listener>()
+  const regionAttributes = new Map<string, string>()
   const region = {
     addEventListener(name: string, listener: Listener) {
       regionListeners.set(name, listener)
     },
     async dispatch(name: string) {
       await regionListeners.get(name)?.()
+    },
+    removeAttribute(name: string) {
+      regionAttributes.delete(name)
+    },
+    setAttribute(name: string, value: string) {
+      regionAttributes.set(name, value)
     },
     querySelector(selector: string) {
       return new Map([
@@ -66,13 +87,16 @@ function createFixture() {
       ]).get(selector)
     },
   }
-  return { copy, error, feedback, output, region }
+  return { copy, error, feedback, output, region, regionAttributes }
 }
 
 function runTokenSafety(
   fixture: ReturnType<typeof createFixture>,
   writeText: (value: string) => Promise<void>,
-): () => Promise<void> {
+): {
+  dispatchBeforeUnload: () => Promise<{ prevented: boolean; returnValue: string }>
+  dispatchPagehide: () => Promise<void>
+} {
   const windowListeners = new Map<string, Listener>()
   runInNewContext(tokenSafetyClientScript, {
     document: { querySelectorAll: () => [fixture.region] },
@@ -84,8 +108,21 @@ function runTokenSafety(
       },
     },
   })
-  return async () => {
-    await windowListeners.get("pagehide")?.()
+  return {
+    async dispatchBeforeUnload() {
+      let prevented = false
+      const event = {
+        preventDefault() {
+          prevented = true
+        },
+        returnValue: "unchanged",
+      }
+      await windowListeners.get("beforeunload")?.(event)
+      return { prevented, returnValue: event.returnValue }
+    },
+    async dispatchPagehide() {
+      await windowListeners.get("pagehide")?.()
+    },
   }
 }
 
@@ -106,6 +143,7 @@ describe("one-time token copy safety", () => {
     expect(fixture.feedback.hidden).toBe(false)
     expect(fixture.error.hidden).toBe(true)
     expect(fixture.output.focusCount).toBe(0)
+    expect(fixture.regionAttributes.has("data-token-safety-acknowledged")).toBe(true)
   })
 
   it("reveals the manual-copy error and focuses the token output when copying fails", async () => {
@@ -192,7 +230,7 @@ describe("one-time token copy safety", () => {
   it("clears the one-time token before a page can enter browser history cache", async () => {
     // Given
     const fixture = createFixture()
-    const dispatchPagehide = runTokenSafety(fixture, async () => {})
+    const { dispatchPagehide } = runTokenSafety(fixture, async () => {})
 
     // When
     await dispatchPagehide()
@@ -202,6 +240,29 @@ describe("one-time token copy safety", () => {
     expect(fixture.copy.disabled).toBe(true)
     expect(fixture.feedback.hidden).toBe(true)
     expect(fixture.error.hidden).toBe(true)
+    expect(fixture.regionAttributes.has("data-token-safety-acknowledged")).toBe(false)
+  })
+
+  it("requests browser confirmation before leaving with an unacknowledged token", async () => {
+    const fixture = createFixture()
+    const { dispatchBeforeUnload } = runTokenSafety(fixture, async () => {})
+
+    const event = await dispatchBeforeUnload()
+
+    expect(event.prevented).toBe(true)
+    expect(event.returnValue).toBe("")
+    expect(fixture.output.textContent).not.toBe("")
+  })
+
+  it("allows leaving after the clipboard copy is confirmed", async () => {
+    const fixture = createFixture()
+    const { dispatchBeforeUnload } = runTokenSafety(fixture, async () => {})
+    await fixture.copy.click()
+
+    const event = await dispatchBeforeUnload()
+
+    expect(event.prevented).toBe(false)
+    expect(event.returnValue).toBe("unchanged")
   })
 
   it.each(["resolve", "reject"] as const)(
@@ -210,7 +271,7 @@ describe("one-time token copy safety", () => {
       // Given
       const fixture = createFixture()
       const pendingAttempt = deferred()
-      const dispatchPagehide = runTokenSafety(fixture, async () => {
+      const { dispatchPagehide } = runTokenSafety(fixture, async () => {
         await pendingAttempt.promise
       })
       const pendingClick = fixture.copy.click()

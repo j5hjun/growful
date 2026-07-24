@@ -52,67 +52,77 @@ test("management Korean error text wraps between words without splitting syllabl
   expect(splitWords).toEqual([])
 })
 
-test("management states share a flexible three-row frame and fixed action slot", async ({
+test("compact management form keeps mobile token controls and action close together", async ({
   page,
 }) => {
+  for (const width of [320, 360, 390]) {
+    // Given
+    await page.setViewportSize({ height: 480, width })
+    await page.emulateMedia({ colorScheme: "dark" })
+    await page.setContent(renderPortalManagement(portalAccess()))
+    const form = page.locator("[data-portal-token-form]")
+    const submit = page.locator("[data-token-submit]")
+    const reveal = page.locator("[data-token-visibility]")
+    const input = page.locator("#growful-token")
+
+    // When
+    const grid = await form.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { minBlockSize: style.minBlockSize, rows: style.gridTemplateRows.split(" ") }
+    })
+    const inputBox = await input.boundingBox()
+    const revealBox = await reveal.boundingBox()
+    const actionBox = await submit.boundingBox()
+    const dimensions = await page.locator("html").evaluate((html) => ({
+      clientWidth: html.clientWidth,
+      scrollWidth: html.scrollWidth,
+    }))
+
+    // Then
+    expect(grid.rows).toHaveLength(3)
+    if (width <= 360) {
+      expect(grid.minBlockSize).toBe("0px")
+    } else {
+      expect(grid.minBlockSize).not.toBe("0px")
+    }
+    if (inputBox === null || revealBox === null || actionBox === null) {
+      throw new Error(`Management controls have a missing layout box at ${width}px`)
+    }
+    if (width <= 360) {
+      expect(revealBox.y).toBeGreaterThanOrEqual(inputBox.y + inputBox.height)
+      expect(revealBox.width).toBeCloseTo(inputBox.width, 0)
+    } else {
+      expect(revealBox.y).toBeCloseTo(inputBox.y, 0)
+      expect(revealBox.width).toBeLessThan(inputBox.width)
+    }
+    if (width <= 360) {
+      expect(actionBox.y - (revealBox.y + revealBox.height)).toBeLessThanOrEqual(96)
+    }
+    expect(revealBox.height).toBeGreaterThanOrEqual(44)
+    expect(actionBox.height).toBeGreaterThanOrEqual(44)
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)
+    await expect(input).toHaveAttribute("aria-describedby", "token-hint management-token-error")
+  }
+})
+
+test("management token errors remain part of the input description", async ({ page }) => {
   // Given
-  await page.setViewportSize({ height: 812, width: 375 })
+  await page.setViewportSize({ height: 480, width: 320 })
   await page.setContent(renderPortalManagement(portalAccess()))
-  const form = page.locator("[data-portal-token-form]")
-  const submit = page.locator("[data-token-submit]")
-  const reveal = page.locator("[data-token-visibility]")
   const input = page.locator("#growful-token")
-  const initialFrame = await form.boundingBox()
-  const initialAction = await submit.boundingBox()
+  const errorMessage = page.locator("#management-token-error")
 
   // When
-  const grid = await form.evaluate((element) => {
-    const style = getComputedStyle(element)
-    return { minBlockSize: style.minBlockSize, rows: style.gridTemplateRows.split(" ") }
-  })
-  await submit.evaluate((element) => {
-    element.textContent = "확인 중…"
-    element.setAttribute("disabled", "")
-  })
-  const loadingAction = await submit.boundingBox()
-  await page.locator("[data-portal-error-message]").evaluate((element) => {
+  await errorMessage.evaluate((element) => {
     element.textContent = "네트워크 연결을 확인하세요."
+    element.parentElement?.removeAttribute("hidden")
   })
-  await page.locator("[data-portal-error]").evaluate((element) => {
-    element.removeAttribute("hidden")
-  })
-  const errorAction = await submit.boundingBox()
-  const inputBox = await input.boundingBox()
-  const revealBox = await reveal.boundingBox()
-  await page.locator("[data-portal-status]").evaluate((element) => {
-    element.removeAttribute("hidden")
-  })
-  const successFrame = await form.boundingBox()
-  const successAction = await submit.boundingBox()
 
   // Then
-  expect(grid.rows).toHaveLength(3)
-  expect(grid.minBlockSize).not.toBe("0px")
-  if (
-    initialFrame === null ||
-    initialAction === null ||
-    loadingAction === null ||
-    errorAction === null ||
-    inputBox === null ||
-    revealBox === null ||
-    successFrame === null ||
-    successAction === null
-  ) {
-    throw new Error("Management frame has a missing browser layout box")
-  }
-  expect(Math.abs(loadingAction.y - initialAction.y)).toBeLessThanOrEqual(8)
-  expect(Math.abs(errorAction.y - initialAction.y)).toBeLessThanOrEqual(8)
-  expect(Math.abs(successAction.y - initialAction.y)).toBeLessThanOrEqual(8)
-  expect(successFrame.x).toBeCloseTo(initialFrame.x, 2)
-  expect(successFrame.y).toBeCloseTo(initialFrame.y, 2)
-  expect(successFrame.width).toBeCloseTo(initialFrame.width, 2)
-  expect(revealBox.y).toBeCloseTo(inputBox.y, 2)
-  expect(revealBox.width).toBeLessThan(initialFrame.width / 2)
+  await expect(page.locator("#token-hint")).toBeVisible()
+  await expect(errorMessage).toBeVisible()
+  const describedBy = (await input.getAttribute("aria-describedby"))?.split(/\s+/u)
+  expect(describedBy).toEqual(["token-hint", "management-token-error"])
 })
 
 test("one-time token flows confirm rotation and keep recovery navigation available", async ({
@@ -212,6 +222,8 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   await expect(result.locator("[data-return-status]")).toHaveClass(/secondary/)
 
   // When
+  await result.locator("[data-copy-token]").click()
+  await expect(result.locator("[data-token-copy-feedback]")).toBeVisible()
   await page.locator("[data-return-status]").click()
 
   // Then
@@ -223,13 +235,16 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   await page.locator("[data-rotate-token]").click()
   await page.locator("[data-rotate-token-confirm]").click()
   await expect(result).toBeVisible()
+  await result.locator("[data-copy-token]").click()
+  await expect(result).toHaveAttribute("data-token-safety-acknowledged", "")
   holdStatusRefresh = true
   await page.locator("[data-token-submit]").click()
 
   // Then
+  await expect(result).toBeVisible()
+  releaseStatusRefresh?.()
   await expect(result).toBeHidden()
   await expect(page.locator("[data-rotated-token]")).toHaveText("")
-  releaseStatusRefresh?.()
   await expect(page.locator("[data-portal-status]")).toBeVisible()
   expect(rotationRequests).toBe(2)
 

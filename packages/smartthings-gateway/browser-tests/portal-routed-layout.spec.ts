@@ -178,3 +178,24 @@ test("routed management states keep the portal shell pinned to the top safe area
     await app.close()
   }
 })
+
+test("forced colors preserve the current portal menu boundary", async ({ page }) => {
+  // Given
+  const apps: FastifyInstance[] = []
+  const { app } = createGatewayAppFixture({ apps })
+  const origin = await app.listen({ host: "127.0.0.1", port: 0 })
+  await page.setViewportSize({ height: 844, width: 390 })
+  await page.emulateMedia({ forcedColors: "active" })
+
+  try {
+    // When
+    await page.goto(`${origin}/manage`)
+
+    // Then
+    const currentMenu = page.locator('.nav-list a[aria-current="page"]')
+    await expect(currentMenu).toHaveCSS("border-top-style", "solid")
+    await expect(currentMenu).toHaveCSS("border-top-width", "2px")
+  } finally {
+    await app.close()
+  }
+})

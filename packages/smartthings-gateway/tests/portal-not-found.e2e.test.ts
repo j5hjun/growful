@@ -2,6 +2,7 @@ import { request } from "node:http"
 import type { FastifyInstance } from "fastify"
 import { afterEach, describe, expect, it } from "vitest"
 import { createGatewayAppFixture } from "./fixtures/gateway-app-fixture.js"
+import { publicOAuthAccess } from "./fixtures/oauth-access.js"
 
 const apps: FastifyInstance[] = []
 
@@ -61,6 +62,12 @@ describe("Growful portal not-found responses", () => {
     expect(response.body).toContain('href="/support"')
     expect(response.body).toContain('<a class="phrase" href="/support">지원 안내</a>')
     expect(response.body).toContain('<main id="main-content" tabindex="-1"')
+    expect(response.body).toContain(
+      `<!--email_off--><a href="mailto:${publicOAuthAccess.supportEmail}">${publicOAuthAccess.supportEmail}</a><!--/email_off-->`,
+    )
+    expect(response.body).not.toContain("/cdn-cgi/l/email-protection")
+    expect(response.body).not.toContain("[email protected]")
+    expect(response.headers["content-security-policy"]).not.toContain("script-src 'unsafe-inline'")
   })
 
   it.each([

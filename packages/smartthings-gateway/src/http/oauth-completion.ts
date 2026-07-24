@@ -7,7 +7,7 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     <h1>SmartThings 연결 완료</h1>
     <section aria-labelledby="growful-token-title" data-token-safety>
       <h2 id="growful-token-title">Growful 토큰</h2>
-      <p><span class="phrase">이 페이지를 떠나면 토큰을 다시 볼 수 없습니다.</span> <span class="phrase">분실하면 OAuth를 다시 완료해야 합니다.</span> <span class="phrase">Gateway 요청에는 Bearer 토큰으로 사용하세요.</span></p>
+      <p><span class="phrase">이 페이지를 떠나면 토큰을 다시 볼 수 없습니다.</span> 복사하거나 안전한 곳에 저장했는지 확인하기 전에는 <span class="phrase">페이지를 닫거나 이동하지 마세요.</span> <span class="phrase">분실하면 OAuth를 다시 완료해야 합니다.</span> <span class="phrase">Gateway 요청에는 Bearer 토큰으로 사용하세요.</span></p>
       <output id="issued-growful-token" data-token-value tabindex="-1" data-growful-token>${growfulToken}</output>
       <p class="copy-feedback" data-token-copy-feedback role="status" aria-live="polite" hidden>Growful 토큰을 클립보드에 복사했습니다.</p>
       <p class="copy-error" data-token-copy-error role="alert" hidden><span class="phrase">자동 복사를 사용할 수 없습니다.</span> <span class="phrase">위 토큰을 직접 복사하세요.</span></p>

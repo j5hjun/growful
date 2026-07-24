@@ -14,6 +14,14 @@ import { readyProbe } from "./fixtures/readiness.js"
 const apps: ReturnType<typeof createApp>[] = []
 const redirectOrigin = "https://smartthings.growful.click"
 
+function expectCloudflareSafeSupportEmail(body: string): void {
+  expect(body).toContain(
+    `<!--email_off--><a href="mailto:${publicOAuthAccess.supportEmail}">${publicOAuthAccess.supportEmail}</a><!--/email_off-->`,
+  )
+  expect(body).not.toContain("/cdn-cgi/l/email-protection")
+  expect(body).not.toContain("[email protected]")
+}
+
 function createFixture(oauthAccess: AppOptions["oauthAccess"] = publicOAuthAccess) {
   const app = createApp({
     abuseControl: allowAllGrowfulAbuseControl,
@@ -62,9 +70,10 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body).toContain(publicOAuthAccess.operatorName)
     expect(response.body).toContain(publicOAuthAccess.privacyPolicyUrl.toString())
     expect(response.body).toContain(publicOAuthAccess.termsUrl.toString())
-    expect(response.body).toContain(publicOAuthAccess.supportEmail)
+    expectCloudflareSafeSupportEmail(response.body)
     expect(response.body).toContain('href="/oauth/start" data-action="connect"')
     expect(response.body).toContain('href="/manage" data-action="manage"')
+    expect(response.headers["content-security-policy"]).not.toContain("script-src 'unsafe-inline'")
   })
 
   it("renders a token management page with a self-hosted interaction script", async () => {
@@ -87,7 +96,9 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body).toContain("data-portal-status")
     expect(response.body).toContain("data-support-reference")
     expect(response.body).toContain("data-blocked-notice")
-    expect(response.body).toContain(`href="mailto:${publicOAuthAccess.supportEmail}"`)
+    expect(response.body).toContain(
+      `문의할 때 위 지원 참조를 함께 전달해 주세요. <!--email_off--><a href="mailto:${publicOAuthAccess.supportEmail}">${publicOAuthAccess.supportEmail}</a><!--/email_off-->`,
+    )
     expect(response.body).toContain(
       '<form class="dialog-content" method="dialog" data-disconnect-form>',
     )
@@ -130,7 +141,10 @@ describe("Growful portal HTTP surface", () => {
       expect(response.headers["cache-control"]).toBe("no-store")
       expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
       expect(response.body).toContain(publicOAuthAccess.operatorName)
-      expect(response.body).toContain(`href="mailto:${publicOAuthAccess.supportEmail}"`)
+      expectCloudflareSafeSupportEmail(response.body)
+      expect(response.headers["content-security-policy"]).not.toContain(
+        "script-src 'unsafe-inline'",
+      )
     }
     expect(privacy.body).toContain('data-policy-document="privacy"')
     expect(privacy.body).toContain('href="/privacy" aria-current="page"')
@@ -164,9 +178,11 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body.includes('href="/manage"')).toBe(true)
     expect(
       response.body.includes(
-        `href="mailto:${publicOAuthAccess.supportEmail}" data-support-email-action`,
+        `<!--email_off--><a class="action action-primary" href="mailto:${publicOAuthAccess.supportEmail}" data-support-email-action>이메일 문의하기</a><!--/email_off-->`,
       ),
     ).toBe(true)
+    expectCloudflareSafeSupportEmail(response.body)
+    expect(response.headers["content-security-policy"]).not.toContain("script-src 'unsafe-inline'")
     expect(response.body.includes(publicOAuthAccess.operatorName)).toBe(true)
     expect(response.body.includes('<dl class="support-topics">')).toBe(true)
     expect(response.body.includes('data-support-topic="connection"')).toBe(true)

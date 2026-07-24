@@ -2,6 +2,7 @@ import { z } from "zod"
 import { type ServiceDisclosures, smartThingsPolicyConsentStatement } from "../config.js"
 import type { SmartThingsScope } from "../oauth/smartthings-scope.js"
 import { renderGatewayPage } from "./oauth-page.js"
+import { renderPortalEmailLink } from "./portal-shell.js"
 
 const deviceRangeSchema = z.enum(["selected", "all"])
 const devicePermissions = ["read", "control", "write"] as const
@@ -263,7 +264,9 @@ export function renderOAuthScopeSelection(options: {
       </section>`
   const operatorName = escapeHtml(options.disclosures.operatorName)
   const privacyPolicyUrl = escapeHtml(options.disclosures.privacyPolicyUrl.toString())
-  const supportEmail = escapeHtml(options.disclosures.supportEmail)
+  const supportEmailLink = renderPortalEmailLink(options.disclosures.supportEmail, {
+    label: "지원 문의",
+  })
   const termsUrl = escapeHtml(options.disclosures.termsUrl.toString())
   return renderGatewayPage({
     body: `
@@ -341,7 +344,7 @@ export function renderOAuthScopeSelection(options: {
       <section class="policy" data-permission-step="policy" aria-labelledby="policy-title">
         <h2 id="policy-title"><span class="step-index">4</span> 정책 동의</h2>
         <p><strong>${operatorName}</strong>에서 SmartThings 연결 정보와 암호화된 OAuth 토큰을 관리합니다.</p>
-        <p><a href="${privacyPolicyUrl}" aria-label="개인정보처리방침(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">개인정보처리방침</a> · <a href="${termsUrl}" aria-label="이용약관(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">이용약관</a> · <a href="mailto:${supportEmail}">지원 문의</a></p>
+        <p class="policy-links"><a href="${privacyPolicyUrl}" aria-label="개인정보처리방침(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">개인정보처리방침</a><a href="${termsUrl}" aria-label="이용약관(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">이용약관</a>${supportEmailLink}</p>
         <label><input type="checkbox" name="policyConsent" value="accepted" required${checked(draft.policyConsent)}${policyValidation}><span>${smartThingsPolicyConsentStatement}</span></label>
       </section>
       <div class="form-actions" data-permission-step="actions">
@@ -382,7 +385,10 @@ export function renderOAuthScopeSelection(options: {
     .policy h2 { margin: 0 0 var(--space-3); font-size: var(--font-h2); }
     .policy p { margin: var(--space-2) 0; }
     .policy a { color: var(--focus); }
+    .policy-links { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .policy-links a { display: inline-flex; max-width: 100%; min-height: var(--action-height); align-items: center; padding: 0 var(--space-2); overflow-wrap: anywhere; text-align: center; }
     label { display: flex; gap: var(--space-3); align-items: flex-start; margin: var(--space-3) 0; line-height: var(--line-body); cursor: pointer; }
+    [data-permission-step="range"] label { min-height: var(--action-height); align-items: center; padding: 0 var(--space-2); }
     label > span { min-width: 0; }
     small { display: block; color: var(--text-muted); font-size: var(--font-small); line-height: var(--line-body); overflow-wrap: anywhere; }
     input { width: var(--control-size); height: var(--control-size); margin: var(--control-offset) 0 0; flex: 0 0 auto; accent-color: var(--focus); }
@@ -402,6 +408,9 @@ export function renderOAuthScopeSelection(options: {
       .impact { margin-left: 0; }
       label { gap: var(--space-2); }
       .phrase { white-space: normal; }
+    }
+    @media (forced-colors: active) {
+      button { border: 2px solid ButtonText; }
     }
     @media (prefers-reduced-motion: reduce) { button { transition: none; } }`,
     title: "SmartThings 권한 연결",

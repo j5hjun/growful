@@ -94,9 +94,18 @@ describe("Growful portal connection states", () => {
   })
 
   it.each([
-    [401, "토큰이 교체되었거나 만료되었습니다. 새 Growful 토큰을 입력하세요.", "다시 확인"],
+    [
+      401,
+      "입력한 Growful 토큰이 올바르지 않거나 이미 교체 또는 회수되었습니다. 현재 유효한 토큰을 입력하세요.",
+      "다시 확인",
+    ],
     [404, "연결된 SmartThings 설치를 찾을 수 없습니다.", "SmartThings 다시 연결"],
     [429, "요청이 너무 많습니다. 잠시 후 다시 확인하세요.", "다시 확인"],
+    [
+      503,
+      "Growful 관리 서비스를 일시적으로 사용할 수 없습니다. 연결은 삭제되지 않았습니다. 잠시 후 상태를 다시 확인하세요.",
+      "상태 다시 확인",
+    ],
   ])("maps HTTP %i to a distinct Korean recovery message", async (status, message, action) => {
     const fixture = createPortalBrowserFixture()
     const errorMessage = getPortalElement(fixture.elements, "errorMessage")
@@ -112,6 +121,35 @@ describe("Growful portal connection states", () => {
 
     expect(errorMessage.textContent).toBe(message)
     expect(reconnect.hidden ? submit.textContent : reconnect.textContent).toBe(action)
+  })
+
+  it("preserves the last status and entered token during a temporary service outage", async () => {
+    const replacementToken = `grw_st_${"B".repeat(43)}`
+    const fixture = createPortalBrowserFixture()
+    const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const reconnect = getPortalElement(fixture.elements, "reconnect")
+    const status = getPortalElement(fixture.elements, "status")
+    const submit = getPortalElement(fixture.elements, "submit")
+    let requestCount = 0
+    runPortalClient(fixture, async () => {
+      requestCount += 1
+      return requestCount === 1 ? response(200, activeConnection()) : response(503)
+    })
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    input.value = replacementToken
+
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(status.hidden).toBe(false)
+    expect(input.value).toBe(replacementToken)
+    expect(reconnect.hidden).toBe(true)
+    expect(submit.textContent).toBe("상태 다시 확인")
+    expect(errorMessage.textContent).toContain("연결은 삭제되지 않았습니다")
   })
 
   it("renders an inline Korean format error without sending a request", async () => {
@@ -233,7 +271,7 @@ describe("Growful portal connection states", () => {
     expect(rotatedOutput.textContent).toBe(`grw_st_${"B".repeat(43)}`)
   })
 
-  it("clears the one-time token when the visible status action restores status", async () => {
+  it("keeps the one-time token until the visible status action successfully restores status", async () => {
     const refreshedConnection = deferred<ReturnType<typeof response>>()
     const fixture = createPortalBrowserFixture()
     const form = getPortalElement(fixture.elements, "form")
@@ -261,12 +299,44 @@ describe("Growful portal connection states", () => {
 
     const statusRefresh = form.dispatch("submit", { preventDefault() {} })
 
-    expect(rotatedSection.hidden).toBe(true)
-    expect(rotatedOutput.textContent).toBe("")
+    expect(rotatedSection.hidden).toBe(false)
+    expect(rotatedOutput.textContent).toBe(`grw_st_${"B".repeat(43)}`)
     refreshedConnection.resolve(response(200, activeConnection()))
     await statusRefresh
     await new Promise<void>((resolve) => setImmediate(resolve))
     expect(status.hidden).toBe(false)
+    expect(rotatedSection.hidden).toBe(true)
+    expect(rotatedOutput.textContent).toBe("")
+  })
+
+  it("keeps an unconfirmed replacement token visible when status return is cancelled", async () => {
+    const fixture = createPortalBrowserFixture()
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const returnStatus = getPortalElement(fixture.elements, "returnStatus")
+    const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+    const rotatedOutput = getPortalElement(fixture.elements, "rotatedOutput")
+    const rotatedSection = getPortalElement(fixture.elements, "rotatedSection")
+    runPortalClient(fixture, async (path) =>
+      path === "/token/rotate"
+        ? response(200, { growfulToken: `grw_st_${"B".repeat(43)}` })
+        : response(200, activeConnection()),
+    )
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await rotate.dispatch("click")
+    await rotateForm.dispatch("submit", { preventDefault() {}, submitter: rotateConfirm })
+    fixture.confirmation.accepted = false
+
+    await returnStatus.dispatch("click")
+
+    expect(rotatedSection.hidden).toBe(false)
+    expect(rotatedOutput.textContent).toBe(`grw_st_${"B".repeat(43)}`)
+    expect(rotatedOutput.focusCount).toBe(2)
+    expect(fixture.confirmation.messages[0]).toContain("다시 볼 수 없습니다")
   })
 
   it("restores the rotation trigger focus after a recoverable rotation error", async () => {

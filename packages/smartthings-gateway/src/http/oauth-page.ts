@@ -43,6 +43,11 @@ const sharedStyles = `
     @media (max-width: 30rem) { main { padding: var(--space-6); } h1 { font-size: var(--font-h1-mobile); } .phrase { white-space: normal; } }
     @media (prefers-color-scheme: dark) {
       :root { --canvas: #101820; --surface: #19232d; --text: #edf2f7; --text-muted: #aeb8c4; --border: #748396; --action: #e8eef5; --action-text: #17202a; --action-hover: #ffffff; --surface-subtle: #23303c; --success: #6ce9a6; --backdrop: #101820cc; --focus: #60a5fa; --error: #ffb4ab; }
+    }
+    @media (forced-colors: active) {
+      .nav-list a[aria-current="page"], .footer-nav-list a[aria-current="page"] {
+        border: 2px solid ButtonText;
+      }
     }`
 
 export function renderGatewayPage(options: GatewayPageOptions): string {

@@ -1,7 +1,12 @@
 import { servicePolicyRevision } from "../config.js"
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import { type PortalPageName, portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
+import {
+  type PortalPageName,
+  portalSharedStyles,
+  renderPortalEmailLink,
+  renderPortalNavigation,
+} from "./portal-shell.js"
 
 export type PolicyDocumentName = Extract<PortalPageName, "privacy" | "terms">
 
@@ -96,7 +101,7 @@ export function renderPortalPolicy(
 ): string {
   const isPrivacy = documentName === "privacy"
   const operatorName = escapeHtml(access.operatorName)
-  const supportEmail = escapeHtml(access.supportEmail)
+  const supportEmailLink = renderPortalEmailLink(access.supportEmail)
   const title = isPrivacy ? "개인정보 처리방침" : "이용약관"
   const summary = isPrivacy
     ? "Growful SmartThings Gateway가 연결 과정에서 어떤 정보를 처리하고 보호하는지 설명합니다."
@@ -114,7 +119,7 @@ export function renderPortalPolicy(
       ${isPrivacy ? renderPrivacySections(access.mode) : renderTermsSections(access.mode)}
       <section class="policy-contact" aria-labelledby="policy-contact-title">
         <h2 id="policy-contact-title">${isPrivacy ? "5. " : "6. "}운영자와 문의</h2>
-        <dl><div><dt>운영자</dt><dd>${operatorName}</dd></div><div><dt>지원 이메일</dt><dd><a href="mailto:${supportEmail}">${supportEmail}</a></dd></div></dl>
+        <dl><div><dt>운영자</dt><dd>${operatorName}</dd></div><div><dt>지원 이메일</dt><dd>${supportEmailLink}</dd></div></dl>
       </section>
     </article>`,
     description: summary,

@@ -1,18 +1,13 @@
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
-import { portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-}
+import {
+  portalSharedStyles,
+  renderPortalEmailLink,
+  renderPortalNavigation,
+} from "./portal-shell.js"
 
 export function renderPortalManagement(access: OAuthAccessPolicy): string {
-  const supportEmail = escapeHtml(access.supportEmail)
+  const supportEmailLink = renderPortalEmailLink(access.supportEmail)
   return renderGatewayPage({
     body: `
     ${renderPortalNavigation("manage")}
@@ -26,14 +21,14 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
         <div class="token-entry-region">
           <label for="growful-token">Growful 토큰</label>
           <div class="token-entry">
-            <input id="growful-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="grw_st_[A-Za-z0-9_\\-]{43}" minlength="50" maxlength="50" aria-describedby="token-hint" required>
+            <input id="growful-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="grw_st_[A-Za-z0-9_\\-]{43}" minlength="50" maxlength="50" aria-describedby="token-hint management-token-error" required>
             <button class="secondary reveal" type="button" data-token-visibility aria-controls="growful-token" aria-pressed="false">토큰 보기</button>
           </div>
           <p class="hint" id="token-hint">연결 완료 화면에서 한 번 표시된 <span class="phrase"><code>grw_st_</code> 토큰을</span> 붙여 넣으세요.</p>
         </div>
         <div class="connection-state-region">
           <p class="feedback" data-portal-feedback role="status" aria-live="polite" hidden></p>
-          <div class="error" data-portal-error role="alert" hidden><p data-portal-error-message></p></div>
+          <div class="error" data-portal-error role="alert" hidden><p id="management-token-error" data-portal-error-message></p></div>
           <div class="no-js-fallback error" id="javascript-required" data-no-js-fallback role="status" aria-labelledby="javascript-required-title">
             <p id="javascript-required-title"><strong>스크립트를 사용할 수 없습니다.</strong> 스크립트를 허용한 뒤 <span class="phrase">다시 시도하세요.</span> <span class="phrase">토큰은 전송되지 않았습니다.</span></p>
           </div>
@@ -58,7 +53,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
           <h3 id="blocked-title">SmartThings API 요청이 차단되었습니다</h3>
           <p data-block-reason></p>
           <p>차단 적용: <time data-blocked-at></time></p>
-          <p>문의할 때 위 지원 참조를 함께 전달해 주세요. <a href="mailto:${supportEmail}">${supportEmail}</a></p>
+          <p>문의할 때 위 지원 참조를 함께 전달해 주세요. ${supportEmailLink}</p>
         </section>
         <section class="scope-section" aria-labelledby="scope-title">
           <h3 id="scope-title">승인된 권한</h3>
@@ -73,7 +68,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     <section class="credential-output" data-token-safety data-rotated-token-section aria-labelledby="rotated-token-title" hidden>
       <p class="eyebrow">교체 완료</p>
       <h2 id="rotated-token-title">새 Growful 토큰</h2>
-      <p><span class="phrase">이 토큰은 다시 확인할 수 없습니다.</span> <span class="phrase">지금 복사해 안전한 곳에 보관하세요.</span></p>
+      <p><span class="phrase">이 토큰은 다시 확인할 수 없습니다.</span> 복사하거나 안전한 곳에 저장했는지 확인하기 전에는 <span class="phrase">이 화면을 떠나지 마세요.</span></p>
       <output id="rotated-growful-token" data-token-value data-rotated-token tabindex="-1"></output>
       <p class="copy-feedback" data-token-copy-feedback role="status" aria-live="polite" hidden>새 Growful 토큰을 클립보드에 복사했습니다.</p>
       <p class="copy-error" data-token-copy-error role="alert" hidden><span class="phrase">자동 복사를 사용할 수 없습니다.</span> <span class="phrase">위 토큰을 직접 복사하세요.</span></p>
@@ -119,7 +114,8 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .reveal { width: auto; white-space: nowrap; }
     .hint { margin: var(--space-2) 0 0; font-size: var(--font-small); }
     code, output { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
-    .connection-state-region { min-width: 0; padding-top: var(--space-4); }
+    .connection-state-region { min-width: 0; }
+    .connection-state-region > :not([hidden]) { margin-top: var(--space-4); }
     .feedback, .error { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface); font-weight: var(--weight-bold); }
     .error p { margin: 0; color: var(--error); }
     .feedback { color: var(--success); }
@@ -169,6 +165,12 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       .status-heading { flex-direction: column; }
       .support-value { align-items: stretch; flex-direction: column; }
       button.compact { width: 100%; }
+    }
+    @media (max-width: 22.5rem) {
+      .connection-panel { margin-top: var(--space-4); }
+      .token-form { grid-template-rows: repeat(3, auto); min-block-size: 0; padding: var(--space-4); }
+      .token-entry { grid-template-columns: minmax(0, 1fr); }
+      .reveal { width: 100%; }
     }`,
     title: "SmartThings 연결 관리 | Growful",
   })

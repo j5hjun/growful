@@ -68,7 +68,12 @@ describe("Growful portal status document", () => {
     expect(response.body).toContain('href="/manage" data-action="check-connection"')
     expect(response.body).toContain('href="/support"')
     expect(response.body).toContain(publicOAuthAccess.operatorName)
-    expect(response.body).toContain(`href="mailto:${publicOAuthAccess.supportEmail}"`)
+    expect(response.body).toContain(
+      `<!--email_off--><a href="mailto:${publicOAuthAccess.supportEmail}">${publicOAuthAccess.supportEmail}</a><!--/email_off-->`,
+    )
+    expect(response.body).not.toContain("/cdn-cgi/l/email-protection")
+    expect(response.body).not.toContain("[email protected]")
+    expect(response.headers["content-security-policy"]).not.toContain("script-src 'unsafe-inline'")
     expect(response.body).toContain("data-incident-history")
     expect(response.body).toContain("data-incident-empty")
     const renderedText = response.body.replace(/<[^>]+>/gu, " ").replace(/\s+/gu, " ")
