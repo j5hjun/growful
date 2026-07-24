@@ -101,7 +101,7 @@ describe("Growful portal connection states", () => {
   it.each([
     [
       401,
-      "입력한 Growful 토큰이 올바르지 않거나 이미 교체 또는 회수되었습니다. 현재 유효한 토큰을 입력하세요.",
+      "입력한 Growful 토큰이 올바르지 않거나 이미 교체되어 사용할 수 없습니다. 현재 유효한 토큰을 입력하세요.",
       "다시 확인",
     ],
     [404, "연결된 SmartThings 설치를 찾을 수 없습니다.", "SmartThings 다시 연결"],

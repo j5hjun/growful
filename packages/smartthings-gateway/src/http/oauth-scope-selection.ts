@@ -343,7 +343,7 @@ export function renderOAuthScopeSelection(options: {
       </div>
       <section class="policy" data-permission-step="policy" aria-labelledby="policy-title">
         <h2 id="policy-title"><span class="step-index">4</span> 정책 동의</h2>
-        <p><strong>${operatorName}</strong>에서 SmartThings 연결 정보와 암호화된 OAuth 토큰을 관리합니다.</p>
+        <p><strong>${operatorName}</strong>에서 SmartThings 연결 정보와 암호화된 SmartThings 연결 토큰을 관리합니다. 이 연결 토큰은 화면에 표시하지 않습니다.</p>
         <p class="policy-links"><a href="${privacyPolicyUrl}" aria-label="개인정보처리방침(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">개인정보처리방침</a><a href="${termsUrl}" aria-label="이용약관(새 탭에서 열림)" rel="noopener noreferrer" target="_blank">이용약관</a>${supportEmailLink}</p>
         <label><input type="checkbox" name="policyConsent" value="accepted" required${checked(draft.policyConsent)}${policyValidation}><span>${smartThingsPolicyConsentStatement}</span></label>
       </section>

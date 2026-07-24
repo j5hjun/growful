@@ -16,7 +16,9 @@ describe("portal token safety actions", () => {
 
     expect(page).toContain("data-rotate-token-dialog")
     expect(page).toContain("교체하면 현재 토큰은 즉시 무효화됩니다.")
-    expect(page).toContain("모든 소비자 설정을 새 토큰으로 변경해야 합니다.")
+    expect(page).toContain(
+      "Growful 토큰을 사용하는 모든 앱·자동화·서버 설정을 새 토큰으로 변경해야 합니다.",
+    )
     expect(page).toContain("data-rotate-token-confirm>토큰 교체</button>")
   })
 

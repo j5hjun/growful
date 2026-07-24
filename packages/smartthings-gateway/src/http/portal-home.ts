@@ -16,7 +16,8 @@ function escapeHtml(value: string): string {
 }
 
 export function renderPortalHome(access: OAuthAccessPolicy): string {
-  const accessLabel = access.mode === "private_beta" ? "비공개 베타" : "공개 서비스"
+  const accessLabel =
+    access.mode === "private_beta" ? "비공개 베타" : "초대 없이 이용 가능한 공개 접근 모드"
   const descriptionSuffix = access.mode === "private_beta" ? "비공개 베타 Gateway" : "Gateway"
   const operatorName = escapeHtml(access.operatorName)
   const privacyPolicyUrl = escapeHtml(access.privacyPolicyUrl.toString())
@@ -26,7 +27,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     access.mode === "private_beta"
       ? `<aside class="beta-entry-guidance" data-private-beta-entry-guidance aria-labelledby="beta-entry-title">
         <h2 id="beta-entry-title">초대 정보를 준비하세요</h2>
-        <p><span class="phrase">연결 시작 시 초대받은 사용자 이름과 비밀번호를 입력합니다.</span> <span class="phrase">삼성 계정 비밀번호가 아닙니다.</span> <span class="phrase">반복해서 잘못 입력하면 잠시 연결 시작이 제한될 수 있습니다.</span></p>
+        <p><span class="phrase">연결 시작 시 초대 사용자 이름과 초대 비밀번호를 입력합니다.</span> <span class="phrase">초대 비밀번호는 삼성 계정 비밀번호가 아닙니다.</span> <span class="phrase">반복해서 잘못 입력하면 초대 확인 시도가 잠시 제한될 수 있습니다.</span></p>
       </aside>`
       : ""
   return renderGatewayPage({
@@ -35,7 +36,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     <header class="hero" data-portal-home>
       <p class="eyebrow">${accessLabel}</p>
       <h1><span class="phrase">SmartThings 연결은 한 번,</span><br><span class="phrase">토큰 관리는 안전하게.</span></h1>
-      <p class="hero-copy">Growful Gateway가 SmartThings OAuth 토큰을 암호화해 보관하고 갱신합니다. <span class="phrase">삼성 계정 비밀번호 대신</span> <span class="phrase">별도로 발급된 Growful 토큰으로</span> <span class="phrase">SmartThings API를 호출합니다.</span></p>
+      <p class="hero-copy">Growful Gateway가 SmartThings 연결 토큰을 암호화해 보관하고 갱신합니다. <span class="phrase">사용자는 별도로 발급된 Growful 토큰으로 이 Gateway에 요청하고,</span> <span class="phrase">Gateway가 SmartThings API로 중계합니다.</span></p>
       ${privateBetaEntryGuidance}
       <div class="action-row">
         <a class="action action-primary" href="/oauth/start" data-action="connect">SmartThings 연결 시작</a>
@@ -48,13 +49,13 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
       <ol>
         <li><span class="step-number">01</span><h3>권한 선택</h3><p>필요한 디바이스와 기능만 고른 뒤 <span class="phrase">SmartThings 화면에서 승인합니다.</span></p></li>
         <li><span class="step-number">02</span><h3>토큰 수령</h3><p>Gateway 전용 Growful 토큰이 <span class="phrase">완료 화면에 한 번 표시됩니다.</span></p></li>
-        <li><span class="step-number">03</span><h3>연결 사용</h3><p>Growful 토큰으로 연결 상태를 확인하고 SmartThings API를 호출합니다.</p></li>
+        <li><span class="step-number">03</span><h3>연결 사용</h3><p>Growful 토큰으로 이 Gateway에 요청하면 Gateway가 SmartThings API로 중계합니다.</p></li>
       </ol>
     </section>
     <section class="trust-boundary" aria-labelledby="boundary-title">
       <div>
         <p class="eyebrow">보안 경계</p>
-        <h2 id="boundary-title"><span class="phrase">삼성 계정 자격 증명은</span> <span class="phrase">받지 않습니다</span></h2>
+        <h2 id="boundary-title"><span class="phrase">삼성 계정 로그인 정보는</span> <span class="phrase">받지 않습니다</span></h2>
       </div>
       <p>승인은 SmartThings에서 직접 진행됩니다. 관리 화면에 입력한 Growful 토큰은 URL, 쿠키 또는 브라우저 저장소에 남기지 않습니다. <span class="phrase">이 탭에서만 사용합니다.</span></p>
     </section>
@@ -67,7 +68,7 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
         <div><dt>정책</dt><dd><a href="${privacyPolicyUrl}">개인정보 처리방침</a> · <a href="${termsUrl}">이용약관</a></dd></div>
       </dl>
     </section>`,
-    description: `SmartThings OAuth 토큰을 대신 보관하고 Growful 토큰으로 안전하게 연결하는 ${descriptionSuffix}입니다.`,
+    description: `SmartThings 연결 토큰을 대신 보관하고 Growful 토큰 요청을 SmartThings API로 안전하게 중계하는 ${descriptionSuffix}입니다.`,
     layout: "wide",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
     styles: `${portalSharedStyles}
@@ -86,12 +87,14 @@ export function renderPortalHome(access: OAuthAccessPolicy): string {
     .flow h3 { margin: var(--space-4) 0 var(--space-2); font-size: var(--font-body); }
     .flow li p { margin: 0; font-size: var(--font-small); }
     .trust-boundary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; margin-top: var(--space-8); padding: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .trust-boundary > *, .service-disclosures > * { min-width: 0; }
     .trust-boundary h2, .trust-boundary p { margin: 0; }
     .service-disclosures { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; margin-top: var(--space-8); padding: var(--space-6) 0; border-top: 1px solid var(--border); }
     .service-disclosures h2, .service-disclosures dl { margin: 0; }
     .service-disclosures dl { display: grid; gap: var(--space-3); }
     .service-disclosures dt { color: var(--text-muted); font-size: var(--font-small); }
     .service-disclosures dd { margin: var(--space-2) 0 0; }
+    .service-disclosures dd, .service-disclosures a { overflow-wrap: anywhere; }
     .service-disclosures a { color: var(--text); }
     @media (max-width: 48rem) {
       .hero { padding: var(--space-8) 0 var(--space-12); }

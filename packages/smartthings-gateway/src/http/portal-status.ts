@@ -7,6 +7,7 @@ import type {
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
 import { portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
+import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 type StatusPresentation = {
   readonly label: string
@@ -182,11 +183,12 @@ export function renderPortalStatus(
       <section aria-labelledby="status-scope-title" data-status-section="scope">
         <h2 id="status-scope-title">판정과 공지 범위</h2>
         <p>필수 내부 검사가 통과한 경우에만 <strong>Gateway 준비됨</strong>으로 표시합니다. 자동 확인에는 <a href="/readyz">기계용 Gateway 준비 상태 응답</a>을 사용하세요.</p>
-        <p>공개 SLA와 가동률 목표는 아직 확정되지 않았습니다. 이 이력은 운영자가 등록한 공지이며 자동 장애 탐지나 개별 사용자 통지를 보장하지 않습니다.</p>
+        <p>공개 가동률 보장 목표와 목표 수치는 아직 확정되지 않았습니다. 이 이력은 운영자가 등록한 공지이며 자동 장애 탐지나 개별 사용자 통지를 보장하지 않습니다.</p>
       </section>
       <section aria-labelledby="status-help-title" data-status-section="support">
         <h2 id="status-help-title">지원</h2>
-        <p><a href="/manage">연결 관리</a>에서 자신의 연결 상태를 먼저 확인하세요. 비밀값을 제외한 발생 시각, 작업과 오류 종류를 <a href="/support">지원 안내</a>에 따라 보내 주세요.</p>
+        <p><a href="/manage">연결 관리</a>에서 자신의 연결 상태를 먼저 확인하세요. 자세한 문의 방법은 <a href="/support">지원 안내</a>에서 확인할 수 있습니다.</p>
+        ${renderSupportSafetyGuidance()}
       </section>
     </article>`,
     description:
@@ -202,16 +204,19 @@ export function renderPortalStatus(
     .status-document section h2 { margin: 0 0 var(--space-4); }
     .status-document section p:last-child { margin-bottom: 0; }
     .current-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
+    .current-status > * { min-width: 0; }
     .current-status h2 { margin-bottom: var(--space-3); }
-    .status-context { display: grid; gap: var(--space-4); }
-    .status-boundary { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
+    .status-context { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+    .status-context > * { min-width: 0; }
+    .status-boundary { min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface-subtle); }
     .status-boundary h2 { font-size: var(--font-body); }
     .status-boundary dl { display: grid; gap: var(--space-3); margin: 0; }
     .status-boundary dl div { display: grid; gap: var(--space-2); }
     .status-boundary dt { color: var(--text); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .status-boundary dd { margin: 0; color: var(--text-muted); line-height: var(--line-body); }
     .status-title { margin-bottom: 0; color: var(--text); font-size: var(--font-h2); font-weight: var(--weight-bold); line-height: var(--line-heading); }
-    .status-check { display: grid; gap: var(--space-3); }
+    .status-check { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+    .status-check > * { min-width: 0; }
     .status-check p { margin: 0; }
     .status-check dl { margin: 0; }
     .status-check dl div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--space-3); }
@@ -233,10 +238,11 @@ export function renderPortalStatus(
     .incident-list li > p { margin: var(--space-4) 0 0; white-space: pre-wrap; }
     .status-document a { color: var(--text); }
     @media (max-width: 30rem) {
-      .current-status, .incident-heading, .status-check dl div { grid-template-columns: 1fr; gap: var(--space-2); }
+      .current-status { grid-template-columns: minmax(0, 1fr); }
+      .incident-heading, .status-check dl div { grid-template-columns: 1fr; gap: var(--space-2); }
     }
     @media (max-width: 20rem) {
-      .status-document { padding-top: var(--space-6); }
+      .status-document { min-width: 0; padding-top: var(--space-6); }
       .status-document header { padding-bottom: var(--space-3); }
       .status-document .current-status { padding-top: var(--space-3); }
       .status-context { gap: var(--space-3); }

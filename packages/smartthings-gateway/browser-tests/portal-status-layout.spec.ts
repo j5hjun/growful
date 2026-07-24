@@ -259,10 +259,9 @@ for (const actionCase of actionCases) {
   })
 }
 
-test("status content reflows at 200 percent without overlap or horizontal scrolling", async ({
-  page,
-}) => {
+test("status content reflows in the DPR 2 / 640px surrogate without overlap", async ({ page }) => {
   // Given
+  // DPR does not emulate browser zoom; verify actual 200% browser zoom manually after deployment.
   const { app, origin } = await startStatusApp({ serviceIncidents: incidents })
   const cdp = await page.context().newCDPSession(page)
   await cdp.send("Emulation.setDeviceMetricsOverride", {

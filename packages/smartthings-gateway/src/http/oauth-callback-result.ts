@@ -1,4 +1,5 @@
 import { renderGatewayPage } from "./oauth-page.js"
+import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 export const oauthCallbackResultKinds = {
   cancelled: "cancelled",
@@ -31,37 +32,37 @@ const resultCopy = {
     title: "SmartThings 연결이 취소되었습니다",
   },
   invalid_request: {
-    description: "올바르지 않은 SmartThings OAuth 연결 요청을 안전하게 복구합니다.",
+    description: "올바르지 않은 SmartThings 연결 요청을 안전하게 복구합니다.",
     explanation:
-      '연결 완료에 필요한 정보가 없거나 <span class="phrase">올바른 형식이 아닙니다.</span> 현재 주소를 수정하거나 다시 사용하지 말고 <span class="phrase">새 OAuth 요청을 시작해 주세요.</span>',
+      '연결 완료에 필요한 정보가 없거나 <span class="phrase">올바른 형식이 아닙니다.</span> 현재 주소를 수정하거나 다시 사용하지 말고 <span class="phrase">새 연결 요청을 시작해 주세요.</span>',
     label: "잘못된 요청",
     title: "올바르지 않은 연결 요청입니다",
   },
   invalid_state: {
-    description: "만료되었거나 이미 사용한 SmartThings OAuth 연결 요청을 안전하게 복구합니다.",
+    description: "만료되었거나 이미 사용한 SmartThings 연결 요청을 안전하게 복구합니다.",
     explanation:
-      '보안을 위해 연결 요청은 일정 시간이 지나면 만료되며 한 번만 사용할 수 있습니다. 새 OAuth 요청을 시작하면 <span class="phrase">다시 연결할 수 있습니다.</span>',
+      '보안을 위해 연결 요청은 일정 시간이 지나면 만료되며 한 번만 사용할 수 있습니다. 새 연결 요청을 시작하면 <span class="phrase">다시 연결할 수 있습니다.</span>',
     label: "요청 만료",
     title: "연결 요청을 다시 시작해 주세요",
   },
   rate_limited: {
     description: "SmartThings 승인 후 돌아오는 요청이 반복되면 안전하게 제한합니다.",
     explanation:
-      '짧은 시간에 연결 완료 요청이 너무 많이 접수되었습니다. 잠시 기다린 뒤 <span class="phrase">새 OAuth 요청을 시작해 주세요.</span>',
+      '짧은 시간에 연결 완료 요청이 너무 많이 접수되었습니다. 잠시 기다린 뒤 <span class="phrase">새 연결 요청을 시작해 주세요.</span>',
     label: "요청 제한",
     title: "요청이 너무 많습니다",
   },
   scope_mismatch: {
     description: "SmartThings 권한 확인이 일치하지 않아 연결을 완료하지 않았습니다.",
     explanation:
-      'SmartThings가 요청한 범위와 다른 <span class="phrase">권한 정보를 반환해</span> 연결을 중단했습니다. 잠시 후 OAuth를 다시 시작하고, 반복되면 지원 안내를 확인해 주세요.',
+      'SmartThings가 요청한 범위와 다른 <span class="phrase">권한 정보를 반환해</span> 연결을 중단했습니다. 잠시 후 연결 승인을 다시 시작하고, 반복되면 지원 안내를 확인해 주세요.',
     label: "권한 확인 실패",
     title: "권한 확인 실패",
   },
   token_exchange_failed: {
-    description: "SmartThings 토큰 교환 실패 후 안전하게 다시 연결하도록 안내합니다.",
+    description: "SmartThings 연결 토큰을 받지 못한 뒤 안전하게 다시 연결하도록 안내합니다.",
     explanation:
-      "SmartThings와 연결 정보를 교환하는 동안 작업을 완료하지 못했습니다. 잠시 후 OAuth를 다시 시작하고, 반복되면 지원 안내를 확인해 주세요.",
+      "SmartThings 연결 토큰을 받는 동안 작업을 완료하지 못했습니다. 잠시 후 연결 승인을 다시 시작하고, 반복되면 지원 안내를 확인해 주세요.",
     label: "연결 처리 실패",
     title: "SmartThings 연결 실패",
   },
@@ -84,11 +85,13 @@ export function renderOAuthCallbackResult(kind: OAuthCallbackResultKind): string
     <section aria-labelledby="recovery-title">
       <h2 id="recovery-title">다음 단계</h2>
       <div class="actions">
-        <a class="primary" href="/oauth/start">OAuth 다시 시작</a>
+        <a class="primary" href="/oauth/start">권한 선택 다시 시작</a>
         <a class="secondary" href="/">서비스 안내</a>
         <a class="secondary" href="/support">지원 안내</a>
       </div>
-      <p class="support-note"><span class="phrase">지원이 필요해도 OAuth code, state 또는 토큰을 보내지 마세요.</span> <span class="phrase">전체 오류 응답 대신 발생 시각과 이 화면의 제목만 알려 주세요.</span></p>
+      <aside class="support-note" aria-label="안전한 지원 문의">
+        ${renderSupportSafetyGuidance()}
+      </aside>
     </section>`,
     description: copy.description,
     styles: `
@@ -103,6 +106,8 @@ export function renderOAuthCallbackResult(kind: OAuthCallbackResultKind): string
     .primary:active, .secondary:active { transform: scale(var(--pressed-scale)); }
     .primary:focus-visible, .secondary:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .support-note { margin: var(--space-6) 0 0; padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
+    .support-note p { margin-bottom: var(--space-3); }
+    .support-note p:last-child { margin-bottom: 0; }
     .support-note .phrase { white-space: normal; }
     @media (prefers-reduced-motion: no-preference) { .primary, .secondary { transition: transform 100ms ease; } }`,
     title: copy.title,

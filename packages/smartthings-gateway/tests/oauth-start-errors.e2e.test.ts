@@ -444,7 +444,7 @@ describe("OAuth start failure responses", () => {
       expect(fixture.store.states.size).toBe(0)
       if (contentType === "text/html") {
         expectOAuthRecoveryPage(response)
-        expect(response.body).toContain("연결 자격이 변경되었거나")
+        expect(response.body).toContain("연결 요청 정보가 변경되었거나")
         expect(response.body).toContain("Growful 권한 선택 화면")
         expect(response.body).toContain("권한 선택 다시 시작")
       } else {

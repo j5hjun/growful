@@ -47,8 +47,9 @@ for (const width of [320, 375]) {
   })
 }
 
-test("OAuth start recovery remains usable at 200 percent zoom", async ({ page }) => {
+test("OAuth start recovery remains usable in a 160px reflow surrogate", async ({ page }) => {
   // Given
+  // This narrow viewport is a layout surrogate; verify actual 200% browser zoom manually after deployment.
   await page.setViewportSize({ height: 360, width: 160 })
 
   // When

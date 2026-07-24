@@ -249,7 +249,8 @@ for (const viewport of viewports) {
   }
 }
 
-test("quickstart remains readable at 200 percent zoom", async ({ page }) => {
+test("quickstart remains readable in a 160px reflow surrogate", async ({ page }) => {
+  // This viewport reduction is a layout surrogate; verify actual 200% browser zoom manually after deployment.
   await page.setViewportSize({ height: viewports[0].height / 2, width: viewports[0].width / 2 })
   await page.emulateMedia({ colorScheme: "dark" })
   await routeCompletion(page, true)

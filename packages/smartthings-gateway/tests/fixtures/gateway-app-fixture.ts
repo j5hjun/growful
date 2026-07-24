@@ -16,6 +16,7 @@ export type GatewayAppFixtureOptions = {
   readonly abuseControl?: GrowfulAbuseControl
   readonly apps: FastifyInstance[]
   readonly logger?: AppOptions["logger"]
+  readonly oauthAccess?: AppOptions["oauthAccess"]
   readonly readinessProbe?: AppOptions["readinessProbe"]
   readonly requestQuota?: GrowfulRequestQuota
   readonly serviceStatusSource?: AppOptions["serviceStatusSource"]
@@ -50,7 +51,7 @@ export function createGatewayAppFixture(options: GatewayAppFixtureOptions) {
     abuseControl: options.abuseControl ?? allowAllGrowfulAbuseControl,
     authorizationOrigin: "https://api.smartthings.test",
     logger: options.logger,
-    oauthAccess: publicOAuthAccess,
+    oauthAccess: options.oauthAccess ?? publicOAuthAccess,
     readinessProbe: options.readinessProbe ?? readyProbe,
     redirectOrigin: gatewayRedirectOrigin,
     ...(options.requestQuota === undefined ? {} : { requestQuota: options.requestQuota }),

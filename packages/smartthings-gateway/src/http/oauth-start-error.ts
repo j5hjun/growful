@@ -1,4 +1,5 @@
 import { renderGatewayPage } from "./oauth-page.js"
+import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 export const oauthStartErrorKinds = {
   authorizationExpired: "authorization_expired",
@@ -40,12 +41,12 @@ export function parseOAuthStartRetryAfterSeconds(value: unknown): number | undef
 
 const errorCopy = {
   authorization_expired: {
-    description: "변경되거나 만료된 SmartThings 연결 자격을 안전하게 다시 확인하도록 안내합니다.",
+    description: "변경되거나 만료된 SmartThings 연결 요청을 안전하게 다시 확인하도록 안내합니다.",
     explanation:
-      "연결 화면을 연 뒤 연결 자격이 변경되었거나 사용할 수 있는 시간이 지났습니다. 새 Growful 권한 선택 화면을 열어 현재 자격으로 다시 시작해 주세요.",
-    label: "연결 자격 확인",
+      "연결 화면을 연 뒤 연결 요청 정보가 변경되었거나 사용할 수 있는 시간이 지났습니다. 새 Growful 권한 선택 화면을 열어 다시 시작해 주세요.",
+    label: "연결 요청 확인",
     retryLabel: "권한 선택 다시 시작",
-    title: "연결 자격을 다시 확인해 주세요",
+    title: "연결 요청을 다시 확인해 주세요",
   },
   internal: {
     description: "SmartThings 연결 시작 오류 후 안전한 복구 방법을 안내합니다.",
@@ -132,7 +133,9 @@ export function renderOAuthStartError(
       <nav class="actions" aria-label="연결 시작 복구">
         ${actions}
       </nav>
-      <p class="support-note"><span class="phrase">지원이 필요해도 브라우저 주소창의 전체 주소, 임시 연결 코드, 토큰 또는 입력한 요청 내용을 보내지 마세요.</span> <span class="phrase">발생 시각과 이 화면의 제목만 알려 주세요.</span></p>
+      <aside class="support-note" aria-label="안전한 지원 문의">
+        ${renderSupportSafetyGuidance()}
+      </aside>
     </section>`,
     description: copy.description,
     styles: `
@@ -150,6 +153,8 @@ export function renderOAuthStartError(
     .primary:active, .secondary:active { transform: scale(var(--pressed-scale)); }
     .primary:focus-visible, .secondary:focus-visible { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
     .support-note { margin: var(--space-6) 0 0; padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); }
+    .support-note p { margin-bottom: var(--space-3); }
+    .support-note p:last-child { margin-bottom: 0; }
     .support-note .phrase { white-space: normal; }
     @media (forced-colors: active) { .primary { border: 2px solid ButtonText; } }
     @media (prefers-reduced-motion: no-preference) { .primary, .secondary { transition: transform 100ms ease; } }`,

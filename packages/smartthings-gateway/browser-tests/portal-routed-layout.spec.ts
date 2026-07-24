@@ -98,8 +98,11 @@ test("portal shell keeps tablet navigation and the home journey compact", async 
   }
 })
 
-test("200 percent zoom keeps status summary regions from overlapping", async ({ page }) => {
+test("the 640px reflow surrogate keeps status summary regions from overlapping", async ({
+  page,
+}) => {
   // Given
+  // This viewport reduction is a layout surrogate; verify actual 200% browser zoom manually after deployment.
   const apps: FastifyInstance[] = []
   const { app } = createGatewayAppFixture({ apps })
   const origin = await app.listen({ host: "127.0.0.1", port: 0 })

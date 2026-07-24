@@ -95,7 +95,9 @@ describe("HTTP request rate limits", () => {
       '<a class="secondary" href="/oauth/start">권한 선택 다시 시작</a>',
     )
     expect(response.body).not.toContain('class="primary" href="/oauth/start"')
-    expect(response.body).toContain("브라우저 주소창의 전체 주소, 임시 연결 코드, 토큰")
+    expect(response.body).toContain(
+      "주소창 전체 주소, 승인 과정의 임시 코드·상태값, Growful 토큰, SmartThings 연결 토큰",
+    )
     expect(fixture.store.states.size).toBe(storedStateCount)
   })
 
