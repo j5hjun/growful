@@ -23,27 +23,197 @@ const modes = [
 const viewportWidths = [160, 320, 375, 768, 1_280] as const
 
 async function expectNoHorizontalOverflow(page: Page, label: string): Promise<void> {
-  const layout = await page.locator("html").evaluate((html) => ({
-    clientWidth: html.clientWidth,
-    scrollWidth: html.scrollWidth,
-  }))
-  const overflowingElements = await page.locator("body *").evaluateAll((elements) =>
-    elements
-      .filter((element) => {
-        const bounds = element.getBoundingClientRect()
-        return (
-          bounds.left < -1 || bounds.right > element.ownerDocument.documentElement.clientWidth + 1
-        )
-      })
-      .map((element) => ({
-        className: element.getAttribute("class") ?? "",
-        tagName: element.tagName,
-        text: element.textContent?.trim().slice(0, 80) ?? "",
-      })),
-  )
+  const initial = await page.locator("html").evaluate((html) => {
+    const viewportWidth = html.clientWidth
+    const elementSelector = (element: Element): string => {
+      const parts: string[] = []
+      let current: Element | null = element
+      while (current !== null && current !== document.documentElement && parts.length < 5) {
+        const id = current.id === "" ? "" : `#${current.id}`
+        const classes = current.classList.length === 0 ? "" : `.${[...current.classList].join(".")}`
+        parts.unshift(`${current.tagName.toLowerCase()}${id}${classes}`)
+        current = current.parentElement
+      }
+      return parts.join(" > ")
+    }
+    const elements = [...document.querySelectorAll<HTMLElement>("body *")].map((element) => {
+      const bounds = element.getBoundingClientRect()
+      const textNodes = [...element.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())
+        .flatMap((node) => {
+          const range = document.createRange()
+          range.selectNodeContents(node)
+          return [...range.getClientRects()].map((rect) => ({
+            left: rect.left,
+            right: rect.right,
+            text: node.textContent?.trim().slice(0, 80) ?? "",
+            width: rect.width,
+          }))
+        })
+      return {
+        rect: {
+          left: bounds.left,
+          right: bounds.right,
+          width: bounds.width,
+        },
+        selector: elementSelector(element),
+        textNodes,
+      }
+    })
+    const textNodeEdges = elements.flatMap((element) =>
+      element.textNodes
+        .filter((rect) => rect.left < 0 || rect.right > viewportWidth)
+        .map((rect) => ({ ...rect, selector: element.selector })),
+    )
+    const rootBounds = html.getBoundingClientRect()
+    const bodyBounds = document.body.getBoundingClientRect()
+    return {
+      elementEdges: elements.filter(({ rect }) => rect.left < 0 || rect.right > viewportWidth),
+      layout: {
+        body: {
+          clientWidth: document.body.clientWidth,
+          rect: { left: bodyBounds.left, right: bodyBounds.right, width: bodyBounds.width },
+          scrollWidth: document.body.scrollWidth,
+        },
+        html: {
+          clientWidth: html.clientWidth,
+          rect: { left: rootBounds.left, right: rootBounds.right, width: rootBounds.width },
+          scrollWidth: html.scrollWidth,
+        },
+      },
+      textNodeEdges,
+    }
+  })
+  const hasOverflow =
+    initial.layout.html.scrollWidth > initial.layout.html.clientWidth ||
+    initial.elementEdges.length > 0 ||
+    initial.textNodeEdges.length > 0
 
-  expect(overflowingElements, label).toEqual([])
-  expect(layout.scrollWidth, label).toBeLessThanOrEqual(layout.clientWidth)
+  if (!hasOverflow) return
+
+  const details = await page.locator("html").evaluate((html) => {
+    const elementSelector = (element: Element): string => {
+      const parts: string[] = []
+      let current: Element | null = element
+      while (current !== null && current !== document.documentElement && parts.length < 5) {
+        const id = current.id === "" ? "" : `#${current.id}`
+        const classes = current.classList.length === 0 ? "" : `.${[...current.classList].join(".")}`
+        parts.unshift(`${current.tagName.toLowerCase()}${id}${classes}`)
+        current = current.parentElement
+      }
+      return parts.join(" > ")
+    }
+    const pseudoDetails = (element: Element, pseudo: "::before" | "::after") => {
+      const style = getComputedStyle(element, pseudo)
+      return {
+        borderInline: `${style.borderLeftWidth} ${style.borderRightWidth}`,
+        content: style.content,
+        display: style.display,
+        marginInline: `${style.marginLeft} ${style.marginRight}`,
+        outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`,
+        paddingInline: `${style.paddingLeft} ${style.paddingRight}`,
+        position: style.position,
+        transform: style.transform,
+        width: style.width,
+      }
+    }
+    const elements = [...document.querySelectorAll<HTMLElement>("body *")].map((element) => {
+      const bounds = element.getBoundingClientRect()
+      const style = getComputedStyle(element)
+      const textNodes = [...element.childNodes]
+        .filter((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())
+        .flatMap((node) => {
+          const range = document.createRange()
+          range.selectNodeContents(node)
+          return [...range.getClientRects()].map((rect) => ({
+            left: rect.left,
+            right: rect.right,
+            text: node.textContent?.trim().slice(0, 80) ?? "",
+            width: rect.width,
+          }))
+        })
+      return {
+        after: pseudoDetails(element, "::after"),
+        before: pseudoDetails(element, "::before"),
+        box: {
+          borderInline: `${style.borderLeftWidth} ${style.borderRightWidth}`,
+          boxSizing: style.boxSizing,
+          marginInline: `${style.marginLeft} ${style.marginRight}`,
+          maxWidth: style.maxWidth,
+          minWidth: style.minWidth,
+          outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`,
+          overflowX: style.overflowX,
+          paddingInline: `${style.paddingLeft} ${style.paddingRight}`,
+          position: style.position,
+          transform: style.transform,
+          width: style.width,
+        },
+        clientWidth: element.clientWidth,
+        offsetWidth: element.offsetWidth,
+        rect: {
+          left: bounds.left,
+          right: bounds.right,
+          width: bounds.width,
+        },
+        scrollWidth: element.scrollWidth,
+        selector: elementSelector(element),
+        textNodes,
+      }
+    })
+    const hasPseudoSignal = (pseudo: ReturnType<typeof pseudoDetails>) =>
+      (pseudo.content !== "none" && pseudo.content !== "normal") ||
+      !pseudo.outline.startsWith("none ") ||
+      pseudo.transform !== "none"
+    return {
+      ancestorScrollDifferences: [
+        {
+          clientWidth: html.clientWidth,
+          scrollWidth: html.scrollWidth,
+          selector: "html",
+        },
+        {
+          clientWidth: document.body.clientWidth,
+          scrollWidth: document.body.scrollWidth,
+          selector: "body",
+        },
+        ...elements.map(({ clientWidth, scrollWidth, selector }) => ({
+          clientWidth,
+          scrollWidth,
+          selector,
+        })),
+      ].filter(({ clientWidth, scrollWidth }) => scrollWidth - clientWidth >= 1),
+      pseudoSignals: elements
+        .filter(({ before, after }) => hasPseudoSignal(before) || hasPseudoSignal(after))
+        .map(({ after, before, selector }) => ({ after, before, selector })),
+      rightmostElements: [...elements]
+        .sort((left, right) => right.rect.right - left.rect.right)
+        .slice(0, 8)
+        .map(({ box, clientWidth, offsetWidth, rect, scrollWidth, selector }) => ({
+          box,
+          clientWidth,
+          offsetWidth,
+          rect,
+          scrollWidth,
+          selector,
+        })),
+      rightmostTextNodes: elements
+        .flatMap((element) =>
+          element.textNodes.map((rect) => ({ ...rect, selector: element.selector })),
+        )
+        .sort((left, right) => right.right - left.right)
+        .slice(0, 8),
+      transformedElements: elements
+        .filter(({ box }) => box.transform !== "none")
+        .map(({ box, rect, selector }) => ({ rect, selector, transform: box.transform })),
+    }
+  })
+  const diagnosticLabel = `${label}\n${JSON.stringify({ details, initial })}`
+
+  expect(initial.elementEdges, diagnosticLabel).toEqual([])
+  expect(initial.textNodeEdges, diagnosticLabel).toEqual([])
+  expect(initial.layout.html.scrollWidth, diagnosticLabel).toBeLessThanOrEqual(
+    initial.layout.html.clientWidth,
+  )
 }
 
 async function createAuthorizationState(app: FastifyInstance): Promise<string> {
