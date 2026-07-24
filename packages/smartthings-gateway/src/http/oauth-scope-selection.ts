@@ -386,7 +386,7 @@ export function renderOAuthScopeSelection(options: {
     .policy p { margin: var(--space-2) 0; }
     .policy a { color: var(--focus); }
     .policy-links { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    .policy-links a { display: inline-flex; min-height: var(--action-height); align-items: center; padding: 0 var(--space-2); }
+    .policy-links a { display: inline-flex; max-width: 100%; min-height: var(--action-height); align-items: center; padding: 0 var(--space-2); overflow-wrap: anywhere; text-align: center; }
     label { display: flex; gap: var(--space-3); align-items: flex-start; margin: var(--space-3) 0; line-height: var(--line-body); cursor: pointer; }
     [data-permission-step="range"] label { min-height: var(--action-height); align-items: center; padding: 0 var(--space-2); }
     label > span { min-width: 0; }
