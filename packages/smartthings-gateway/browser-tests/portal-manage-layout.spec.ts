@@ -164,9 +164,17 @@ test("management keeps token checking ahead of lost-token recovery at 320px", as
   expect(recoveryBox.y).toBeGreaterThanOrEqual(panelBox.y + panelBox.height)
   await expect(reconnect).toHaveClass(/action-secondary/)
   await expect(reconnect).not.toHaveClass(/action-primary/)
-  await expect(recovery).toContainText("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")
   await expect(recovery).toContainText(
-    "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+    "같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다.",
+  )
+  await expect(recovery).toContainText(
+    "별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다.",
+  )
+  await expect(recovery).not.toContainText(
+    "이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.",
+  )
+  await expect(page.locator("[data-disconnect-dialog]")).toContainText(
+    "이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.",
   )
 
   await input.focus()
@@ -341,7 +349,9 @@ test("one-time token flows confirm rotation and keep recovery navigation availab
   const dialog = page.locator("[data-rotate-token-dialog]")
   await expect(dialog).toBeVisible()
   await expect(dialog).toContainText("현재 토큰은 즉시 무효화됩니다")
-  await expect(dialog).toContainText("모든 소비자 설정을 새 토큰으로 변경해야 합니다")
+  await expect(dialog).toContainText(
+    "Growful 토큰을 사용하는 모든 앱·자동화·서버 설정을 새 토큰으로 변경해야 합니다",
+  )
   expect(rotationRequests).toBe(0)
 
   // When

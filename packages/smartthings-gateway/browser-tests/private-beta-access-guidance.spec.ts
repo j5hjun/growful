@@ -5,7 +5,7 @@ const pageVariants = [
   {
     guidance: { kind: "authentication_failed" },
     name: "authentication-failed",
-    title: "인증을 완료하지 못했습니다",
+    title: "초대 확인을 완료하지 못했습니다",
   },
   {
     guidance: { kind: "rate_limited", retryAfterSeconds: 60 },
@@ -59,7 +59,7 @@ for (const variant of pageVariants) {
         })
         const primaryAction = page.locator(".action-primary")
         const secondaryAction = page.locator(".action-secondary")
-        const credentialPhrases = ["초대 사용자 이름", "원본 invite secret"] as const
+        const credentialPhrases = ["초대 사용자 이름", "초대 비밀번호"] as const
         await page.keyboard.press("Tab")
 
         // Then
@@ -79,10 +79,7 @@ for (const variant of pageVariants) {
           ).toBe(1)
         }
         if (variant.guidance.kind === "rate_limited") {
-          for (const phraseWithParticle of [
-            "초대 사용자 이름과",
-            "원본 invite secret을",
-          ] as const) {
+          for (const phraseWithParticle of ["초대 사용자 이름과", "초대 비밀번호를"] as const) {
             expect(
               await page
                 .getByText(phraseWithParticle, { exact: true })

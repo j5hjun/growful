@@ -65,7 +65,7 @@ describe("Growful portal HTTP surface", () => {
     expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
     expect(response.headers["content-security-policy"]).toContain("connect-src 'self'")
     expect(response.body).toContain("data-portal-home")
-    expect(response.body).toContain("공개 서비스")
+    expect(response.body).toContain("초대 없이 이용 가능한 공개 접근 모드")
     expect(response.body).not.toContain("비공개 베타 Gateway")
     expect(response.body).toContain(publicOAuthAccess.operatorName)
     expect(response.body).toContain(publicOAuthAccess.privacyPolicyUrl.toString())
@@ -94,9 +94,17 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body).toContain("data-token-loss-recovery")
     expect(response.body).toContain('href="/oauth/start" data-token-loss-reconnect')
     expect(response.body).toContain("기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.")
-    expect(response.body).toContain("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")
     expect(response.body).toContain(
-      "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+      "새 연결 시작을 선택해 SmartThings 승인을 완료하면 새 Growful 토큰을 받을 수 있습니다.",
+    )
+    expect(response.body).toContain(
+      "같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다.",
+    )
+    expect(response.body).toContain(
+      "별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다.",
+    )
+    expect(response.body).toContain(
+      "이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.",
     )
     expect(response.body).toContain(">새 연결 시작</a>")
     expect(response.body).toContain('type="password"')
@@ -156,15 +164,17 @@ describe("Growful portal HTTP surface", () => {
     }
     expect(privacy.body).toContain('data-policy-document="privacy"')
     expect(privacy.body).toContain('href="/privacy" aria-current="page"')
-    expect(privacy.body).toContain("OAuth 상태는 10분 동안 유효")
+    expect(privacy.body).toContain("승인 과정의 임시 상태값은 10분 동안 유효")
     expect(privacy.body).toContain("데이터베이스에 남는 시간은 최대 15분")
-    expect(privacy.body).toContain('<span class="phrase">백업·WAL·운영 로그</span>')
+    expect(privacy.body).toContain(
+      '<span class="phrase">백업·데이터베이스 복구 기록·운영 로그</span>',
+    )
     expect(privacy.body).toContain("구체적인 보존 기간은 이 문서에 아직 명시되어 있지 않습니다")
     expect(privacy.body).not.toContain("비공개 베타 범위에서 운영합니다")
     expect(privacy.body).not.toContain("비공개")
     expect(terms.body).toContain('data-policy-document="terms"')
     expect(terms.body).toContain('href="/terms" aria-current="page"')
-    expect(terms.body).toContain("공개 서비스의 기술적 이용 조건")
+    expect(terms.body).toContain("초대 없이 이용 가능한 공개 접근 모드의 기술적 이용 조건")
     expect(terms.body).not.toContain("비공개 베타")
     expect(terms.body).toContain("연결당 분당 60회")
   })
@@ -197,13 +207,14 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body.includes('data-support-topic="token-exposure"')).toBe(true)
     expect(response.body.includes('data-support-topic="privacy"')).toBe(true)
     expect(response.body.includes('data-support-topic="security"')).toBe(true)
-    expect(response.body.includes("Growful 토큰 원문")).toBe(true)
-    expect(response.body.includes("SmartThings access·refresh token")).toBe(true)
-    expect(response.body.includes("OAuth code·state")).toBe(true)
+    expect(response.body.includes("Growful 토큰")).toBe(true)
+    expect(response.body.includes("SmartThings 연결 토큰")).toBe(true)
+    expect(response.body.includes("승인 과정의 임시 코드·상태값")).toBe(true)
+    expect(response.body.includes("주소창 전체 주소")).toBe(true)
     expect(response.body.includes("비밀번호")).toBe(true)
     expect(response.body.includes("원본 계정·설치 식별자")).toBe(true)
     expect(response.body.includes("승인 후 돌아오는 단계")).toBe(true)
-    expect(response.body.includes("가명 지원 참조")).toBe(true)
+    expect(response.body.includes("화면에 표시된 지원 참조")).toBe(true)
     expect(response.body.includes("callback")).toBe(false)
     expect(response.body.includes("supportReference")).toBe(false)
     expect(response.body.includes("data-token-loss-recovery")).toBe(true)
@@ -211,26 +222,32 @@ describe("Growful portal HTTP surface", () => {
     expect(response.body.includes("기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.")).toBe(
       true,
     )
-    expect(response.body.includes("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")).toBe(
-      true,
-    )
     expect(
-      response.body.includes("SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요."),
+      response.body.includes(
+        "새 연결 시작을 선택해 SmartThings 승인을 완료하면 새 Growful 토큰을 받을 수 있습니다.",
+      ),
+    ).toBe(true)
+    expect(
+      response.body.includes(
+        "같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다.",
+      ),
+    ).toBe(true)
+    expect(
+      response.body.includes(
+        "별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다.",
+      ),
+    ).toBe(true)
+    expect(
+      response.body.includes(
+        "이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.",
+      ),
     ).toBe(true)
     expect(response.body.includes(">새 연결 시작</a>")).toBe(true)
     expect(
       response.body.includes("분실한 토큰의 기존 연결을 찾아 정리하기 위한 본인 확인 절차"),
     ).toBe(true)
-    expect(
-      response.body.includes(
-        "Gateway에 저장된 SmartThings 토큰까지 삭제하려면 Growful 연결을 해제합니다.",
-      ),
-    ).toBe(true)
-    expect(
-      response.body.includes(
-        "Growful 연결 해제는 Gateway의 활성 연결과 저장 토큰을 삭제하지만 SmartThings 설치 자체는 삭제하지 않습니다.",
-      ),
-    ).toBe(true)
+    expect(response.body.includes("SmartThings에 남아")).toBe(false)
+    expect(response.body.includes("SmartThings에서 별도로 정리")).toBe(false)
     expect(response.body.includes("SmartThings 토큰까지 폐기하려면")).toBe(false)
     expect(response.body.includes("비공개 베타")).toBe(false)
   })
@@ -272,14 +289,16 @@ describe("Growful portal HTTP surface", () => {
       expect(page.body).toContain('<meta name="robots" content="noindex,nofollow">')
     }
     expect(home.body).toContain("data-private-beta-entry-guidance")
-    expect(home.body).toContain("초대받은 사용자 이름과 비밀번호")
-    expect(home.body).toContain("삼성 계정 비밀번호가 아닙니다")
-    expect(home.body).toContain("반복해서 잘못 입력하면 잠시 연결 시작이 제한될 수 있습니다")
+    expect(home.body).toContain("초대 사용자 이름과 초대 비밀번호")
+    expect(home.body).toContain("초대 비밀번호는 삼성 계정 비밀번호가 아닙니다")
+    expect(home.body).toContain("반복해서 잘못 입력하면 초대 확인 시도가 잠시 제한될 수 있습니다")
     expect(privacy.body).toContain("비공개 베타 범위에서 운영합니다")
-    expect(privacy.body).toContain("비공개 베타 사용자명")
-    expect(privacy.body).toContain("비공개 초대·운영 정책이 회수")
+    expect(privacy.body).toContain("초대 사용자 이름")
+    expect(privacy.body).toContain("비공개 베타 초대가 회수")
+    expect(privacy.body).toContain("Gateway API 중계 접근이 제한·중단되어도 연결 정보는 유지되며")
     expect(terms.body).toContain("비공개 베타의 기술적 이용 조건")
-    expect(support.body).toContain("비공개 베타 초대나 접근을 회수")
+    expect(support.body).toContain("비공개 베타 초대를 회수")
+    expect(support.body).toContain("해당 연결의 Gateway API 중계 접근을 제한·중단")
     expect(robots.headers["cache-control"]).toBe("no-store")
     expect(robots.body).toBe("User-agent: *\nDisallow: /\n")
   })

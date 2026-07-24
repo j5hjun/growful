@@ -62,10 +62,16 @@ test("reauthorization recovery is keyboard reachable, responsive, and forced-col
       "기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.",
     )
     await expect(tokenRecovery).toContainText(
-      "분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.",
+      "같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다.",
     )
     await expect(tokenRecovery).toContainText(
-      "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+      "별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다.",
+    )
+    await expect(tokenRecovery).not.toContainText(
+      "이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.",
+    )
+    await expect(page.locator("[data-disconnect-dialog]")).toContainText(
+      "이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.",
     )
     await expect(tokenRecoveryAction).toHaveAttribute("href", "/oauth/start")
     const tokenInput = page.locator("#growful-token")
@@ -84,15 +90,15 @@ test("reauthorization recovery is keyboard reachable, responsive, and forced-col
     const reconnect = notice.getByRole("link", { name: "SmartThings 다시 연결" })
     await expect(page.locator("[data-portal-status]")).toBeFocused()
     await expect(page.locator("[data-status-reauthorization]")).toHaveText(
-      "API 사용 불가 · 다시 연결 필요",
+      "Gateway API 중계 사용 불가 · 다시 연결 필요",
     )
     await expect(namedAlert).toBeVisible()
-    await expect(notice.getByText("인증 갱신 필요", { exact: true })).toBeVisible()
+    await expect(notice.getByText("연결 다시 승인 필요", { exact: true })).toBeVisible()
     await expect(
       notice.getByRole("heading", { name: "SmartThings 연결을 다시 승인해 주세요" }),
     ).toBeVisible()
     await expect(notice).toContainText(
-      "SmartThings 인증이 만료되었거나 회수되어 API 요청을 사용할 수 없습니다. 다시 연결하면 새 Growful 토큰이 발급되고 현재 토큰은 사용할 수 없게 됩니다. 새 토큰으로 소비자 설정을 업데이트하세요.",
+      "SmartThings 연결 승인이 만료되었거나 철회되어 Gateway의 API 중계를 사용할 수 없습니다. 다시 연결하면 새 Growful 토큰이 발급되고 현재 토큰은 사용할 수 없게 됩니다. 새 Growful 토큰을 사용하는 앱·자동화·서버 설정을 업데이트하세요.",
     )
     await expect(reconnect).toHaveAttribute("href", "/oauth/start")
     await expect(page.locator("[data-rotate-token]")).toBeHidden()

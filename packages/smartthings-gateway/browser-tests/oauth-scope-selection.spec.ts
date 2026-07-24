@@ -133,8 +133,9 @@ for (const viewport of viewports) {
   }
 }
 
-test("invalid draft remains usable at 200 percent zoom", async ({ page }) => {
+test("invalid draft remains usable in a 160px reflow surrogate", async ({ page }) => {
   // Given
+  // This viewport reduction is a layout surrogate; verify actual 200% browser zoom manually after deployment.
   await page.setViewportSize({
     height: Math.floor(viewports[0].height / 2),
     width: Math.floor(viewports[0].width / 2),

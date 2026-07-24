@@ -78,17 +78,23 @@ test("support keyboard order reaches the primary contact action before static to
   await expect(reconnect).toBeFocused()
   await expect(reconnect).toHaveAttribute("href", "/oauth/start")
   await expect(recovery).toContainText("기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다.")
-  await expect(recovery).toContainText("분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.")
   await expect(recovery).toContainText(
-    "SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.",
+    "같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다.",
+  )
+  await expect(recovery).toContainText(
+    "별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다.",
+  )
+  await expect(recovery).toContainText(
+    "이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.",
   )
   await expect(recovery).not.toContainText("비밀값을 이메일로 보내지 마세요.")
 })
 
-test("support content reflows without horizontal overflow at 200 percent zoom", async ({
+test("support content reflows without overflow in the DPR 2 / 640px surrogate", async ({
   page,
 }) => {
   // Given
+  // DPR does not emulate browser zoom; verify actual 200% browser zoom manually after deployment.
   const cdp = await page.context().newCDPSession(page)
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     deviceScaleFactor: 2,

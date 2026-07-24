@@ -7,7 +7,7 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     <h1>SmartThings 연결 완료</h1>
     <section aria-labelledby="growful-token-title" data-token-safety>
       <h2 id="growful-token-title">Growful 토큰</h2>
-      <p><span class="phrase">이 페이지를 떠나면 토큰을 다시 볼 수 없습니다.</span> 복사하거나 안전한 곳에 저장했는지 확인하기 전에는 <span class="phrase">페이지를 닫거나 이동하지 마세요.</span> <span class="phrase">분실하면 OAuth를 다시 완료해야 합니다.</span> <span class="phrase">Gateway 요청에는 Bearer 토큰으로 사용하세요.</span></p>
+      <p><span class="phrase">이 페이지를 떠나면 토큰을 다시 볼 수 없습니다.</span> 복사하거나 안전한 곳에 저장했는지 확인하기 전에는 <span class="phrase">페이지를 닫거나 이동하지 마세요.</span> <span class="phrase">분실하면 SmartThings 연결을 다시 완료해야 합니다.</span> 같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다. 별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다. <span class="phrase">이 Gateway에 보내는 요청에는 Bearer 토큰으로 사용하세요.</span></p>
       <textarea id="issued-growful-token" data-token-value data-growful-token aria-labelledby="growful-token-title" aria-describedby="growful-token-copy-guidance" rows="2" readonly autocomplete="off" autocapitalize="off" spellcheck="false">${growfulToken}</textarea>
       <p id="growful-token-copy-guidance" class="manual-copy-guidance" data-token-manual-copy><span class="phrase">자동 복사를 사용할 수 없으면 토큰 필드에 초점을 둔 뒤 토큰 전체를 선택하세요.</span> <span class="phrase">Ctrl+C 또는 Command+C를 눌러 직접 복사할 수 있습니다.</span></p>
       <p class="copy-feedback" data-token-copy-feedback role="status" aria-live="polite" hidden>Growful 토큰을 클립보드에 복사했습니다.</p>
@@ -19,14 +19,15 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     </section>
     <section class="api-quickstart" aria-labelledby="api-quickstart-title">
       <h2 id="api-quickstart-title">첫 API 요청</h2>
-      <p>이 Gateway와 같은 주소의 <code>/v1</code> 아래에 SmartThings API 경로를 붙이세요. Growful 토큰은 요청 헤더에 Bearer 토큰으로 전달합니다.</p>
+      <p>이 Gateway와 같은 주소의 <code>/v1</code> 아래에 SmartThings API 경로를 붙이세요. Growful 토큰을 요청 헤더에 Bearer 토큰으로 보내면 Gateway가 SmartThings API로 중계합니다.</p>
       <p>디바이스 읽기 권한을 선택한 경우 아래처럼 요청할 수 있습니다. 다른 권한만 승인했다면 <code>/v1</code> 뒤에 자신이 승인한 SmartThings API 경로를 사용하세요.</p>
       <pre class="api-request-example" aria-label="첫 API 요청 예시"><code>GET /v1/devices
 Authorization: Bearer &lt;Growful 토큰&gt;</code></pre>
       <p class="api-token-safety">실제 토큰은 위 자리표시자 대신 Authorization 헤더에만 넣으세요. URL, 쿼리, 요청 본문 또는 공유 문서에는 넣지 마세요.</p>
     </section>
     <script src="/token-safety.js" defer></script>`,
-    description: "SmartThings 연결이 완료되어 Growful 토큰을 한 번 표시합니다.",
+    description:
+      "SmartThings 연결이 완료되어 Growful 토큰을 한 번 표시하고 Gateway의 SmartThings API 중계 사용법을 안내합니다.",
     styles: `
     section { margin-top: var(--space-6); }
     h2 { margin: 0 0 var(--space-3); font-size: var(--font-body); line-height: var(--line-body); }

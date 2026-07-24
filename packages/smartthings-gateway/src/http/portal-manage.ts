@@ -5,6 +5,7 @@ import {
   renderPortalEmailLink,
   renderPortalNavigation,
 } from "./portal-shell.js"
+import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 export function renderPortalManagement(access: OAuthAccessPolicy): string {
   const supportEmailLink = renderPortalEmailLink(access.supportEmail)
@@ -14,7 +15,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     <header class="manage-header">
       <p class="eyebrow">연결 관리</p>
       <h1><span class="phrase">Growful 토큰으로</span> <span class="phrase">연결 확인</span></h1>
-      <p>토큰은 이 탭을 닫거나 새로고침하면 사라집니다. <span class="phrase">브라우저에 저장하지 않습니다.</span></p>
+      <p>입력한 Growful 토큰으로 이 Gateway에 연결 상태를 요청합니다. 토큰은 이 탭을 닫거나 새로고침하면 사라지며 <span class="phrase">브라우저에 저장하지 않습니다.</span> SmartThings 연결 토큰은 Gateway가 암호화해 보관·갱신하며 이 화면에 표시하지 않습니다.</p>
     </header>
     <section class="connection-panel" aria-label="Growful 토큰 연결 상태">
       <form class="token-form" action="/manage#javascript-required" method="get" data-portal-token-form novalidate>
@@ -40,25 +41,25 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       </form>
       <section class="connection-status" data-portal-status aria-labelledby="connection-title" tabindex="-1" hidden>
         <div class="status-heading">
-          <div><p class="status-indicator" data-status-active>API 사용 가능</p><p class="status-indicator status-blocked" data-status-blocked hidden>API 접근 차단</p><p class="status-indicator status-reauthorization" data-status-reauthorization hidden>API 사용 불가 · 다시 연결 필요</p><h2 id="connection-title">SmartThings 연결 상태</h2></div>
+          <div><p class="status-indicator" data-status-active>Gateway API 중계 사용 가능</p><p class="status-indicator status-blocked" data-status-blocked hidden>Gateway API 중계 접근 제한</p><p class="status-indicator status-reauthorization" data-status-reauthorization hidden>Gateway API 중계 사용 불가 · 다시 연결 필요</p><h2 id="connection-title">SmartThings 연결 상태</h2></div>
           <button class="secondary" type="button" data-forget-token>이 탭에서 토큰 지우기</button>
         </div>
         <dl>
-          <div><dt>토큰 만료 예정</dt><dd><time data-expires-at></time></dd></div>
-          <div><dt>마지막 자동 갱신</dt><dd><time data-refreshed-at></time></dd></div>
+          <div><dt>SmartThings 연결 토큰 만료 예정</dt><dd><time data-expires-at></time></dd></div>
+          <div><dt>SmartThings 연결 토큰 마지막 자동 갱신</dt><dd><time data-refreshed-at></time></dd></div>
           <div class="support-entry"><dt>지원 참조</dt><dd class="support-value"><output data-support-reference tabindex="-1"></output><button class="secondary compact" type="button" data-copy-support-reference>지원 참조 복사</button></dd></div>
         </dl>
         <section class="restricted-notice" data-blocked-notice role="alert" aria-labelledby="blocked-title" hidden>
-          <p class="eyebrow">API 접근 차단</p>
-          <h3 id="blocked-title">SmartThings API 요청이 차단되었습니다</h3>
+          <p class="eyebrow">Gateway API 중계 접근 제한</p>
+          <h3 id="blocked-title">Growful Gateway의 SmartThings API 중계가 제한되었습니다</h3>
           <p data-block-reason></p>
-          <p>차단 적용: <time data-blocked-at></time></p>
+          <p>제한 적용 시각: <time data-blocked-at></time></p>
           <p>문의할 때 위 지원 참조를 함께 전달해 주세요. ${supportEmailLink}</p>
         </section>
         <section class="reauthorization-notice" data-reauthorization-notice role="alert" aria-labelledby="reauthorization-title" hidden>
-          <p class="eyebrow">인증 갱신 필요</p>
+          <p class="eyebrow">연결 다시 승인 필요</p>
           <h3 id="reauthorization-title">SmartThings 연결을 다시 승인해 주세요</h3>
-          <p>SmartThings 인증이 만료되었거나 회수되어 API 요청을 사용할 수 없습니다. 다시 연결하면 새 Growful 토큰이 발급되고 현재 토큰은 사용할 수 없게 됩니다. 새 토큰으로 소비자 설정을 업데이트하세요.</p>
+          <p>SmartThings 연결 승인이 만료되었거나 철회되어 Gateway의 API 중계를 사용할 수 없습니다. 다시 연결하면 새 Growful 토큰이 발급되고 현재 토큰은 사용할 수 없게 됩니다. 새 Growful 토큰을 사용하는 앱·자동화·서버 설정을 업데이트하세요.</p>
           <a class="action action-primary" href="/oauth/start">SmartThings 다시 연결</a>
         </section>
         <div class="action-row status-actions">
@@ -74,10 +75,13 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     <section class="token-recovery" data-token-loss-recovery aria-labelledby="token-recovery-title">
       <p class="eyebrow">토큰 분실 도움말</p>
       <h2 id="token-recovery-title">Growful 토큰을 잃어버렸나요?</h2>
-      <p>기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다. 새 연결을 시작하면 새 토큰을 받을 수 있지만, 분실한 토큰의 기존 연결은 자동으로 해제되지 않습니다.</p>
-      <p>기존 연결도 정리하려면 SmartThings에서 이전 Growful 설치를 삭제한 뒤 새 연결을 시작하세요.</p>
+      <p>기존 Growful 토큰은 다시 조회하거나 복구할 수 없습니다. 새 연결 시작을 선택해 SmartThings 승인을 완료하면 새 Growful 토큰을 받을 수 있습니다. 같은 SmartThings 연결을 다시 승인하면 이전 Growful 토큰은 더 이상 사용할 수 없습니다. 별도 SmartThings 연결로 승인하면 기존 Growful 연결은 자동으로 해제되지 않고 남을 수 있습니다.</p>
       <a class="action action-secondary" href="/oauth/start" data-token-loss-reconnect>새 연결 시작</a>
     </section>
+    <aside class="management-support-safety" aria-label="안전한 지원 문의">
+      ${renderSupportSafetyGuidance()}
+      <p><a href="/support">지원 안내 보기</a></p>
+    </aside>
     <section class="credential-output" data-token-safety data-rotated-token-section aria-labelledby="rotated-token-title" hidden>
       <p class="eyebrow">교체 완료</p>
       <h2 id="rotated-token-title">새 Growful 토큰</h2>
@@ -93,7 +97,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     <dialog data-rotate-token-dialog aria-labelledby="rotate-token-title" aria-describedby="rotate-token-description">
       <form class="dialog-content" method="dialog" data-rotate-token-form>
         <h2 id="rotate-token-title">Growful 토큰을 교체할까요?</h2>
-        <p id="rotate-token-description"><span class="phrase">교체하면 현재 토큰은 즉시 무효화됩니다.</span> <span class="phrase">모든 소비자 설정을 새 토큰으로 변경해야 합니다.</span></p>
+        <p id="rotate-token-description"><span class="phrase">교체하면 현재 토큰은 즉시 무효화됩니다.</span> <span class="phrase">Growful 토큰을 사용하는 모든 앱·자동화·서버 설정을 새 토큰으로 변경해야 합니다.</span></p>
         <div class="action-row">
           <button class="secondary" type="submit" value="cancel">취소</button>
           <button class="destructive" type="submit" value="confirm" data-rotate-token-confirm>토큰 교체</button>
@@ -103,7 +107,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     <dialog data-disconnect-dialog aria-labelledby="disconnect-title" aria-describedby="disconnect-description" tabindex="-1">
       <form class="dialog-content" method="dialog" data-disconnect-form>
         <h2 id="disconnect-title">연결을 해제할까요?</h2>
-        <p id="disconnect-description"><span class="phrase">저장된 SmartThings 토큰과</span> <span class="phrase">Growful 토큰이 삭제됩니다.</span> <span class="phrase">SmartThings Linked Service 설치는</span> <span class="phrase">별도로 해제해야 합니다.</span></p>
+        <p id="disconnect-description">이 작업은 Growful Gateway에 저장된 연결 정보만 삭제하며 SmartThings 쪽 상태는 변경하지 않습니다.</p>
         <div class="action-row">
           <button class="secondary" type="submit" value="cancel" data-disconnect-cancel>취소</button>
           <button class="destructive" type="submit" value="confirm" data-disconnect-confirm>연결 해제</button>
@@ -111,7 +115,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       </form>
     </dialog>`,
     description:
-      "Growful 토큰으로 SmartThings 연결 상태와 만료 시각을 확인하고 토큰을 교체하거나 연결을 해제합니다.",
+      "Growful 토큰으로 SmartThings 연결 상태와 연결 토큰 만료 시각을 확인하고 Growful 토큰을 교체하거나 연결을 해제합니다.",
     layout: "manage",
     robots: access.mode === "public" ? "index,follow" : "noindex,nofollow",
     scriptSource: "/portal.js",
@@ -166,6 +170,10 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .reauthorization-notice p { margin-bottom: var(--space-3); }
     .reauthorization-notice .action { width: 100%; }
     .scope-section { margin-top: var(--space-6); }
+    .management-support-safety { margin-top: var(--space-6); padding: var(--space-4); border-radius: var(--radius-field); background: var(--surface); font-size: var(--font-small); }
+    .management-support-safety p { margin-bottom: var(--space-3); }
+    .management-support-safety p:last-child { margin-bottom: 0; }
+    .management-support-safety a { color: var(--text); }
     .scope-section h3 { margin: 0 0 var(--space-3); font-size: var(--font-body); }
     .scope-section ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
     .scope-section li { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); overflow-wrap: anywhere; }

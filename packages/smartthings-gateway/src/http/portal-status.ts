@@ -7,6 +7,7 @@ import type {
 import { renderGatewayPage } from "./oauth-page.js"
 import type { OAuthAccessPolicy } from "./oauth-routes.js"
 import { portalSharedStyles, renderPortalNavigation } from "./portal-shell.js"
+import { renderSupportSafetyGuidance } from "./support-safety-copy.js"
 
 type StatusPresentation = {
   readonly label: string
@@ -182,11 +183,12 @@ export function renderPortalStatus(
       <section aria-labelledby="status-scope-title" data-status-section="scope">
         <h2 id="status-scope-title">판정과 공지 범위</h2>
         <p>필수 내부 검사가 통과한 경우에만 <strong>Gateway 준비됨</strong>으로 표시합니다. 자동 확인에는 <a href="/readyz">기계용 Gateway 준비 상태 응답</a>을 사용하세요.</p>
-        <p>공개 SLA와 가동률 목표는 아직 확정되지 않았습니다. 이 이력은 운영자가 등록한 공지이며 자동 장애 탐지나 개별 사용자 통지를 보장하지 않습니다.</p>
+        <p>공개 가동률 보장 목표와 목표 수치는 아직 확정되지 않았습니다. 이 이력은 운영자가 등록한 공지이며 자동 장애 탐지나 개별 사용자 통지를 보장하지 않습니다.</p>
       </section>
       <section aria-labelledby="status-help-title" data-status-section="support">
         <h2 id="status-help-title">지원</h2>
-        <p><a href="/manage">연결 관리</a>에서 자신의 연결 상태를 먼저 확인하세요. 비밀값을 제외한 발생 시각, 작업과 오류 종류를 <a href="/support">지원 안내</a>에 따라 보내 주세요.</p>
+        <p><a href="/manage">연결 관리</a>에서 자신의 연결 상태를 먼저 확인하세요. 자세한 문의 방법은 <a href="/support">지원 안내</a>에서 확인할 수 있습니다.</p>
+        ${renderSupportSafetyGuidance()}
       </section>
     </article>`,
     description:

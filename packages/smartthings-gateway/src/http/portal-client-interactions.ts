@@ -150,7 +150,7 @@ export function bindPortalInteractions(
     switch (error.status) {
       case 401:
         resetToTokenEntry(
-          "입력한 Growful 토큰이 올바르지 않거나 이미 교체 또는 회수되었습니다. 현재 유효한 토큰을 입력하세요.",
+          "입력한 Growful 토큰이 올바르지 않거나 이미 교체되어 사용할 수 없습니다. 현재 유효한 토큰을 입력하세요.",
         )
         break
       case 404:

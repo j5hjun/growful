@@ -115,11 +115,11 @@ export function createPortalContracts() {
   function blockReasonMessage(reason: BlockReason): string {
     switch (reason) {
       case "quota_abuse":
-        return "반복적인 요청 한도 초과를 운영자가 확인해 API 접근을 차단했습니다."
+        return "반복적인 요청 한도 초과를 운영자가 확인해 이 연결의 Gateway API 중계 접근을 제한했습니다."
       case "security_incident":
-        return "연결에서 보안 위험 신호가 확인되어 API 접근을 차단했습니다."
+        return "연결에서 보안 위험 신호가 확인되어 이 연결의 Gateway API 중계 접근을 제한했습니다."
       case "terms_violation":
-        return "서비스 이용 조건 위반 검토로 API 접근을 차단했습니다."
+        return "서비스 이용 조건 위반 검토로 이 연결의 Gateway API 중계 접근을 제한했습니다."
       default:
         return assertNever(reason)
     }
