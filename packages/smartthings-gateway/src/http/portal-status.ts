@@ -243,6 +243,8 @@ export function renderPortalStatus(
       .status-boundary { padding: var(--space-3); }
       .status-boundary h2 { margin-bottom: var(--space-3); }
       .status-boundary dl { gap: var(--space-2); }
+      .status-check .action-row { flex-direction: row; gap: var(--space-2); }
+      .status-check .action { width: auto; min-width: 0; flex: 1 1 0; padding-inline: var(--space-2); }
     }
     @media (forced-colors: active) {
       .status-boundary, .status-label { border: 2px solid CanvasText; }

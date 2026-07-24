@@ -227,7 +227,14 @@ for (const actionCase of actionCases) {
       await expect(actions.nth(1)).toHaveText(actionCase.secondLabel)
       await expect(actions.nth(1)).toHaveClass(/\baction-secondary\b/u)
       const lastAction = await actions.nth(1).boundingBox()
-      if (lastAction === null) throw new Error(`${actionCase.readiness} action has no layout box`)
+      const firstAction = await actions.nth(0).boundingBox()
+      if (firstAction === null || lastAction === null) {
+        throw new Error(`${actionCase.readiness} action has no layout box`)
+      }
+      expect(lastAction.x).toBeGreaterThan(firstAction.x)
+      expect(lastAction.y).toBeCloseTo(firstAction.y, 0)
+      expect(firstAction.height).toBeGreaterThanOrEqual(44)
+      expect(lastAction.height).toBeGreaterThanOrEqual(44)
       expect(lastAction.y + lastAction.height).toBeLessThanOrEqual(900)
 
       // When
