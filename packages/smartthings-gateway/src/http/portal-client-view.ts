@@ -98,27 +98,29 @@ export function createPortalView(elements: PortalElements, contracts: PortalCont
     })
     elements.scopeList.replaceChildren(...items)
     elements.supportReference.textContent = connection.supportReference
-    switch (connection.serviceAccess.status) {
-      case "active":
-        elements.statusActive.hidden = false
-        elements.statusBlocked.hidden = true
-        elements.blockedNotice.hidden = true
-        elements.blockReason.textContent = ""
-        elements.blockedAt.textContent = ""
-        elements.blockedAt.removeAttribute("datetime")
-        break
-      case "blocked":
-        elements.statusActive.hidden = true
-        elements.statusBlocked.hidden = false
-        elements.blockedNotice.hidden = false
-        elements.blockReason.textContent = contracts.blockReasonMessage(
-          connection.serviceAccess.reason,
-        )
-        elements.blockedAt.textContent = formatDate(connection.serviceAccess.blockedAt)
-        elements.blockedAt.setAttribute("datetime", connection.serviceAccess.blockedAt)
-        break
-      default:
-        contracts.blockReasonMessage(connection.serviceAccess)
+    elements.statusActive.hidden = true
+    elements.statusBlocked.hidden = true
+    elements.statusReauthorization.hidden = true
+    elements.blockedNotice.hidden = true
+    elements.reauthorizationNotice.hidden = true
+    elements.rotateTokenButton.hidden = false
+    elements.blockReason.textContent = ""
+    elements.blockedAt.textContent = ""
+    elements.blockedAt.removeAttribute("datetime")
+    if (connection.serviceAccess.status === "blocked") {
+      elements.statusBlocked.hidden = false
+      elements.blockedNotice.hidden = false
+      elements.blockReason.textContent = contracts.blockReasonMessage(
+        connection.serviceAccess.reason,
+      )
+      elements.blockedAt.textContent = formatDate(connection.serviceAccess.blockedAt)
+      elements.blockedAt.setAttribute("datetime", connection.serviceAccess.blockedAt)
+    } else if (connection.authorizationHealth.status === "reauthorization_required") {
+      elements.statusReauthorization.hidden = false
+      elements.reauthorizationNotice.hidden = false
+      elements.rotateTokenButton.hidden = true
+    } else {
+      elements.statusActive.hidden = false
     }
     elements.tokenForm.hidden = false
     elements.statusSection.hidden = false

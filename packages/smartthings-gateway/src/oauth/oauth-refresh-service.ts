@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
+import { SmartThingsReauthorizationRequiredError } from "../smartthings/smartthings-client.js"
 import type { InstalledAppId, OAuthStore, SmartThingsClient, StoredTokens } from "./contracts.js"
-import { RefreshClaimIdSchema } from "./contracts.js"
+import { RefreshClaimIdSchema, SMARTTHINGS_REAUTHORIZATION_REQUIRED } from "./contracts.js"
 import { ensureOAuthScopesWithin } from "./oauth-scope-policy.js"
 
 export type RefreshBatchResult = {
@@ -78,7 +79,12 @@ export class OAuthRefreshService {
       await this.options.store.recordRefreshFailure({
         claimId,
         installedAppId: tokens.installedAppId,
-        message: error instanceof Error ? error.name : "UnknownError",
+        message:
+          error instanceof SmartThingsReauthorizationRequiredError
+            ? SMARTTHINGS_REAUTHORIZATION_REQUIRED
+            : error instanceof Error
+              ? error.name
+              : "UnknownError",
         occurredAt: now,
       })
       throw error

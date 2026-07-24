@@ -12,12 +12,14 @@ export function getPortalElements() {
   const statusSection = document.querySelector<HTMLElement>("[data-portal-status]")
   const statusActive = document.querySelector<HTMLElement>("[data-status-active]")
   const statusBlocked = document.querySelector<HTMLElement>("[data-status-blocked]")
+  const statusReauthorization = document.querySelector<HTMLElement>("[data-status-reauthorization]")
   const expiresAt = document.querySelector<HTMLTimeElement>("[data-expires-at]")
   const refreshedAt = document.querySelector<HTMLTimeElement>("[data-refreshed-at]")
   const supportReference = document.querySelector<HTMLOutputElement>("[data-support-reference]")
   const blockedNotice = document.querySelector<HTMLElement>("[data-blocked-notice]")
   const blockReason = document.querySelector<HTMLElement>("[data-block-reason]")
   const blockedAt = document.querySelector<HTMLTimeElement>("[data-blocked-at]")
+  const reauthorizationNotice = document.querySelector<HTMLElement>("[data-reauthorization-notice]")
   const copySupportReferenceButton = document.querySelector<HTMLButtonElement>(
     "[data-copy-support-reference]",
   )
@@ -51,12 +53,14 @@ export function getPortalElements() {
     statusSection === null ||
     statusActive === null ||
     statusBlocked === null ||
+    statusReauthorization === null ||
     expiresAt === null ||
     refreshedAt === null ||
     supportReference === null ||
     blockedNotice === null ||
     blockReason === null ||
     blockedAt === null ||
+    reauthorizationNotice === null ||
     copySupportReferenceButton === null ||
     scopeList === null ||
     forgetTokenButton === null ||
@@ -91,6 +95,7 @@ export function getPortalElements() {
     feedback,
     forgetTokenButton,
     reconnectAction,
+    reauthorizationNotice,
     refreshedAt,
     rotatedTokenError,
     rotatedTokenFeedback,
@@ -105,6 +110,7 @@ export function getPortalElements() {
     statusSection,
     statusActive,
     statusBlocked,
+    statusReauthorization,
     supportReference,
     tokenForm,
     tokenInput,

@@ -1,5 +1,9 @@
 import type { Kysely, Selectable } from "kysely"
-import type { RefreshClaim, StoredTokens } from "../oauth/contracts.js"
+import {
+  type RefreshClaim,
+  SMARTTHINGS_REAUTHORIZATION_REQUIRED,
+  type StoredTokens,
+} from "../oauth/contracts.js"
 import type { GatewayDatabase, SmartThingsConnectionTable } from "./database.js"
 import type { PostgresTokenCodec } from "./postgres-token-codec.js"
 
@@ -25,6 +29,12 @@ export class PostgresRefreshClaimStore {
           .selectAll()
           .where("consentedAt", "is not", null)
           .where("policyVersion", "is not", null)
+          .where((expression) =>
+            expression.or([
+              expression("lastRefreshError", "is", null),
+              expression("lastRefreshError", "!=", SMARTTHINGS_REAUTHORIZATION_REQUIRED),
+            ]),
+          )
           .where((expression) =>
             expression.or([
               expression("refreshClaimedUntil", "is", null),

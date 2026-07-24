@@ -13,6 +13,7 @@ import {
   type RefreshClaimId,
   type RefreshFailure,
   type SaveTokensInput,
+  SMARTTHINGS_REAUTHORIZATION_REQUIRED,
   StaleRefreshClaimError,
   type StoredTokens,
 } from "../../src/oauth/contracts.js"
@@ -89,7 +90,9 @@ export class MemoryOAuthStore implements OAuthStore {
         connection.tokens.expiresAt.getTime() <= claim.now.getTime() + claim.refreshBeforeExpiryMs
       const expectedTokenMatches =
         claim.kind === "due" || connection.tokens.accessToken === claim.expectedAccessToken
-      if (!claimAvailable || !due || !expectedTokenMatches) {
+      const refreshable =
+        connection.tokens.lastRefreshError !== SMARTTHINGS_REAUTHORIZATION_REQUIRED
+      if (!claimAvailable || !due || !expectedTokenMatches || !refreshable) {
         continue
       }
       connection.refreshClaimedUntil = new Date(claim.now.getTime() + claim.leaseMs)
@@ -132,6 +135,9 @@ export class MemoryOAuthStore implements OAuthStore {
     const connection = this.connections.get(failure.installedAppId)
     if (connection?.refreshClaimId === failure.claimId) {
       this.failures.push(failure)
+      if (connection.tokens.lastRefreshError !== SMARTTHINGS_REAUTHORIZATION_REQUIRED) {
+        connection.tokens = { ...connection.tokens, lastRefreshError: failure.message }
+      }
     }
   }
 
@@ -194,6 +200,7 @@ export class MemoryOAuthStore implements OAuthStore {
       accessToken: input.grant.accessToken,
       expiresAt: new Date(input.issuedAt.getTime() + input.grant.expiresInSeconds * 1_000),
       installedAppId: input.grant.installedAppId,
+      lastRefreshError: null,
       lastRefreshedAt: input.source === "refresh" ? input.issuedAt : null,
       refreshToken: input.grant.refreshToken,
       scopes: input.grant.scopes,

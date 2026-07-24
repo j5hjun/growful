@@ -35,6 +35,7 @@ export function storedTokens(index: number): StoredTokens {
     accessToken: `access-${index}`,
     expiresAt: new Date("2026-07-19T00:00:30.000Z"),
     installedAppId: InstalledAppIdSchema.parse(`installed-app-${index}`),
+    lastRefreshError: null,
     lastRefreshedAt: null,
     refreshToken: `refresh-${index}`,
     scopes: ["r:devices:*"],

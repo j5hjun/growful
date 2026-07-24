@@ -28,6 +28,7 @@ function storedTokens(): StoredTokens {
     accessToken: "access-token",
     expiresAt: new Date("2026-07-20T00:00:00.000Z"),
     installedAppId: InstalledAppIdSchema.parse("removed-user-installed-app"),
+    lastRefreshError: null,
     lastRefreshedAt: null,
     refreshToken: "refresh-token",
     scopes: ["r:devices:$"],

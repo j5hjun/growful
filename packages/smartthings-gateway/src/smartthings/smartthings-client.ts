@@ -20,16 +20,21 @@ const tokenResponseSchema = z.object({
   token_type: z.string().min(1),
 })
 
+const invalidGrantResponseSchema = z.object({
+  error: z.literal("invalid_grant"),
+})
+
 export type HttpSmartThingsClientOptions = {
   readonly authorizationUrl: URL
   readonly clientId: string
   readonly clientSecret: string
   readonly redirectUri: URL
+  readonly tokenRequestTimeoutMs?: number
   readonly tokenUrl: URL
 }
 
 export class SmartThingsTokenRequestError extends Error {
-  override readonly name = "SmartThingsTokenRequestError"
+  override readonly name: string = "SmartThingsTokenRequestError"
 
   constructor(
     readonly statusCode: number | undefined,
@@ -37,6 +42,10 @@ export class SmartThingsTokenRequestError extends Error {
   ) {
     super("SmartThings rejected the OAuth token request", options)
   }
+}
+
+export class SmartThingsReauthorizationRequiredError extends SmartThingsTokenRequestError {
+  override readonly name = "SmartThingsReauthorizationRequiredError"
 }
 
 export class HttpSmartThingsClient implements SmartThingsClient {
@@ -84,7 +93,7 @@ export class HttpSmartThingsClient implements SmartThingsClient {
           body,
           headers: { accept: "application/json", authorization: `Basic ${credentials}` },
           retry: 0,
-          timeout: 15_000,
+          timeout: this.options.tokenRequestTimeoutMs ?? 15_000,
         })
         .json<unknown>()
       const parsed = tokenResponseSchema.parse(responseBody)
@@ -98,7 +107,17 @@ export class HttpSmartThingsClient implements SmartThingsClient {
       }
     } catch (error) {
       const statusCode = error instanceof HTTPError ? error.response.status : undefined
-      throw new SmartThingsTokenRequestError(statusCode, { cause: error })
+      if (this.isExplicitInvalidGrant(error)) {
+        throw new SmartThingsReauthorizationRequiredError(statusCode)
+      }
+      throw new SmartThingsTokenRequestError(statusCode)
     }
+  }
+
+  private isExplicitInvalidGrant(error: unknown): boolean {
+    if (!(error instanceof HTTPError) || error.response.status !== 400) {
+      return false
+    }
+    return invalidGrantResponseSchema.safeParse(error.data).success
   }
 }

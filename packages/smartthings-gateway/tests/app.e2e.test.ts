@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify"
 import { afterEach, describe, expect, it } from "vitest"
 import { hashAuditSubject } from "../src/audit/audit-event.js"
 import { GrowfulRequestQuota } from "../src/http/growful-request-quota.js"
+import { SMARTTHINGS_REAUTHORIZATION_REQUIRED } from "../src/oauth/contracts.js"
+import { hashGrowfulToken } from "../src/security/growful-token.js"
 import {
   authorizeGatewayApp,
   createGatewayAppFixture,
@@ -48,6 +50,7 @@ describe("SmartThings Gateway HTTP API", () => {
     expect(tokenSafetyScript.headers["content-type"]).toContain("javascript")
     expect(unauthenticatedStatus.statusCode).toBe(401)
     expect(authenticatedStatus.json()).toEqual({
+      authorizationHealth: { status: "active" },
       connected: true,
       expiresAt: "2026-07-20T00:00:00.000Z",
       grantedScopes: ["r:devices:$", "x:devices:$", "r:locations:*"],
@@ -88,6 +91,46 @@ describe("SmartThings Gateway HTTP API", () => {
       status: "blocked",
     })
     expect(response.body).not.toContain(fixture.client.exchangeGrant.installedAppId)
+  })
+
+  it("adds authorization health without exposing stored refresh error details", async () => {
+    const fixture = createGatewayAppFixture({ apps })
+    await authorizeGatewayApp(fixture.app)
+    const tokens = await fixture.store.getTokens(fixture.client.exchangeGrant.installedAppId)
+    if (tokens === null) throw new Error("Expected authorized test connection")
+    fixture.store.seedTokens(
+      { ...tokens, lastRefreshError: "legacy error_description secret-refresh-token" },
+      hashGrowfulToken(testGrowfulToken(1)),
+    )
+
+    const legacy = await fixture.app.inject({
+      headers: { authorization: `Bearer ${testGrowfulToken(1)}` },
+      method: "GET",
+      url: "/connection",
+    })
+    fixture.store.seedTokens(
+      { ...tokens, lastRefreshError: SMARTTHINGS_REAUTHORIZATION_REQUIRED },
+      hashGrowfulToken(testGrowfulToken(1)),
+    )
+    const terminal = await fixture.app.inject({
+      headers: { authorization: `Bearer ${testGrowfulToken(1)}` },
+      method: "GET",
+      url: "/connection",
+    })
+
+    expect(legacy.json()).toMatchObject({
+      authorizationHealth: { status: "active" },
+      connected: true,
+      serviceAccess: { status: "active" },
+    })
+    expect(terminal.json()).toMatchObject({
+      authorizationHealth: { status: "reauthorization_required" },
+      connected: true,
+      serviceAccess: { status: "active" },
+    })
+    expect(legacy.body).not.toContain("error_description")
+    expect(legacy.body).not.toContain("secret-refresh-token")
+    expect(terminal.body).not.toContain(SMARTTHINGS_REAUTHORIZATION_REQUIRED)
   })
 
   it("rate limits repeated connection status reads per connection", async () => {

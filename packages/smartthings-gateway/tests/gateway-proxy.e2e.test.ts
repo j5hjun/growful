@@ -68,6 +68,7 @@ describe("SmartThings API passthrough", () => {
         accessToken: "second-smartthings-access-token",
         expiresAt: new Date("2026-07-20T00:00:00.000Z"),
         installedAppId: InstalledAppIdSchema.parse("installed-app-2"),
+        lastRefreshError: null,
         lastRefreshedAt: null,
         refreshToken: "second-smartthings-refresh-token",
         scopes: ["r:devices:*"],

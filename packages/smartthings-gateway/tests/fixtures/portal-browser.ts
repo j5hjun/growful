@@ -133,12 +133,14 @@ const selectorEntries = [
   ["[data-portal-status]", "status"],
   ["[data-status-active]", "statusActive"],
   ["[data-status-blocked]", "statusBlocked"],
+  ["[data-status-reauthorization]", "statusReauthorization"],
   ["[data-expires-at]", "expires"],
   ["[data-refreshed-at]", "refreshed"],
   ["[data-support-reference]", "supportReference"],
   ["[data-blocked-notice]", "blockedNotice"],
   ["[data-block-reason]", "blockReason"],
   ["[data-blocked-at]", "blockedAt"],
+  ["[data-reauthorization-notice]", "reauthorizationNotice"],
   ["[data-copy-support-reference]", "copySupportReference"],
   ["[data-scope-list]", "scopes"],
   ["[data-forget-token]", "forget"],
@@ -170,7 +172,9 @@ export function createPortalBrowserFixture(missingSelector?: string) {
   getPortalElement(elements, "disconnectForm").dialogOwner = getPortalElement(elements, "dialog")
   getPortalElement(elements, "status").hidden = true
   getPortalElement(elements, "statusBlocked").hidden = true
+  getPortalElement(elements, "statusReauthorization").hidden = true
   getPortalElement(elements, "blockedNotice").hidden = true
+  getPortalElement(elements, "reauthorizationNotice").hidden = true
   getPortalElement(elements, "error").hidden = true
   getPortalElement(elements, "rotatedSection").hidden = true
   getPortalElement(elements, "rotatedFeedback").hidden = true

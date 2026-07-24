@@ -4,6 +4,7 @@ import {
   InstalledAppIdSchema,
   OAuthStateHashSchema,
   RefreshClaimIdSchema,
+  SMARTTHINGS_REAUTHORIZATION_REQUIRED,
   StaleRefreshClaimError,
   type TokenGrant,
 } from "../src/oauth/contracts.js"
@@ -290,5 +291,91 @@ describe("PostgresOAuthStore", () => {
     // Then
     expect(immediateRetry).toBeNull()
     expect(retryAfterLease?.installedAppId).toBe(tokenGrant.installedAppId)
+  })
+
+  it("keeps terminal refresh failure sticky, excludes both claim kinds, and clears it on reauthorization", async () => {
+    const tokenGrant = await saveAuthorization(1)
+    const terminalClaimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000011")
+    await store.claimTokensForRefresh({
+      claimId: terminalClaimId,
+      kind: "due",
+      leaseMs: 120_000,
+      now,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+    await store.recordRefreshFailure({
+      claimId: terminalClaimId,
+      installedAppId: tokenGrant.installedAppId,
+      message: SMARTTHINGS_REAUTHORIZATION_REQUIRED,
+      occurredAt: now,
+    })
+
+    await store.recordRefreshFailure({
+      claimId: terminalClaimId,
+      installedAppId: tokenGrant.installedAppId,
+      message: "SmartThingsTokenRequestError",
+      occurredAt: new Date(now.getTime() + 1),
+    })
+    const afterLease = new Date(now.getTime() + 120_000)
+    const due = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000012"),
+      kind: "due",
+      leaseMs: 120_000,
+      now: afterLease,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+    const forced = await store.claimTokensForRefresh({
+      claimId: RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000013"),
+      expectedAccessToken: tokenGrant.accessToken,
+      installedAppId: tokenGrant.installedAppId,
+      kind: "forced",
+      leaseMs: 120_000,
+      now: afterLease,
+    })
+
+    expect(due).toBeNull()
+    expect(forced).toBeNull()
+    await expect(store.getTokens(tokenGrant.installedAppId)).resolves.toMatchObject({
+      lastRefreshError: SMARTTHINGS_REAUTHORIZATION_REQUIRED,
+    })
+
+    await saveAuthorization(1)
+
+    await expect(store.getTokens(tokenGrant.installedAppId)).resolves.toMatchObject({
+      lastRefreshError: null,
+    })
+  })
+
+  it("clears a stored refresh error when a claimed refresh succeeds through the token codec", async () => {
+    const tokenGrant = await saveAuthorization(1)
+    const claimId = RefreshClaimIdSchema.parse("00000000-0000-4000-8000-000000000021")
+    await store.claimTokensForRefresh({
+      claimId,
+      kind: "due",
+      leaseMs: 120_000,
+      now,
+      refreshBeforeExpiryMs: 60 * 60 * 1_000,
+    })
+    await database
+      .updateTable("smartThingsConnections")
+      .set({ lastRefreshError: SMARTTHINGS_REAUTHORIZATION_REQUIRED })
+      .where("installedAppId", "=", tokenGrant.installedAppId)
+      .execute()
+
+    await store.saveTokens({
+      claimId,
+      grant: {
+        ...tokenGrant,
+        accessToken: "refreshed-access",
+        refreshToken: "refreshed-refresh",
+      },
+      issuedAt: new Date(now.getTime() + 1),
+      source: "refresh",
+    })
+
+    await expect(store.getTokens(tokenGrant.installedAppId)).resolves.toMatchObject({
+      accessToken: "refreshed-access",
+      lastRefreshError: null,
+    })
   })
 })

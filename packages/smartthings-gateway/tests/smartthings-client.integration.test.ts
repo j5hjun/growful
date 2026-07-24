@@ -1,7 +1,11 @@
 import { createServer, type IncomingMessage } from "node:http"
 import { afterEach, describe, expect, it } from "vitest"
 import { z } from "zod"
-import { HttpSmartThingsClient } from "../src/smartthings/smartthings-client.js"
+import {
+  HttpSmartThingsClient,
+  SmartThingsReauthorizationRequiredError,
+  SmartThingsTokenRequestError,
+} from "../src/smartthings/smartthings-client.js"
 
 const addressSchema = z.object({ port: z.number().int().positive() })
 const servers: ReturnType<typeof createServer>[] = []
@@ -48,12 +52,42 @@ async function createTokenServer(
   return new URL(`http://127.0.0.1:${port}/oauth/token`)
 }
 
-function createClient(tokenUrl: URL): HttpSmartThingsClient {
+async function createRejectedTokenServer(
+  statusCode: number,
+  body: string,
+  contentType = "application/json",
+): Promise<URL> {
+  const server = createServer((_request, response) => {
+    response.writeHead(statusCode, { "content-type": contentType })
+    response.end(body)
+  })
+  servers.push(server)
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", resolve)
+  })
+  const { port } = addressSchema.parse(server.address())
+  return new URL(`http://127.0.0.1:${port}/oauth/token`)
+}
+
+async function createStalledTokenServer(): Promise<URL> {
+  const server = createServer(() => {})
+  servers.push(server)
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", resolve)
+  })
+  const { port } = addressSchema.parse(server.address())
+  return new URL(`http://127.0.0.1:${port}/oauth/token`)
+}
+
+function createClient(tokenUrl: URL, tokenRequestTimeoutMs?: number): HttpSmartThingsClient {
   return new HttpSmartThingsClient({
     authorizationUrl: new URL("https://api.smartthings.test/oauth/authorize"),
     clientId: "client-id",
     clientSecret: "client-secret",
     redirectUri: new URL("https://smartthings.growful.click/oauth/callback"),
+    ...(tokenRequestTimeoutMs === undefined ? {} : { tokenRequestTimeoutMs }),
     tokenUrl,
   })
 }
@@ -132,5 +166,89 @@ describe("HttpSmartThingsClient", () => {
     const grant = await client.refresh("latest-refresh-token")
 
     expect(grant.scopes).toEqual(["r:scenes:*"])
+  })
+
+  it("classifies only a safely parsed OAuth invalid_grant as reauthorization required", async () => {
+    const client = createClient(
+      await createRejectedTokenServer(
+        400,
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description: "revoked credential secret-refresh-token",
+        }),
+      ),
+    )
+
+    const error = await client.refresh("secret-refresh-token").catch((cause: unknown) => cause)
+
+    expect(error).toBeInstanceOf(SmartThingsReauthorizationRequiredError)
+    expect(error).toMatchObject({ statusCode: 400 })
+    expect(String(error)).not.toContain("revoked credential")
+    expect(String(error)).not.toContain("secret-refresh-token")
+    expect((error as Error & { cause?: unknown }).cause).toBeUndefined()
+  })
+
+  it.each([
+    ["a bare 401", 401, "", "application/json"],
+    ["an HTML error", 401, "<html>secret upstream detail</html>", "text/html"],
+    [
+      "a non-terminal OAuth JSON error",
+      400,
+      JSON.stringify({ error: "temporarily_unavailable", error_description: "secret detail" }),
+      "application/json",
+    ],
+    ["a malformed OAuth body", 400, "{not-json", "application/json"],
+    [
+      "a transient 5xx even with an invalid_grant-shaped body",
+      503,
+      JSON.stringify({ error: "invalid_grant" }),
+      "application/json",
+    ],
+    [
+      "an invalid_grant-shaped 401 outside the OAuth error contract",
+      401,
+      JSON.stringify({ error: "invalid_grant" }),
+      "application/json",
+    ],
+    [
+      "an invalid_grant-shaped 403 outside the OAuth error contract",
+      403,
+      JSON.stringify({ error: "invalid_grant" }),
+      "application/json",
+    ],
+    [
+      "an invalid_grant-shaped 429 outside the OAuth error contract",
+      429,
+      JSON.stringify({ error: "invalid_grant" }),
+      "application/json",
+    ],
+  ])(
+    "keeps %s as a sanitized generic token request failure",
+    async (_case, statusCode, body, contentType) => {
+      const client = createClient(await createRejectedTokenServer(statusCode, body, contentType))
+
+      const error = await client.refresh("secret-refresh-token").catch((cause: unknown) => cause)
+
+      expect(error).toBeInstanceOf(SmartThingsTokenRequestError)
+      expect(error).not.toBeInstanceOf(SmartThingsReauthorizationRequiredError)
+      expect(error).toMatchObject({ name: "SmartThingsTokenRequestError", statusCode })
+      expect((error as Error & { cause?: unknown }).cause).toBeUndefined()
+      expect(String(error)).not.toContain("secret")
+    },
+  )
+
+  it("sanitizes a real token request timeout without changing its transient classification", async () => {
+    const client = createClient(await createStalledTokenServer(), 25)
+
+    const error = await client.refresh("secret-refresh-token").catch((cause: unknown) => cause)
+
+    expect(error).toBeInstanceOf(SmartThingsTokenRequestError)
+    expect(error).not.toBeInstanceOf(SmartThingsReauthorizationRequiredError)
+    expect(error).toMatchObject({
+      name: "SmartThingsTokenRequestError",
+      statusCode: undefined,
+    })
+    expect((error as Error & { cause?: unknown }).cause).toBeUndefined()
+    expect(String(error)).not.toContain("secret-refresh-token")
   })
 })

@@ -23,6 +23,7 @@ export function storedTokens(): StoredTokens {
     accessToken: "webhook-access-token",
     expiresAt: new Date("2026-07-23T00:00:00.000Z"),
     installedAppId,
+    lastRefreshError: null,
     lastRefreshedAt: null,
     refreshToken: "webhook-refresh-token",
     scopes: ["r:devices:$"],

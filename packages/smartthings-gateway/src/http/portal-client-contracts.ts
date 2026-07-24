@@ -1,4 +1,5 @@
 export type ConnectionStatus = {
+  readonly authorizationHealth: AuthorizationHealth
   readonly connected: true
   readonly expiresAt: string
   readonly grantedScopes: readonly string[]
@@ -7,6 +8,9 @@ export type ConnectionStatus = {
   readonly supportReference: string
 }
 
+export type AuthorizationHealth =
+  | { readonly status: "active" }
+  | { readonly status: "reauthorization_required" }
 export type BlockReason = "quota_abuse" | "security_incident" | "terms_violation"
 export type ServiceAccess =
   | { readonly status: "active" }
@@ -19,6 +23,7 @@ export type Rotation = { readonly growfulToken: string }
 export type PortalMethod = "DELETE" | "GET" | "POST"
 
 type PortalResponse = {
+  readonly authorizationHealth?: unknown
   readonly connected?: unknown
   readonly blockedAt?: unknown
   readonly expiresAt?: unknown
@@ -68,9 +73,15 @@ export function createPortalContracts() {
     }
   }
 
+  function isAuthorizationHealth(value: unknown): value is AuthorizationHealth {
+    if (!isPortalResponse(value)) return false
+    return value.status === "active" || value.status === "reauthorization_required"
+  }
+
   function isConnectionStatus(value: unknown): value is ConnectionStatus {
     return (
       isPortalResponse(value) &&
+      isAuthorizationHealth(value.authorizationHealth) &&
       value.connected === true &&
       typeof value.expiresAt === "string" &&
       (value.lastRefreshedAt === null || typeof value.lastRefreshedAt === "string") &&

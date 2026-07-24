@@ -40,6 +40,7 @@ export function createGatewayProxyFixture(options: GatewayProxyFixtureOptions) {
     accessToken: "stored-smartthings-access-token",
     expiresAt: new Date("2026-07-20T00:00:00.000Z"),
     installedAppId: client.exchangeGrant.installedAppId,
+    lastRefreshError: null,
     lastRefreshedAt: null,
     refreshToken: "stored-smartthings-refresh-token",
     scopes: ["r:devices:*"],

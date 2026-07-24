@@ -11,6 +11,7 @@ const validToken = `grw_st_${"A".repeat(43)}`
 
 function activeConnection() {
   return {
+    authorizationHealth: { status: "active" },
     connected: true,
     expiresAt: "2026-07-23T00:00:00.000Z",
     grantedScopes: ["r:devices:*"],
@@ -27,6 +28,8 @@ describe("Growful portal connection states", () => {
     const form = getPortalElement(fixture.elements, "form")
     const input = getPortalElement(fixture.elements, "input")
     const status = getPortalElement(fixture.elements, "status")
+    const statusActive = getPortalElement(fixture.elements, "statusActive")
+    const statusReauthorization = getPortalElement(fixture.elements, "statusReauthorization")
     const submit = getPortalElement(fixture.elements, "submit")
     let requestCount = 0
     runPortalClient(fixture, async () => {
@@ -44,6 +47,8 @@ describe("Growful portal connection states", () => {
     expect(form.hidden).toBe(false)
     expect(input.value).toBe("")
     expect(status.hidden).toBe(false)
+    expect(statusActive.hidden).toBe(false)
+    expect(statusReauthorization.hidden).toBe(true)
     expect(submit.textContent).toBe("상태 다시 확인")
 
     // When

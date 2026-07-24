@@ -1,4 +1,4 @@
-import type { Kysely } from "kysely"
+import { type Kysely, sql } from "kysely"
 import {
   type AuthorizationSaveTokensInput,
   type ConnectionAccessPolicy,
@@ -12,6 +12,7 @@ import {
   type RefreshClaim,
   type RefreshFailure,
   type SaveTokensInput,
+  SMARTTHINGS_REAUTHORIZATION_REQUIRED,
   StaleRefreshClaimError,
   type StoredTokens,
 } from "../oauth/contracts.js"
@@ -125,7 +126,13 @@ export class PostgresOAuthStore implements OAuthStore {
   async recordRefreshFailure(failure: RefreshFailure): Promise<void> {
     await this.database
       .updateTable("smartThingsConnections")
-      .set({ lastRefreshError: failure.message })
+      .set({
+        lastRefreshError: sql<string>`case
+          when last_refresh_error = ${SMARTTHINGS_REAUTHORIZATION_REQUIRED}
+            then last_refresh_error
+          else ${failure.message}
+        end`,
+      })
       .where("installedAppId", "=", failure.installedAppId)
       .where("refreshClaimId", "=", failure.claimId)
       .execute()
