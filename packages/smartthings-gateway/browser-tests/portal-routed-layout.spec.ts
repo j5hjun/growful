@@ -1,10 +1,59 @@
-import { expect, test } from "@playwright/test"
+import { expect, type Page, test } from "@playwright/test"
 import type { FastifyInstance } from "fastify"
 import {
   authorizeGatewayApp,
   createGatewayAppFixture,
   gatewayRedirectOrigin,
 } from "../tests/fixtures/gateway-app-fixture.js"
+
+function readStandardHeaderLayout(page: Page) {
+  return page.locator("[data-page-shell]").evaluate((shell) => {
+    const brand = shell.querySelector(".brand")
+    const header = shell.querySelector(".site-header")
+    const main = shell.querySelector("main")
+    const navigation = shell.querySelector(".site-nav")
+    const navigationList = shell.querySelector(".nav-list")
+    if (
+      brand === null ||
+      header === null ||
+      main === null ||
+      navigation === null ||
+      navigationList === null
+    ) {
+      throw new Error("Standard shell is missing a required header region")
+    }
+
+    const headerBounds = header.getBoundingClientRect()
+    const mainBounds = main.getBoundingClientRect()
+    const navigationBounds = navigation.getBoundingClientRect()
+    const navigationListBounds = navigationList.getBoundingClientRect()
+    const targets = [brand, ...navigationList.querySelectorAll("a")]
+    return {
+      currentHrefs: [...shell.querySelectorAll('a[aria-current="page"]')].map((link) =>
+        link.getAttribute("href"),
+      ),
+      headerBlockEnd: headerBounds.bottom,
+      headerHeight: headerBounds.height,
+      mainBlockStart: mainBounds.top,
+      minimumTarget: {
+        height: Math.min(...targets.map((target) => target.getBoundingClientRect().height)),
+        width: Math.min(...targets.map((target) => target.getBoundingClientRect().width)),
+      },
+      navigationLinks: [...navigationList.querySelectorAll("a")].map((link) => {
+        const bounds = link.getBoundingClientRect()
+        return {
+          height: bounds.height,
+          href: link.getAttribute("href"),
+          width: bounds.width,
+          x: bounds.x,
+          y: bounds.y,
+        }
+      }),
+      navigationPaddingBlockEnd: Number.parseFloat(getComputedStyle(navigation).paddingBlockEnd),
+      navigationTrailingSpace: navigationBounds.bottom - navigationListBounds.bottom,
+    }
+  })
+}
 
 test("the complete routed HTML matrix shares one stable outer shell and accessible reflow", async ({
   page,
@@ -83,6 +132,7 @@ test("the complete routed HTML matrix shares one stable outer shell and accessib
       const expectedShellLeft = Math.max(expectedGutter, (viewportWidth - 1_024) / 2)
       let sharedShellLeft: number | undefined
       let sharedShellWidth: number | undefined
+      let standardHeaderReference: unknown
 
       for (const routedPage of routedPages) {
         // When
@@ -159,6 +209,10 @@ test("the complete routed HTML matrix shares one stable outer shell and accessib
             start: Number.parseFloat(style.paddingBlockStart),
           }
         })
+        const standardHeaderLayout =
+          viewportWidth === 320 && routedPage.headerVariant === "standard"
+            ? await readStandardHeaderLayout(page)
+            : undefined
 
         // Then
         await expect(page.locator(".skip-link"), routedPage.label).toHaveCount(1)
@@ -196,6 +250,26 @@ test("the complete routed HTML matrix shares one stable outer shell and accessib
         sharedShellWidth ??= layout.shellWidth
         expect(layout.shellLeft, routedPage.label).toBeCloseTo(sharedShellLeft, 0)
         expect(layout.shellWidth, routedPage.label).toBeCloseTo(sharedShellWidth, 0)
+
+        if (standardHeaderLayout !== undefined && "url" in routedPage) {
+          const { currentHrefs, ...sharedHeaderLayout } = standardHeaderLayout
+          expect(currentHrefs, routedPage.label).toEqual(
+            routedPage.currentCount === 0 ? [] : [routedPage.url],
+          )
+          expect(sharedHeaderLayout.mainBlockStart, routedPage.label).toBe(
+            sharedHeaderLayout.headerBlockEnd,
+          )
+          expect(sharedHeaderLayout.navigationPaddingBlockEnd, routedPage.label).toBe(0)
+          expect(sharedHeaderLayout.navigationTrailingSpace, routedPage.label).toBe(0)
+          expect(sharedHeaderLayout.minimumTarget.height, routedPage.label).toBeGreaterThanOrEqual(
+            44,
+          )
+          expect(sharedHeaderLayout.minimumTarget.width, routedPage.label).toBeGreaterThanOrEqual(
+            44,
+          )
+          standardHeaderReference ??= sharedHeaderLayout
+          expect(sharedHeaderLayout, routedPage.label).toEqual(standardHeaderReference)
+        }
 
         if (routedPage.label === "home") {
           const flowSpacing = await page.locator(".flow").evaluate((flow) => {
@@ -267,6 +341,33 @@ test("the complete routed HTML matrix shares one stable outer shell and accessib
         await expect(page.locator("main#main-content")).toBeFocused()
       }
     }
+  } finally {
+    await app.close()
+  }
+})
+
+test("320px status-to-manage navigation preserves standard header geometry", async ({ page }) => {
+  // Given
+  const apps: FastifyInstance[] = []
+  const { app } = createGatewayAppFixture({ apps })
+  const origin = await app.listen({ host: "127.0.0.1", port: 0 })
+  await page.setViewportSize({ height: 900, width: 320 })
+
+  try {
+    await page.goto(`${origin}/status`)
+    const { currentHrefs: statusCurrentHrefs, ...statusLayout } =
+      await readStandardHeaderLayout(page)
+
+    // When
+    await page.locator('.site-nav a[href="/manage"]').click()
+    await expect(page).toHaveURL(`${origin}/manage`)
+    const { currentHrefs: manageCurrentHrefs, ...manageLayout } =
+      await readStandardHeaderLayout(page)
+
+    // Then
+    expect(statusCurrentHrefs).toEqual(["/status"])
+    expect(manageCurrentHrefs).toEqual(["/manage"])
+    expect(manageLayout).toEqual(statusLayout)
   } finally {
     await app.close()
   }

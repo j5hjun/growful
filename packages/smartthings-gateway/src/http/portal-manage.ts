@@ -211,7 +211,6 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
       .reveal { width: 100%; }
     }
     @media (max-width: 20rem) {
-      .site-nav { padding-bottom: var(--space-3); }
       .manage-header > p:last-child { font-size: var(--font-small); }
       .connection-status { margin-inline: var(--space-2); padding-bottom: var(--space-4); }
       dl { gap: var(--space-2); margin: var(--space-4) 0; }
