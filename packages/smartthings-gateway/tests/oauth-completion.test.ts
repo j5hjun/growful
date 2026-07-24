@@ -32,6 +32,23 @@ describe("OAuth completion one-time token actions", () => {
     expect(page).toContain("복사하거나 안전한 곳에 저장했는지 확인하기 전에는")
     expect(page).toContain("페이지를 닫거나 이동하지 마세요.")
     expect(page).toContain("분실하면 OAuth를 다시 완료해야 합니다.")
+    expect(page).toContain(
+      '<section class="api-quickstart" aria-labelledby="api-quickstart-title">',
+    )
+    expect(page).toContain('<h2 id="api-quickstart-title">첫 API 요청</h2>')
+    expect(page).toContain(
+      "이 Gateway와 같은 주소의 <code>/v1</code> 아래에 SmartThings API 경로를 붙이세요. Growful 토큰은 요청 헤더에 Bearer 토큰으로 전달합니다.",
+    )
+    expect(page).toContain(
+      "디바이스 읽기 권한을 선택한 경우 아래처럼 요청할 수 있습니다. 다른 권한만 승인했다면 <code>/v1</code> 뒤에 자신이 승인한 SmartThings API 경로를 사용하세요.",
+    )
+    expect(page).toContain(`<code>GET /v1/devices
+Authorization: Bearer &lt;Growful 토큰&gt;</code>`)
+    expect(page).toContain(
+      "실제 토큰은 위 자리표시자 대신 Authorization 헤더에만 넣으세요. URL, 쿼리, 요청 본문 또는 공유 문서에는 넣지 마세요.",
+    )
+    expect(page.split(token)).toHaveLength(2)
+    expect(page).not.toContain(`Authorization: Bearer ${token}`)
     expect(page).toContain('<script src="/token-safety.js" defer></script>')
   })
 })
