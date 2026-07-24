@@ -179,7 +179,7 @@ test("routed management states keep the portal shell pinned to the top safe area
   }
 })
 
-test("forced colors preserve the current portal menu boundary", async ({ page }) => {
+test("forced colors preserve current-menu and primary-action boundaries", async ({ page }) => {
   // Given
   const apps: FastifyInstance[] = []
   const { app } = createGatewayAppFixture({ apps })
@@ -195,6 +195,14 @@ test("forced colors preserve the current portal menu boundary", async ({ page })
     const currentMenu = page.locator('.nav-list a[aria-current="page"]')
     await expect(currentMenu).toHaveCSS("border-top-style", "solid")
     await expect(currentMenu).toHaveCSS("border-top-width", "2px")
+    const primaryButton = page.locator("[data-token-submit]")
+    await expect(primaryButton).toHaveCSS("border-top-style", "solid")
+    await expect(primaryButton).toHaveCSS("border-top-width", "2px")
+
+    await page.goto(origin)
+    const primaryAction = page.locator(".action-primary")
+    await expect(primaryAction).toHaveCSS("border-top-style", "solid")
+    await expect(primaryAction).toHaveCSS("border-top-width", "2px")
   } finally {
     await app.close()
   }

@@ -12,10 +12,19 @@ describe("OAuth completion one-time token actions", () => {
 
     // Then
     expect(page).toContain("data-token-safety")
-    expect(page).toMatch(/<button[^>]*data-copy-token[^>]*>Growful 토큰 복사<\/button>/)
-    expect(page).toMatch(/<output[^>]*data-token-value[^>]*data-growful-token[^>]*>/)
+    expect(page).toMatch(
+      /<button[^>]*data-copy-token[^>]*hidden disabled[^>]*>Growful 토큰 복사<\/button>/,
+    )
+    expect(page).toMatch(
+      /<textarea[^>]*data-token-value[^>]*data-growful-token[^>]*readonly[^>]*>grw_st_[A]+<\/textarea>/,
+    )
+    expect(page).not.toMatch(/<textarea[^>]*data-token-value[^>]*\sname=/)
+    expect(page).not.toMatch(/<textarea[^>]*data-token-value[^>]*\sform=/)
+    expect(page).toContain("data-token-manual-copy")
+    expect(page).toContain("Ctrl+C 또는 Command+C를 눌러 직접 복사할 수 있습니다.")
     expect(page).toContain('data-token-copy-feedback role="status" aria-live="polite"')
     expect(page).toContain('data-token-copy-error role="alert"')
+    expect(page).toContain("토큰 전체를 선택했습니다.")
     expect(page).toMatch(
       /<a[^>]*href="\/manage"[^>]*data-action="manage-issued-token"[^>]*>관리 화면에서 연결 확인<\/a>/,
     )

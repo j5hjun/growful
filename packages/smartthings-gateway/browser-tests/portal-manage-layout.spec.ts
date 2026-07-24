@@ -52,26 +52,32 @@ test("management Korean error text wraps between words without splitting syllabl
   expect(splitWords).toEqual([])
 })
 
-test("compact management form keeps mobile token controls and action close together", async ({
+test("management form stays content-sized at supported mobile and desktop widths", async ({
   page,
 }) => {
-  for (const width of [320, 360, 390]) {
+  for (const width of [320, 360, 390, 768, 1_280]) {
     // Given
-    await page.setViewportSize({ height: 480, width })
+    await page.setViewportSize({ height: 1_024, width })
     await page.emulateMedia({ colorScheme: "dark" })
     await page.setContent(renderPortalManagement(portalAccess()))
     const form = page.locator("[data-portal-token-form]")
+    const actionSlot = page.locator(".connection-action-slot")
     const submit = page.locator("[data-token-submit]")
     const reveal = page.locator("[data-token-visibility]")
     const input = page.locator("#growful-token")
+    const hint = page.locator("#token-hint")
 
     // When
     const grid = await form.evaluate((element) => {
       const style = getComputedStyle(element)
       return { minBlockSize: style.minBlockSize, rows: style.gridTemplateRows.split(" ") }
     })
+    const actionRows = await actionSlot.evaluate((element) =>
+      getComputedStyle(element).gridTemplateRows.split(" "),
+    )
     const inputBox = await input.boundingBox()
     const revealBox = await reveal.boundingBox()
+    const hintBox = await hint.boundingBox()
     const actionBox = await submit.boundingBox()
     const dimensions = await page.locator("html").evaluate((html) => ({
       clientWidth: html.clientWidth,
@@ -80,12 +86,9 @@ test("compact management form keeps mobile token controls and action close toget
 
     // Then
     expect(grid.rows).toHaveLength(3)
-    if (width <= 360) {
-      expect(grid.minBlockSize).toBe("0px")
-    } else {
-      expect(grid.minBlockSize).not.toBe("0px")
-    }
-    if (inputBox === null || revealBox === null || actionBox === null) {
+    expect(grid.minBlockSize).toBe("0px")
+    expect(actionRows).toHaveLength(1)
+    if (inputBox === null || revealBox === null || hintBox === null || actionBox === null) {
       throw new Error(`Management controls have a missing layout box at ${width}px`)
     }
     if (width <= 360) {
@@ -95,9 +98,7 @@ test("compact management form keeps mobile token controls and action close toget
       expect(revealBox.y).toBeCloseTo(inputBox.y, 0)
       expect(revealBox.width).toBeLessThan(inputBox.width)
     }
-    if (width <= 360) {
-      expect(actionBox.y - (revealBox.y + revealBox.height)).toBeLessThanOrEqual(96)
-    }
+    expect(actionBox.y - (hintBox.y + hintBox.height), `${width}px guidance-to-action gap`).toBe(16)
     expect(revealBox.height).toBeGreaterThanOrEqual(44)
     expect(actionBox.height).toBeGreaterThanOrEqual(44)
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth)

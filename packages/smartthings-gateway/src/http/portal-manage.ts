@@ -46,7 +46,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
         <dl>
           <div><dt>토큰 만료 예정</dt><dd><time data-expires-at></time></dd></div>
           <div><dt>마지막 자동 갱신</dt><dd><time data-refreshed-at></time></dd></div>
-          <div class="support-entry"><dt>지원 참조</dt><dd class="support-value"><output data-support-reference></output><button class="secondary compact" type="button" data-copy-support-reference>지원 참조 복사</button></dd></div>
+          <div class="support-entry"><dt>지원 참조</dt><dd class="support-value"><output data-support-reference tabindex="-1"></output><button class="secondary compact" type="button" data-copy-support-reference>지원 참조 복사</button></dd></div>
         </dl>
         <section class="restricted-notice" data-blocked-notice role="alert" aria-labelledby="blocked-title" hidden>
           <p class="eyebrow">API 접근 차단</p>
@@ -87,12 +87,12 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
         </div>
       </form>
     </dialog>
-    <dialog data-disconnect-dialog aria-labelledby="disconnect-title" aria-describedby="disconnect-description">
+    <dialog data-disconnect-dialog aria-labelledby="disconnect-title" aria-describedby="disconnect-description" tabindex="-1">
       <form class="dialog-content" method="dialog" data-disconnect-form>
         <h2 id="disconnect-title">연결을 해제할까요?</h2>
         <p id="disconnect-description"><span class="phrase">저장된 SmartThings 토큰과</span> <span class="phrase">Growful 토큰이 삭제됩니다.</span> <span class="phrase">SmartThings Linked Service 설치는</span> <span class="phrase">별도로 해제해야 합니다.</span></p>
         <div class="action-row">
-          <button class="secondary" type="submit" value="cancel">취소</button>
+          <button class="secondary" type="submit" value="cancel" data-disconnect-cancel>취소</button>
           <button class="destructive" type="submit" value="confirm" data-disconnect-confirm>연결 해제</button>
         </div>
       </form>
@@ -107,7 +107,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .manage-header { padding: var(--space-8) 0 var(--space-4); }
     .manage-header p:last-child { margin-bottom: 0; }
     .connection-panel { margin-top: var(--space-6); border-radius: var(--radius-field); background: var(--surface-subtle); word-break: keep-all; overflow-wrap: normal; }
-    .token-form { display: grid; grid-template-rows: auto 1fr auto; min-block-size: calc(24rem + var(--space-12)); padding: var(--space-6); }
+    .token-form { display: grid; grid-template-rows: repeat(3, auto); min-block-size: 0; padding: var(--space-6); }
     .token-entry-region > label { display: block; margin-bottom: var(--space-2); font-weight: var(--weight-bold); }
     .token-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
     input { width: 100%; min-height: var(--action-height); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); background: var(--surface); color: var(--text); font: inherit; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
@@ -146,7 +146,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     .scope-section ul { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
     .scope-section li { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-action); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-small); overflow-wrap: anywhere; }
     .status-actions { margin-top: var(--space-6); }
-    .connection-action-slot { display: grid; align-self: end; grid-template-rows: repeat(2, var(--action-height)); gap: var(--space-3); padding-top: var(--space-4); }
+    .connection-action-slot { display: grid; grid-auto-rows: minmax(var(--action-height), auto); gap: var(--space-3); padding-top: var(--space-4); }
     .connection-action-slot > * { width: 100%; }
     .credential-output output { display: block; margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
     .credential-output output:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
@@ -168,7 +168,7 @@ export function renderPortalManagement(access: OAuthAccessPolicy): string {
     }
     @media (max-width: 22.5rem) {
       .connection-panel { margin-top: var(--space-4); }
-      .token-form { grid-template-rows: repeat(3, auto); min-block-size: 0; padding: var(--space-4); }
+      .token-form { padding: var(--space-4); }
       .token-entry { grid-template-columns: minmax(0, 1fr); }
       .reveal { width: 100%; }
     }`,

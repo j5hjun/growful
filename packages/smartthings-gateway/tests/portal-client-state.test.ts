@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
   createPortalBrowserFixture,
   deferred,
@@ -190,12 +190,80 @@ describe("Growful portal connection states", () => {
     expect(errorMessage.textContent).toBe("네트워크 연결을 확인한 뒤 다시 시도하세요.")
   })
 
+  it.each([
+    ["response", async () => new Promise(() => {})],
+    [
+      "response body",
+      async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return new Promise(() => {})
+        },
+      }),
+    ],
+  ])("times out a never-settling %s and gives safe retry guidance", async (_phase, fetch) => {
+    vi.useFakeTimers()
+    try {
+      const fixture = createPortalBrowserFixture()
+      const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+      const form = getPortalElement(fixture.elements, "form")
+      const input = getPortalElement(fixture.elements, "input")
+      input.value = validToken
+      runPortalClient(fixture, fetch)
+
+      await form.dispatch("submit", { preventDefault() {} })
+      expect(form.attributes.get("aria-busy")).toBe("true")
+
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      expect(errorMessage.textContent).toBe(
+        "연결 상태 확인 시간이 초과되었습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.",
+      )
+      expect(form.attributes.has("aria-busy")).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps focus on the visibility toggle while changing token visibility", async () => {
+    const fixture = createPortalBrowserFixture()
+    const input = getPortalElement(fixture.elements, "input")
+    const visibility = getPortalElement(fixture.elements, "visibility")
+    runPortalClient(fixture, async () => response(200, activeConnection()))
+
+    await visibility.dispatch("click")
+
+    expect(input.type).toBe("text")
+    expect(input.focusCount).toBe(0)
+    expect(visibility.textContent).toBe("토큰 가리기")
+    expect(visibility.attributes.get("aria-pressed")).toBe("true")
+  })
+
+  it("focuses and selects only the support reference when clipboard access fails", async () => {
+    const fixture = createPortalBrowserFixture()
+    const copy = getPortalElement(fixture.elements, "copySupportReference")
+    const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+    const supportReference = getPortalElement(fixture.elements, "supportReference")
+    supportReference.textContent = "f".repeat(64)
+    fixture.clipboard.error = new Error("clipboard denied")
+    runPortalClient(fixture, async () => response(200, activeConnection()))
+
+    await copy.dispatch("click")
+
+    expect(errorMessage.textContent).toBe(
+      "자동 복사를 사용할 수 없습니다. 값을 직접 선택해 복사하세요.",
+    )
+    expect(supportReference.focusCount).toBe(1)
+    expect(fixture.selection.removeCount).toBe(1)
+    expect(fixture.selection.range?.selected).toBe(supportReference)
+  })
+
   it("checks another token while keeping SmartThings reconnection after disconnecting", async () => {
     // Given
     const replacementToken = `grw_st_${"B".repeat(43)}`
     const fixture = createPortalBrowserFixture()
     const confirm = getPortalElement(fixture.elements, "confirm")
-    const dialog = getPortalElement(fixture.elements, "dialog")
     const disconnect = getPortalElement(fixture.elements, "disconnect")
     const disconnectForm = getPortalElement(fixture.elements, "disconnectForm")
     const form = getPortalElement(fixture.elements, "form")
@@ -216,7 +284,6 @@ describe("Growful portal connection states", () => {
     // When
     await disconnect.dispatch("click")
     await disconnectForm.dispatch("submit", { preventDefault() {}, submitter: confirm })
-    await dialog.dispatch("close")
 
     // Then
     expect(status.hidden).toBe(true)
@@ -227,6 +294,7 @@ describe("Growful portal connection states", () => {
     expect(reconnect.textContent).toBe("SmartThings 다시 연결")
     expect(input.focusCount).toBe(1)
     expect(reconnect.focusCount).toBe(0)
+    expect(fixture.focus.activeElement).toBe(input)
 
     // When
     input.value = replacementToken
@@ -248,6 +316,8 @@ describe("Growful portal connection states", () => {
     const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
     const rotateForm = getPortalElement(fixture.elements, "rotateForm")
     const rotatedOutput = getPortalElement(fixture.elements, "rotatedOutput")
+    const status = getPortalElement(fixture.elements, "status")
+    const submit = getPortalElement(fixture.elements, "submit")
     let statusRequestCount = 0
     runPortalClient(fixture, async (path) => {
       if (path === "/token/rotate") return rotation.promise
@@ -263,12 +333,17 @@ describe("Growful portal connection states", () => {
       preventDefault() {},
       submitter: rotateConfirm,
     })
+    expect(fixture.focus.activeElement).toBe(status)
+    expect(submit.disabled).toBe(true)
+    expect(submit.attributes.get("aria-busy")).toBe("true")
     await form.dispatch("submit", { preventDefault() {} })
     rotation.resolve(response(200, { growfulToken: `grw_st_${"B".repeat(43)}` }))
     await rotationRequest
 
     expect(statusRequestCount).toBe(1)
     expect(rotatedOutput.textContent).toBe(`grw_st_${"B".repeat(43)}`)
+    expect(submit.disabled).toBe(false)
+    expect(submit.attributes.has("aria-busy")).toBe(false)
   })
 
   it("keeps the one-time token until the visible status action successfully restores status", async () => {
@@ -360,4 +435,280 @@ describe("Growful portal connection states", () => {
     expect(errorMessage.textContent).toBe("요청이 너무 많습니다. 잠시 후 다시 확인하세요.")
     expect(rotate.focusCount).toBe(1)
   })
+
+  it("bounds a never-settling rotation and treats its outcome as uncertain", async () => {
+    vi.useFakeTimers()
+    try {
+      const fixture = createPortalBrowserFixture()
+      const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+      const form = getPortalElement(fixture.elements, "form")
+      const input = getPortalElement(fixture.elements, "input")
+      const reconnect = getPortalElement(fixture.elements, "reconnect")
+      const rotate = getPortalElement(fixture.elements, "rotate")
+      const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+      const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+      const status = getPortalElement(fixture.elements, "status")
+      runPortalClient(fixture, async (path) =>
+        path === "/token/rotate"
+          ? new Promise(() => {})
+          : Promise.resolve(response(200, activeConnection())),
+      )
+      input.value = validToken
+      await form.dispatch("submit", { preventDefault() {} })
+      await vi.advanceTimersByTimeAsync(0)
+
+      await rotate.dispatch("click")
+      const pendingRotation = rotateForm.dispatch("submit", {
+        preventDefault() {},
+        submitter: rotateConfirm,
+      })
+      expect(rotate.textContent).toBe("Growful 토큰 교체 중…")
+      expect(rotate.attributes.get("aria-label")).toBe("Growful 토큰 교체 중입니다")
+      expect(rotate.attributes.get("aria-busy")).toBe("true")
+      expect(status.attributes.get("aria-busy")).toBe("true")
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await pendingRotation
+
+      expect(errorMessage.textContent).toContain("토큰 교체가 이미 적용되었을 수 있습니다")
+      expect(errorMessage.textContent).toContain("다시 교체하지 마세요")
+      expect(reconnect.hidden).toBe(false)
+      expect(reconnect.focusCount).toBe(1)
+      expect(rotate.textContent).toBe("Growful 토큰 교체")
+      expect(rotate.attributes.has("aria-label")).toBe(false)
+      expect(rotate.attributes.has("aria-busy")).toBe(false)
+      expect(status.hidden).toBe(true)
+      expect(status.attributes.has("aria-busy")).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each([
+    ["network", () => Promise.reject(new Error("offline"))],
+    ["server", () => Promise.resolve(response(502))],
+    ["schema", () => Promise.resolve(response(200, { growfulToken: "invalid" }))],
+  ])(
+    "uses OAuth recovery instead of a blind retry after an uncertain rotation %s failure",
+    async (_failure, rotationResponse) => {
+      const fixture = createPortalBrowserFixture()
+      const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+      const form = getPortalElement(fixture.elements, "form")
+      const input = getPortalElement(fixture.elements, "input")
+      const reconnect = getPortalElement(fixture.elements, "reconnect")
+      const rotate = getPortalElement(fixture.elements, "rotate")
+      const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+      const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+      runPortalClient(fixture, async (path) =>
+        path === "/token/rotate" ? rotationResponse() : response(200, activeConnection()),
+      )
+      input.value = validToken
+      await form.dispatch("submit", { preventDefault() {} })
+      await new Promise<void>((resolve) => setImmediate(resolve))
+
+      await rotate.dispatch("click")
+      await rotateForm.dispatch("submit", {
+        preventDefault() {},
+        submitter: rotateConfirm,
+      })
+
+      expect(errorMessage.textContent).toContain("토큰 교체가 이미 적용되었을 수 있습니다")
+      expect(errorMessage.textContent).toContain("다시 교체하지 마세요")
+      expect(reconnect.hidden).toBe(false)
+      expect(reconnect.textContent).toBe("SmartThings 다시 연결")
+      expect(reconnect.focusCount).toBe(1)
+      expect(rotate.textContent).toBe("Growful 토큰 교체")
+      expect(rotate.attributes.has("aria-label")).toBe(false)
+      expect(rotate.attributes.has("aria-busy")).toBe(false)
+    },
+  )
+
+  it("latches OAuth recovery and ignores stale-token status submissions after uncertain rotation", async () => {
+    const fixture = createPortalBrowserFixture()
+    const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const reconnect = getPortalElement(fixture.elements, "reconnect")
+    const rotate = getPortalElement(fixture.elements, "rotate")
+    const rotateConfirm = getPortalElement(fixture.elements, "rotateConfirm")
+    const rotateForm = getPortalElement(fixture.elements, "rotateForm")
+    const status = getPortalElement(fixture.elements, "status")
+    const submit = getPortalElement(fixture.elements, "submit")
+    let statusRequests = 0
+    runPortalClient(fixture, async (path) => {
+      if (path === "/token/rotate") return response(502)
+      statusRequests += 1
+      return response(200, activeConnection())
+    })
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await rotate.dispatch("click")
+
+    await rotateForm.dispatch("submit", {
+      preventDefault() {},
+      submitter: rotateConfirm,
+    })
+    const recoveryMessage = errorMessage.textContent
+    await form.dispatch("submit", { preventDefault() {} })
+
+    expect(statusRequests).toBe(1)
+    expect(errorMessage.textContent).toBe(recoveryMessage)
+    expect(status.hidden).toBe(true)
+    expect(input.value).toBe("")
+    expect(input.disabled).toBe(true)
+    expect(submit.hidden).toBe(true)
+    expect(submit.disabled).toBe(true)
+    expect(reconnect.hidden).toBe(false)
+    expect(reconnect.attributes.get("class")).toBe("action action-primary")
+    expect(fixture.focus.activeElement).toBe(reconnect)
+  })
+
+  it("announces pending disconnect state and safely recovers from an uncertain outcome", async () => {
+    const disconnectResponse = deferred<ReturnType<typeof response>>()
+    const fixture = createPortalBrowserFixture()
+    const cancel = getPortalElement(fixture.elements, "disconnectCancel")
+    const confirm = getPortalElement(fixture.elements, "confirm")
+    const dialog = getPortalElement(fixture.elements, "dialog")
+    const disconnect = getPortalElement(fixture.elements, "disconnect")
+    const disconnectForm = getPortalElement(fixture.elements, "disconnectForm")
+    const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const reconnect = getPortalElement(fixture.elements, "reconnect")
+    const status = getPortalElement(fixture.elements, "status")
+    runPortalClient(fixture, async (_path, options) =>
+      options.method === "DELETE" ? disconnectResponse.promise : response(200, activeConnection()),
+    )
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    await disconnect.dispatch("click")
+    const pendingDisconnect = disconnectForm.dispatch("submit", {
+      preventDefault() {},
+      submitter: confirm,
+    })
+    expect(confirm.textContent).toBe("연결 해제 중…")
+    expect(confirm.attributes.get("aria-label")).toBe("연결 해제 중입니다")
+    expect(confirm.attributes.get("aria-busy")).toBe("true")
+    expect(disconnect.attributes.get("aria-busy")).toBe("true")
+    expect(disconnectForm.attributes.get("aria-busy")).toBe("true")
+    expect(status.attributes.get("aria-busy")).toBe("true")
+    expect(dialog.open).toBe(true)
+    expect(cancel.disabled).toBe(true)
+    expect(fixture.focus.activeElement).toBe(dialog)
+
+    await dialog.dispatch("cancel")
+    await disconnectForm.dispatch("submit", { submitter: cancel })
+
+    expect(dialog.open).toBe(true)
+    expect(fixture.focus.activeElement).toBe(dialog)
+
+    disconnectResponse.resolve(response(503))
+    await pendingDisconnect
+
+    expect(errorMessage.textContent).toContain("연결 해제가 이미 적용되었을 수 있습니다")
+    expect(errorMessage.textContent).toContain("다시 해제하지 마세요")
+    expect(reconnect.hidden).toBe(false)
+    expect(reconnect.focusCount).toBe(1)
+    expect(status.hidden).toBe(true)
+    expect(confirm.textContent).toBe("연결 해제")
+    expect(confirm.attributes.has("aria-busy")).toBe(false)
+    expect(disconnect.attributes.has("aria-busy")).toBe(false)
+    expect(disconnectForm.attributes.has("aria-busy")).toBe(false)
+    expect(status.attributes.has("aria-busy")).toBe(false)
+    expect(dialog.open).toBe(false)
+    expect(cancel.disabled).toBe(false)
+    expect(fixture.focus.activeElement).toBe(reconnect)
+  })
+
+  it("treats a disconnect timeout as uncertain and focuses OAuth recovery", async () => {
+    vi.useFakeTimers()
+    try {
+      const fixture = createPortalBrowserFixture()
+      const confirm = getPortalElement(fixture.elements, "confirm")
+      const disconnect = getPortalElement(fixture.elements, "disconnect")
+      const disconnectForm = getPortalElement(fixture.elements, "disconnectForm")
+      const errorMessage = getPortalElement(fixture.elements, "errorMessage")
+      const form = getPortalElement(fixture.elements, "form")
+      const input = getPortalElement(fixture.elements, "input")
+      const reconnect = getPortalElement(fixture.elements, "reconnect")
+      runPortalClient(fixture, async (_path, options) =>
+        options.method === "DELETE" ? new Promise(() => {}) : response(200, activeConnection()),
+      )
+      input.value = validToken
+      await form.dispatch("submit", { preventDefault() {} })
+      await vi.runAllTicks()
+      await disconnect.dispatch("click")
+
+      const pendingDisconnect = disconnectForm.dispatch("submit", {
+        preventDefault() {},
+        submitter: confirm,
+      })
+      await vi.advanceTimersByTimeAsync(10_000)
+      await pendingDisconnect
+
+      expect(errorMessage.textContent).toContain("연결 해제가 이미 적용되었을 수 있습니다")
+      expect(reconnect.hidden).toBe(false)
+      expect(reconnect.focusCount).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("focuses OAuth recovery after a definite missing-connection response to disconnect", async () => {
+    const fixture = createPortalBrowserFixture()
+    const confirm = getPortalElement(fixture.elements, "confirm")
+    const disconnect = getPortalElement(fixture.elements, "disconnect")
+    const disconnectForm = getPortalElement(fixture.elements, "disconnectForm")
+    const form = getPortalElement(fixture.elements, "form")
+    const input = getPortalElement(fixture.elements, "input")
+    const reconnect = getPortalElement(fixture.elements, "reconnect")
+    runPortalClient(fixture, async (_path, options) =>
+      options.method === "DELETE" ? response(404) : response(200, activeConnection()),
+    )
+    input.value = validToken
+    await form.dispatch("submit", { preventDefault() {} })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await disconnect.dispatch("click")
+
+    await disconnectForm.dispatch("submit", { preventDefault() {}, submitter: confirm })
+
+    expect(reconnect.hidden).toBe(false)
+    expect(reconnect.focusCount).toBe(2)
+    expect(input.focusCount).toBe(0)
+    expect(fixture.focus.activeElement).toBe(reconnect)
+  })
+
+  it.each([
+    [401, "input"],
+    [429, "disconnect"],
+  ] as const)(
+    "settles disconnect HTTP %i on the correct stable control",
+    async (disconnectStatus, focusTarget) => {
+      const fixture = createPortalBrowserFixture()
+      const confirm = getPortalElement(fixture.elements, "confirm")
+      const disconnect = getPortalElement(fixture.elements, "disconnect")
+      const disconnectForm = getPortalElement(fixture.elements, "disconnectForm")
+      const form = getPortalElement(fixture.elements, "form")
+      const input = getPortalElement(fixture.elements, "input")
+      runPortalClient(fixture, async (_path, options) =>
+        options.method === "DELETE"
+          ? response(disconnectStatus)
+          : response(200, activeConnection()),
+      )
+      input.value = validToken
+      await form.dispatch("submit", { preventDefault() {} })
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      await disconnect.dispatch("click")
+
+      await disconnectForm.dispatch("submit", {
+        preventDefault() {},
+        submitter: confirm,
+      })
+
+      expect(fixture.focus.activeElement).toBe(getPortalElement(fixture.elements, focusTarget))
+    },
+  )
 })

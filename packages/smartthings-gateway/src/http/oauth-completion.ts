@@ -8,11 +8,12 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     <section aria-labelledby="growful-token-title" data-token-safety>
       <h2 id="growful-token-title">Growful 토큰</h2>
       <p><span class="phrase">이 페이지를 떠나면 토큰을 다시 볼 수 없습니다.</span> 복사하거나 안전한 곳에 저장했는지 확인하기 전에는 <span class="phrase">페이지를 닫거나 이동하지 마세요.</span> <span class="phrase">분실하면 OAuth를 다시 완료해야 합니다.</span> <span class="phrase">Gateway 요청에는 Bearer 토큰으로 사용하세요.</span></p>
-      <output id="issued-growful-token" data-token-value tabindex="-1" data-growful-token>${growfulToken}</output>
+      <textarea id="issued-growful-token" data-token-value data-growful-token aria-labelledby="growful-token-title" aria-describedby="growful-token-copy-guidance" rows="2" readonly autocomplete="off" autocapitalize="off" spellcheck="false">${growfulToken}</textarea>
+      <p id="growful-token-copy-guidance" class="manual-copy-guidance" data-token-manual-copy><span class="phrase">자동 복사를 사용할 수 없으면 토큰 필드에 초점을 둔 뒤 토큰 전체를 선택하세요.</span> <span class="phrase">Ctrl+C 또는 Command+C를 눌러 직접 복사할 수 있습니다.</span></p>
       <p class="copy-feedback" data-token-copy-feedback role="status" aria-live="polite" hidden>Growful 토큰을 클립보드에 복사했습니다.</p>
-      <p class="copy-error" data-token-copy-error role="alert" hidden><span class="phrase">자동 복사를 사용할 수 없습니다.</span> <span class="phrase">위 토큰을 직접 복사하세요.</span></p>
+      <p class="copy-error" data-token-copy-error role="alert" hidden><span class="phrase">자동 복사를 사용할 수 없습니다.</span> <span class="phrase">토큰 전체를 선택했습니다.</span> <span class="phrase">Ctrl+C 또는 Command+C를 눌러 직접 복사하세요.</span></p>
       <div class="actions">
-        <button class="primary" type="button" data-copy-token aria-controls="issued-growful-token">Growful 토큰 복사</button>
+        <button class="primary" type="button" data-copy-token aria-controls="issued-growful-token" hidden disabled>Growful 토큰 복사</button>
         <a class="secondary" href="/manage" data-action="manage-issued-token">관리 화면에서 연결 확인</a>
       </div>
     </section>
@@ -21,13 +22,15 @@ export function renderOAuthCompletion(growfulToken: GrowfulToken): string {
     styles: `
     section { margin-top: var(--space-6); }
     h2 { margin: 0 0 var(--space-3); font-size: var(--font-body); line-height: var(--line-body); }
-    output { display: block; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; line-height: var(--line-body); overflow-wrap: anywhere; user-select: all; }
-    output:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    textarea[data-token-value] { display: block; width: 100%; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-field); background: var(--surface); color: var(--text); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: var(--font-body); line-height: var(--line-body); overflow-wrap: anywhere; resize: none; }
+    textarea[data-token-value]:focus { outline: var(--focus-ring) solid var(--focus); outline-offset: var(--focus-ring); }
+    .manual-copy-guidance { margin: var(--space-3) 0 0; font-size: var(--font-small); }
     .copy-feedback, .copy-error { margin: var(--space-3) 0 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-field); background: var(--surface-subtle); font-size: var(--font-small); font-weight: var(--weight-bold); }
     .copy-feedback { color: var(--success); }
     .copy-error { color: var(--error); }
     .actions { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
     .primary, .secondary { display: inline-flex; width: 100%; min-height: var(--action-height); align-items: center; justify-content: center; padding: var(--space-3) var(--space-4); border-radius: var(--radius-action); font: inherit; font-weight: var(--weight-bold); line-height: var(--line-action); text-decoration: none; cursor: pointer; }
+    .primary[hidden] { display: none; }
     .primary { border: 1px solid var(--action); background: var(--action); color: var(--action-text); }
     .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
     .primary:hover { background: var(--action-hover); }
